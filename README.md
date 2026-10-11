@@ -1,56 +1,33 @@
-# Welcome to your Expo app 👋
+# Invest Simulator
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+1. Założenia
+Projekt ma na celu stworzenie simulatora operacji na giełdze przy opieraniu się na rzeczywistych i akutalnych danych pochodzacych z giełdy.
 
-## Get started
+2. Technologia
+Aplikacja powstanie z wykorzystaniem ReactNative oraz Node.js z zastosowaniem Expo dla React. Dzięki temu końcowo projekt będzie możliwy do exportu również na urzdzenia mobilne i dostępny na smartfonach. Potrzebne dane będa także przechowywane lokalnie na urzadzeniu. Planowane jest także wykorzystanie możliwości jakie daja mobilne systemu operacyjne w celu autoryzacji dostępu do aplikacji.
 
-1. Install dependencies
+3. Funkcje i możliwości
+- użytkownik będzie mieć możliwość założenia prostego konta w aplikacji
+- po autoryzacji dostępny będzie główny panel z dostępem do najważniejszych informacji z ostatniego okresu (nieobecności)
+- użytkownik będzie mieć dostęp do konta demo
+- konto demo będzie możliwe do regularnego "zasilania" kwotami - symulowanie regularnego inwestowania
+- użytkwnik inwestwować będzie w wielu walutach, będzie mógł również wymieniać waluty i uważać na spread z tym zwiazany
+- użytkownik będzie mieć dostęp do szeregu akcji, etf'ów czy kontraktów cfd i kryptowalut
+- będzie można stosować metody dźwigni na konrtaktach, kupywania akcji ułamkowych czy wykorzystania metody stop
+- jeden z paneli informować będzie o posiadanych aktywach inwestycyjnych
+- istotna role w aplikacji odegraja oczywiście wykresy, które tworzone będa z wykorzystaniem gotowych bibliotek react, wraz z odpowiednimi podziełkami i przyjaznym wizualnie interfejsem
+- po zamknięciu pozycji czy uzyskaniu przychodu z dywidendy użytkownik otrzyma kwotę na swoje saldo
+- ogólne saldo będzie wizualnie podzielone na wpływy i wydatki, które użytkownik byłby zobowiazny wobec urzędy skarbowego
+- planowane jest tworzenie zestawień dziennych, tygodniowych, miesięcznych, kwartalnych oraz rocznych
+- aplikacja będzie miała również bogate opcje personalizacji i modyfikacji wygladu oraz preferencji użytkownika
+- najważniejsze informacje będa na bieżaco trafiać do użytkownika za sprawa powiadomien push (z dźwiękiem)
+- dane giełdowe będa cachowane na urzadzeniu lokalnym
+- oraz inne...
 
-   ```bash
-   npm install
-   ```
+4. Plany rozwoju i przede wszystkim nauka
+W aplikacji planujemy dodać moduły pomagajace zrozumieć inwestowanie oraz zaznajomić użytkownika z jego możliwościami oraz nieuniknionym ryzkiem. Chcemy w tym celu stworzyć kilka arytkułów tłumaczacych ogolnie inwestowanie i jego podstawowe zagdanienia, ale i również stworzyć pewne narzędzia wspierajace odpowiedzialne iwestowanie (np. kalkulatory ryzyka, indeksy niepokoju itd), sugerowanie inwestycji i ruchów na podstawie zachowania na rynku itd. Aplikacja ma na celu przede wszystkim naukę. Z aplikacji wiedzę mamy pozyskać również my, jako twórcy, dlatego każda funkcjonalność i narzędzie w programie będzie gruntownie tłumaczone krótkimi tooltipami, ale także znaleźć będzie można odwołania do konkretnych rozwinięć tematów w sieci. Możliwy jest również koncik newsów giełodwych.
+Jesteśmy otwarci na propozycje rozwoju.
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+5. Ograniczenia
+Na obecnym etapie koncepcyjnym nie jesteśmy pewni, jak szeroko aplikacja będzie mogła popłynać. Nie znamy dokładnie moliwości dostępu do api z aktualnymi danymi giełdowymi. Nie wiemy również, jak szeroka bazę dostępnych instrumentów i aktywów zawrzeć w niniejszym projekcie. Jesteśmy świadomi, że z jednej strony zawarcie zbyt ograniczonej liczby instrumentów zabierze możliwości użytkownikowi do zbliżonej do realnej zabawy i nauki w inwestowanie, jednakże obowawiamy się, że dostęp do intrumentów niszowych i mógłby z kolei zaburzyć wizję użytkownika i zostawiajac jemu niemal nieskończone możliwości sprawiłoby pewien paraliż decyzyjny i poczucie zagubienia.
+O ostatecznej formie ograniczeń i wykluczeń zdecydujemy na przestrzeni najbliższych tygodni, gdy sam projekt i jego wizja zaczna klarować się w naszym rozumieniu i będziemy świadomi konkretnego celu, jaki planujemy osiagnac, podejmujac sie tego wyzwania.
