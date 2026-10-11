@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text, View, StyleSheet, Button, TextInput, Pressable } from "react-native";
+import { View, StyleSheet, Button, TextInput, Pressable } from "react-native";
 import Ionicons from '@expo/vector-icons/AntDesign';
 
 
