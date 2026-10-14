@@ -1,6 +1,9 @@
-import { useState } from "react";
-import { View, StyleSheet, Button, TextInput, Pressable } from "react-native";
 import Ionicons from '@expo/vector-icons/AntDesign';
+import { useState } from "react";
+import { Button, Pressable, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { LineChart } from "react-native-wagmi-charts";
+
 
 
 export default function Index() {
@@ -16,14 +19,15 @@ export default function Index() {
   };
 
   return (
-    <View style={styles.container}>
-      
-      
+    <GestureHandlerRootView>
+      <View style={styles.container}>
         
+          
         
 
         <View style={styles.chartContainer}>
-          <Ionicons name="line-chart" size={300} color="#fff" style={{ alignSelf: 'center' }} />
+          <Chart1 />
+          {/* <Ionicons name="line-chart" size={300} color="#fff" style={{ alignSelf: 'center' }} /> */}
         </View>
 
         <View style={  styles.inOneLine }>
@@ -50,6 +54,69 @@ export default function Index() {
         
       
     </View>
+    </GestureHandlerRootView>
+  );
+}
+
+const data = [
+  {
+    timestamp: 1625945400000,
+    value: 33575.25,
+  },
+  {
+    timestamp: 1625946300000,
+    value: 33545.25,
+  },
+  {
+    timestamp: 1625947200000,
+    value: 33510.25,
+  },
+  {
+    timestamp: 1625948100000,
+    value: 33215.25,
+  },
+  {
+    timestamp: 1625949000000,
+    value: 33275.25,
+  },
+  {
+    timestamp: 1625949900000,
+    value: 33315.25,
+  },
+  {
+    timestamp: 1625950800000,
+    value: 33415.25,
+  }, 
+  { 
+    timestamp: 1625951700000,
+    value: 33455.25,
+  },
+  {
+    timestamp: 1625952600000,
+    value: 33475.25,
+  },
+  {
+    timestamp: 1625953500000,
+    value: 33495.25,
+  },       
+];
+
+function Chart1() {
+  const { width} = useWindowDimensions();
+  const CHART_WIDTH = width * 0.9;
+  const CHART_HEIGHT = Math.min(CHART_WIDTH * 0.90, 500); // proporcja ~16:9
+
+ 
+
+  return (
+    <LineChart.Provider data={data}>
+      <LineChart width={CHART_WIDTH} height={CHART_HEIGHT}>
+        <LineChart.Path color={"white"} />
+        <LineChart.CursorCrosshair color="#ff9800" />
+      </LineChart>
+      <LineChart.PriceText style={styles.textChart} />
+      <LineChart.DatetimeText style={styles.textChart} />
+    </LineChart.Provider>
   );
 }
 
@@ -110,8 +177,14 @@ const styles = StyleSheet.create({
   },
 
   chartContainer: {
-    width: '100%',
+    width: '95%',
     backgroundColor: '#16181b',
-    marginTop: 20,
+    alignItems: 'center',
+    borderRadius: 40,
+  },
+
+  textChart: {
+    color: "#00ff88",
+    fontSize: 14,
   }
 });
