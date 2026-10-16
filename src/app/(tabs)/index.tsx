@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View, StyleSheet, Button, TextInput, Pressable } from "react-native";
 import Ionicons from '@expo/vector-icons/AntDesign';
+import { getStockData, StockData } from '../../api/marketService';
+
+
 
 
 export default function Index() {
@@ -15,13 +18,24 @@ export default function Index() {
     }
   };
 
+  const [stock, setStock] = useState<StockData | null>(null);
+
+  useEffect(() => {
+    // Wywołanie naszej funkcji przy starcie aplikacji
+    const fetchAppleStock = async () => {
+      console.log('Rozpoczynam pobieranie danych...');
+      const data = await getStockData('AAPL');
+      console.log('Otrzymane dane giełdowe:', data);
+      setStock(data);
+    };
+
+    fetchAppleStock();
+    console.log(stock);
+  }, []);
+
   return (
     <View style={styles.container}>
-      
-      
-        
-        
-
+  
         <View style={styles.chartContainer}>
           <Ionicons name="line-chart" size={300} color="#fff" style={{ alignSelf: 'center' }} />
         </View>
