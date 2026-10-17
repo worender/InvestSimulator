@@ -1,13 +1,30 @@
 import { useEffect, useState } from "react";
-import { View, StyleSheet, Button, TextInput, Pressable } from "react-native";
+import { View, StyleSheet, Button, TextInput, Pressable, ActivityIndicator } from "react-native";
 import Ionicons from '@expo/vector-icons/AntDesign';
-import { getStockData, StockData } from '../../api/marketService';
+import { CandlestickChart } from 'react-native-wagmi-charts';
+import { getStockCandles, CandleData } from '../../api/marketService';
 
 
 
 
 export default function Index() {
   const [value, setValue] = useState("0");
+  const [candles, setCandles] = useState<CandleData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [symbol, setSymbol] = useState("PKO"); // Domyślna spółka z GPW
+
+  useEffect(() => {
+    const fetchCandles = async () => {
+      setLoading(true);
+      const data = await getStockCandles(symbol, '1h', 5);
+      if (data) {
+        setCandles(data);
+      }
+      setLoading(false);
+    };
+
+    fetchCandles();
+  }, [symbol]);
 
   const changeValue = (amount: number) => {
     const currentValue = Number.parseInt(value);
@@ -18,26 +35,26 @@ export default function Index() {
     }
   };
 
-  const [stock, setStock] = useState<StockData | null>(null);
-
-  useEffect(() => {
-    // Wywołanie naszej funkcji przy starcie aplikacji
-    const fetchAppleStock = async () => {
-      console.log('Rozpoczynam pobieranie danych...');
-      const data = await getStockData('AAPL');
-      console.log('Otrzymane dane giełdowe:', data);
-      setStock(data);
-    };
-
-    fetchAppleStock();
-    console.log(stock);
-  }, []);
+  
 
   return (
     <View style={styles.container}>
   
         <View style={styles.chartContainer}>
+          {loading ? (
+          <ActivityIndicator size="large" color="#007AFF" />
+        ) : candles.length > 0 ? (
+          <CandlestickChart.Provider data={candles}>
+            <CandlestickChart height={300}>
+              <CandlestickChart.Candles />
+              <CandlestickChart.Crosshair>
+                <CandlestickChart.Tooltip />
+              </CandlestickChart.Crosshair>
+            </CandlestickChart>
+          </CandlestickChart.Provider>
+        ) : (
           <Ionicons name="line-chart" size={300} color="#fff" style={{ alignSelf: 'center' }} />
+        )}
         </View>
 
         <View style={  styles.inOneLine }>
@@ -125,7 +142,9 @@ const styles = StyleSheet.create({
 
   chartContainer: {
     width: '100%',
+    height: 300,
+    justifyContent: 'center',
     backgroundColor: '#16181b',
-    marginTop: 20,
+    marginTop: 10,
   }
 });

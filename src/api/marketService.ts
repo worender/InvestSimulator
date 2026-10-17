@@ -3,11 +3,14 @@ import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { Platform } from 'react-native';
 
-const BASE_URL = 'http://TWÓJ_ADRES:3000';
+const BASE_URL = 'http://192.168.10.23:3000';
 
-export interface StockData {
-  currentPrice: number;
-  changePercent: number;
+export interface CandleData {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
 }
 
 const getItem = async (key: string) => {
@@ -26,10 +29,18 @@ const setItem = async (key: string, value: string) => {
   }
 };
 
+const deleteItem = async (key: string) => {
+  if (Platform.OS === 'web') {
+    localStorage.removeItem(key);
+  } else {
+    await SecureStore.deleteItemAsync(key);
+  }
+};
 
 
-// Pomocnicza funkcja pobierająca token JWT (lub generująca nowy)
-const getValidToken = async () => {
+
+// Funkcja pobierająca token JWT (lub generująca nowy)
+const getValidToken = async (): Promise<string | null> => {
   let token = await getItem('jwtToken');
   
   if (!token) {
@@ -41,24 +52,28 @@ const getValidToken = async () => {
       await setItem('deviceId', deviceId);
     }
 
-    
-    const response = await fetch(`${BASE_URL}/api/guest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deviceId })
-    });
+    try{
+      const response = await fetch(`${BASE_URL}/api/guest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId })
+      });
 
-    if (response.ok) {
-      const data = await response.json();
-      token = data.token;
-      if (token) {
-        console.log('Zapisywanie nowego tokenu JWT:', token);
-        await setItem('jwtToken', token);
-        console.log('Odebrano token JWT z serwera');
-      }else {
-        console.error('Nie otrzymano tokenu JWT z serwera');
-        return null;
+      if (response.ok) {
+        const data = await response.json();
+        token = data.token;
+        if (token) {
+          console.log('Zapisywanie nowego tokenu JWT:', token);
+          await setItem('jwtToken', token);
+          console.log('Odebrano token JWT z serwera');
+        }else {
+          console.error('Nie otrzymano tokenu JWT z serwera');
+          return null;
+        }
       }
+    } catch (error) {
+      console.error('Błąd podczas pobierania tokenu JWT:', error);
+      return null;
     }
   }else{
     console.log('Używam zapisanego tokenu JWT:');
@@ -67,8 +82,12 @@ const getValidToken = async () => {
   return token;
 };
 
-// Główna funkcja dla interfejsu (wywoływana w widokach)
-export const getStockData = async (symbol: string): Promise< StockData | null> => {
+// Funkcja pobierająca dane świec giełdowych
+export const getStockCandles = async (
+  symbol: string,
+  interval: '1m' | '5m' | '15m' | '1h' | '1d' | '1wk' = '1d',
+  days: number = 30
+): Promise<CandleData[] | null> => {
   const token = await getValidToken();
   if (!token) {
     console.error('Nie udało się uzyskać tokenu JWT');
@@ -76,21 +95,53 @@ export const getStockData = async (symbol: string): Promise< StockData | null> =
   }
 
   try {
-    const response = await fetch(`${BASE_URL}/api/quote?symbol=${symbol}`, {
+    const url = `${BASE_URL}/api/candles?symbol=${encodeURIComponent(symbol)}&interval=${interval}&days=${days}`;
+    
+    const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
 
-    // Jeśli token wygasł (status 403), można usunąć go z pamięci i spróbować ponownie
+    // Token wygasł (status 403), usuwamy go i ponawiamy próbę
     if (response.status === 403) {
-      await SecureStore.deleteItemAsync('jwtToken');
-      return getStockData(symbol); // Ponowienie próby
+      await deleteItem('jwtToken');
+      return getStockCandles(symbol, interval, days);
     }
 
-    if (!response.ok) throw new Error('Błąd połączenia');
+    if (!response.ok) {
+      throw new Error(`Błąd serwera: ${response.status}`);
+    }
 
     return await response.json();
   } catch (error) {
-    console.error('Błąd pobierania danych giełdowych:', error);
+    console.error('Błąd pobierania świec giełdowych:', error);
     return null;
   }
 };
+
+//Finhub API response type
+// export const getStockData = async (symbol: string): Promise< StockData | null> => {
+//   const token = await getValidToken();
+//   if (!token) {
+//     console.error('Nie udało się uzyskać tokenu JWT');
+//     return null;
+//   }
+
+//   try {
+//     const response = await fetch(`${BASE_URL}/api/quote?symbol=${symbol}`, {
+//       headers: { 'Authorization': `Bearer ${token}` }
+//     });
+
+//     // Jeśli token wygasł (status 403), można usunąć go z pamięci i spróbować ponownie
+//     if (response.status === 403) {
+//       await SecureStore.deleteItemAsync('jwtToken');
+//       return getStockData(symbol); // Ponowienie próby
+//     }
+
+//     if (!response.ok) throw new Error('Błąd połączenia');
+
+//     return await response.json();
+//   } catch (error) {
+//     console.error('Błąd pobierania danych giełdowych:', error);
+//     return null;
+//   }
+// };
