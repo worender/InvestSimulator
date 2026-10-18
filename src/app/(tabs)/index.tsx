@@ -24,6 +24,10 @@ const intervals: { label: string; value: CandleInterval }[] = [
   { label: '1 tydz.', value: '1wk' },
 ];
 
+const isIntradayInterval = (interval: CandleInterval) => (
+  interval === '1m' || interval === '5m' || interval === '15m' || interval === '1h'
+);
+
 type TrendAsset = {
   symbol: string;
   name: string;
@@ -52,6 +56,7 @@ export default function Index() {
   const chartWidth = Math.max(screenWidth - 80, 1);
   const trendChartWidth = Math.max(screenWidth - 76, 1);
   const range = ranges[selectedRange];
+  const intradayDisabled = range.days > 60;
   const latestCandle = candles[candles.length - 1];
   const previousCandle = candles[candles.length - 2];
   const change = latestCandle && previousCandle ? latestCandle.close - previousCandle.close : 0;
@@ -63,13 +68,14 @@ export default function Index() {
   useEffect(() => {
     const fetchCandles = async () => {
       setLoading(true);
-      const data = await getStockCandles(symbol, selectedInterval, range.days);
+      const interval = intradayDisabled && isIntradayInterval(selectedInterval) ? '1d' : selectedInterval;
+      const data = await getStockCandles(symbol, interval, range.days);
       setCandles(data ?? []);
       setLoading(false);
     };
 
     fetchCandles();
-  }, [range.days, selectedInterval]);
+  }, [intradayDisabled, range.days, selectedInterval]);
 
   useEffect(() => {
     const fetchTrends = async () => {
@@ -128,19 +134,30 @@ export default function Index() {
                 key={item.label}
                 label={item.label}
                 active={selectedRange === index}
-                onPress={() => setSelectedRange(index)}
+                onPress={() => {
+                  setSelectedRange(index);
+                  if (item.days > 60 && isIntradayInterval(selectedInterval)) {
+                    setSelectedInterval('1d');
+                  }
+                }}
                 colors={colors}
               />
             ))}
           </View>
 
           <Text style={[styles.controlLabel, { color: colors.textMuted }]}>INTERWAŁ ŚWIECY</Text>
+          {intradayDisabled && (
+            <Text style={[styles.intervalHint, { color: colors.textMuted }]}>
+              Dla zakresu powyżej 60 dni dostępne są tylko dane dzienne lub tygodniowe.
+            </Text>
+          )}
           <View style={styles.buttonRow}>
             {intervals.map((item) => (
               <ChartButton
                 key={item.value}
                 label={item.label}
                 active={selectedInterval === item.value}
+                disabled={intradayDisabled && isIntradayInterval(item.value)}
                 onPress={() => setSelectedInterval(item.value)}
                 colors={colors}
               />
@@ -298,19 +315,24 @@ function TrendCard({ asset, candles, colors, width }: TrendCardProps) {
 type ChartButtonProps = {
   label: string;
   active: boolean;
+  disabled?: boolean;
   onPress: () => void;
   colors: ReturnType<typeof useTheme>['colors'];
 };
 
-function ChartButton({ label, active, onPress, colors }: ChartButtonProps) {
+function ChartButton({ label, active, disabled = false, onPress, colors }: ChartButtonProps) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
+      disabled={disabled}
       onPress={onPress}
       style={[
         styles.chartButton,
-        { backgroundColor: active ? colors.accent : colors.surfaceMuted },
+        {
+          backgroundColor: active ? colors.accent : colors.surfaceMuted,
+          opacity: disabled ? 0.45 : 1,
+        },
       ]}
     >
       <Text style={[styles.chartButtonText, { color: active ? colors.background : colors.textMuted }]}>
@@ -351,6 +373,7 @@ const styles = StyleSheet.create({
   price: { fontSize: 30, fontWeight: '700', marginTop: 6, letterSpacing: -1 },
   chartDescription: { fontSize: 12, lineHeight: 18, marginTop: 10 },
   controlLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginTop: 18, marginBottom: 8 },
+  intervalHint: { fontSize: 11, lineHeight: 16, marginTop: -2, marginBottom: 8 },
   buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chartButton: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 6 },
   chartButtonText: { fontSize: 12, fontWeight: '700' },
