@@ -16,7 +16,7 @@ export default function SettingsScreen() {
         </View>
         <View style={styles.copy}>
           <Text style={[styles.title, { color: colors.text }]}>Tryb {isDark ? 'ciemny' : 'jasny'}</Text>
-          <Text style={[styles.subtitle, { color: colors.textMuted }]}>Motyw GitHub dopasowany do pory dnia</Text>
+          <Text style={[styles.subtitle, { color: colors.textMuted }]}>Motyw dopasowany do pory dnia</Text>
         </View>
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: isDark }} onPress={toggleMode} style={[styles.switch, { backgroundColor: isDark ? colors.accent : colors.surfaceMuted }]}>
           <View style={[styles.thumb, { backgroundColor: isDark ? '#ffffff' : colors.textMuted, transform: [{ translateX: isDark ? 18 : 2 }] }]} />

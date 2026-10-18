@@ -1,5 +1,6 @@
 import { Stack } from "expo-router";
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider, useTheme } from '../theme';
 
 function AppStack() {
@@ -17,8 +18,10 @@ function AppStack() {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <AppStack />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <AppStack />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
