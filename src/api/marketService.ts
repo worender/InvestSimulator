@@ -3,7 +3,7 @@ import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { Platform } from 'react-native';
 
-const BASE_URL = 'http://192.168.10.23:3000';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 export interface CandleData {
   timestamp: number;

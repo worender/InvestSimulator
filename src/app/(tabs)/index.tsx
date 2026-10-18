@@ -11,7 +11,7 @@ export default function Index() {
   const [value, setValue] = useState("0");
   const [candles, setCandles] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [symbol, setSymbol] = useState("PKO"); // Domyślna spółka z GPW
+  const symbol = "PKO"; // Domyślna spółka z GPW
 
   useEffect(() => {
     const fetchCandles = async () => {

@@ -1,4 +1,7 @@
 require('dotenv').config();
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -10,6 +13,29 @@ app.use(cors());
 app.use(express.json()); 
 
 const JWT_SECRET = process.env.JWT_SECRET;
+const PORT = Number(process.env.PORT || 3000);
+
+const getLocalIpv4Address = () => {
+  const interfaces = os.networkInterfaces();
+
+  for (const addresses of Object.values(interfaces)) {
+    const address = addresses?.find(
+      (candidate) => candidate.family === 'IPv4' && !candidate.internal,
+    );
+
+    if (address) return address.address;
+  }
+
+  return 'localhost';
+};
+
+const localAddress = getLocalIpv4Address();
+const serverAddressFile = path.join(__dirname, 'server-address.json');
+
+fs.writeFileSync(
+  serverAddressFile,
+  `${JSON.stringify({ host: localAddress, port: PORT, url: `http://${localAddress}:${PORT}` }, null, 2)}\n`,
+);
 
 // MEMORY CACHE
 const stockCache = new Map();
@@ -124,4 +150,7 @@ app.get('/api/candles', authenticateToken, async (req, res) => {
 
 
 
-app.listen(3000, () => console.log('Backend działa na porcie 3000'));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Backend działa pod adresem http://${localAddress}:${PORT}`);
+  console.log(`Adres zapisano w pliku ${serverAddressFile}`);
+});
