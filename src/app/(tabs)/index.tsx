@@ -156,7 +156,7 @@ export default function Index() {
             ) : candles.length > 0 ? (
               <CandlestickChart.Provider data={candles}>
                 <CandlestickChart width={chartWidth} height={280}>
-                  <CandlestickChart.Candles />
+                  <CandlestickChart.Candles useAnimations={false} />
                   <CandlestickChart.Crosshair>
                     <CandlestickChart.Tooltip />
                   </CandlestickChart.Crosshair>
