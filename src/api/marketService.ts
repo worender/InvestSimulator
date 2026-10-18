@@ -1,9 +1,29 @@
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { Platform } from 'react-native';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+const getApiBaseUrl = (): string => {
+  const configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '');
+  }
+
+  if (Platform.OS !== 'web') {
+    const hostUri = Constants.expoConfig?.hostUri;
+    if (hostUri) {
+      const host = new URL(
+        hostUri.includes('://') ? hostUri : `http://${hostUri}`,
+      ).hostname;
+      return `http://${host}:3000`;
+    }
+  }
+
+  return 'http://localhost:3000';
+};
+
+const BASE_URL = getApiBaseUrl();
 
 export interface CandleData {
   timestamp: number;
