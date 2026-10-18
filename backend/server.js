@@ -74,7 +74,7 @@ app.get('/api/candles', authenticateToken, async (req, res) => {
   if (!symbol) return res.status(400).json({ error: 'Brak symbolu akcji' });
 
   symbol = symbol.toUpperCase();
-  if (!symbol.includes('.')) {
+  if (!symbol.includes('.') && !symbol.includes('-') && !symbol.includes('=') && !symbol.startsWith('^')) {
     symbol = `${symbol}.WA`; // Domyślnie GPW
   }
 
