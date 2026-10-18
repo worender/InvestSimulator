@@ -1,24 +1,41 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { LineChart } from 'react-native-wagmi-charts';
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { useTheme } from '../../theme';
+import { useEffect, useState } from "react";
+import { View, StyleSheet, Button, TextInput, Pressable, ActivityIndicator } from "react-native";
+import Ionicons from '@expo/vector-icons/AntDesign';
+import { CandlestickChart } from 'react-native-wagmi-charts';
+import { getStockCandles, CandleData } from '../../api/marketService';
 
-const chartData = [
-  { timestamp: 1710000000000, value: 98.2 },
-  { timestamp: 1710086400000, value: 99.4 },
-  { timestamp: 1710172800000, value: 98.8 },
-  { timestamp: 1710259200000, value: 101.1 },
-  { timestamp: 1710345600000, value: 100.6 },
-  { timestamp: 1710432000000, value: 103.2 },
-  { timestamp: 1710518400000, value: 104.8 },
-  { timestamp: 1710604800000, value: 106.1 },
-];
 
-export default function MarketsScreen() {
-  const { colors } = useTheme();
-  const { width } = useWindowDimensions();
-  // The chart is inside the screen padding, card padding, and its own border.
-  const chartWidth = Math.max(width - 80, 240);
+
+
+export default function Index() {
+  const [value, setValue] = useState("0");
+  const [candles, setCandles] = useState<CandleData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const symbol = "PKO"; // Domyślna spółka z GPW
+
+  useEffect(() => {
+    const fetchCandles = async () => {
+      setLoading(true);
+      const data = await getStockCandles(symbol, '1h', 5);
+      if (data) {
+        setCandles(data);
+      }
+      setLoading(false);
+    };
+
+    fetchCandles();
+  }, [symbol]);
+
+  const changeValue = (amount: number) => {
+    const currentValue = Number.parseInt(value);
+    if (isNaN(currentValue)) {
+      setValue(String(amount));
+    } else {
+      setValue(String(currentValue + amount));
+    }
+  };
+
+  
 
   return (
     <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={styles.content}>
@@ -27,6 +44,23 @@ export default function MarketsScreen() {
           <Text style={[styles.eyebrow, { color: colors.accent }]}>EDUKACYJNY SYMULATOR</Text>
           <Text style={[styles.title, { color: colors.text }]}>Dzień dobry, inwestorze</Text>
         </View>
+    <View style={styles.container}>
+  
+        <View style={styles.chartContainer}>
+          {loading ? (
+          <ActivityIndicator size="large" color="#007AFF" />
+        ) : candles.length > 0 ? (
+          <CandlestickChart.Provider data={candles}>
+            <CandlestickChart height={300}>
+              <CandlestickChart.Candles />
+              <CandlestickChart.Crosshair>
+                <CandlestickChart.Tooltip />
+              </CandlestickChart.Crosshair>
+            </CandlestickChart>
+          </CandlestickChart.Provider>
+        ) : (
+          <Ionicons name="line-chart" size={300} color="#fff" style={{ alignSelf: 'center' }} />
+        )}
         <View style={[styles.marketBadge, { backgroundColor: colors.surfaceMuted }]}>
           <View style={[styles.liveDot, { backgroundColor: colors.positive }]} />
           <Text style={[styles.marketBadgeText, { color: colors.textMuted }]}>OTWARTE</Text>
