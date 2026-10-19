@@ -1,9 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from '../../theme';
+import { Currency, ThemeAccent, useTheme } from '../../theme';
 
 export default function SettingsScreen() {
-  const { mode, colors, toggleMode } = useTheme();
+  const { mode, colors, toggleMode, accent, setAccent, defaultCurrency, setDefaultCurrency, multiCurrency, setMultiCurrency } = useTheme();
   const isDark = mode === 'dark';
 
   return (
@@ -20,6 +20,42 @@ export default function SettingsScreen() {
         </View>
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: isDark }} onPress={toggleMode} style={[styles.switch, { backgroundColor: isDark ? colors.accent : colors.surfaceMuted }]}>
           <View style={[styles.thumb, { backgroundColor: isDark ? '#ffffff' : colors.textMuted, transform: [{ translateX: isDark ? 18 : 2 }] }]} />
+        </Pressable>
+      </View>
+      <Text style={[styles.section, { color: colors.textMuted }]}>KOLOR AKCENTU</Text>
+      <View style={styles.accentRow}>
+        {(['blue', 'violet', 'green', 'orange'] as ThemeAccent[]).map((item) => (
+          <Pressable key={item} accessibilityRole="button" onPress={() => setAccent(item)}
+            style={[styles.accentButton, { backgroundColor: item === accent ? colors.surface : colors.surfaceMuted, borderColor: item === accent ? colors.accent : colors.border }]}>
+            <View style={[styles.accentDot, { backgroundColor: { blue: '#0969da', violet: '#8250df', green: '#1a7f37', orange: '#bc4c00' }[item] }]} />
+            <Text style={[styles.accentLabel, { color: colors.text }]}>{item}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={[styles.section, { color: colors.textMuted }]}>PORTFELE I WALUTA</Text>
+      <View style={[styles.currencySetting, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.copy}>
+          <Text style={[styles.title, { color: colors.text }]}>Domyślna waluta</Text>
+          <Text style={[styles.subtitle, { color: colors.textMuted }]}>Pierwsza karta po otwarciu dashboardu</Text>
+        </View>
+        <View style={styles.currencyRow}>
+          {(['PLN', 'EUR', 'USD'] as Currency[]).map((item) => (
+            <Pressable key={item} onPress={() => setDefaultCurrency(item)} style={[styles.currencyButton, { backgroundColor: defaultCurrency === item ? colors.accent : colors.surfaceMuted }]}>
+              <Text style={{ color: defaultCurrency === item ? colors.background : colors.textMuted, fontWeight: '700', fontSize: 11 }}>{item}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+      <View style={[styles.settingRow, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 10 }]}>
+        <View style={[styles.icon, { backgroundColor: colors.surfaceMuted }]}>
+          <Ionicons name="layers-outline" size={19} color={colors.text} />
+        </View>
+        <View style={styles.copy}>
+          <Text style={[styles.title, { color: colors.text }]}>Wiele walut</Text>
+          <Text style={[styles.subtitle, { color: colors.textMuted }]}>Włącz zmianę kart między PLN, EUR i USD</Text>
+        </View>
+        <Pressable accessibilityRole="switch" accessibilityState={{ checked: multiCurrency }} onPress={() => setMultiCurrency(!multiCurrency)} style={[styles.switch, { backgroundColor: multiCurrency ? colors.accent : colors.surfaceMuted }]}>
+          <View style={[styles.thumb, { backgroundColor: multiCurrency ? '#ffffff' : colors.textMuted, transform: [{ translateX: multiCurrency ? 18 : 2 }] }]} />
         </Pressable>
       </View>
       <Text style={[styles.section, { color: colors.textMuted }]}>O APLIKACJI</Text>
@@ -43,4 +79,11 @@ const styles = StyleSheet.create({
   switch: { width: 40, height: 24, borderRadius: 12, justifyContent: 'center' },
   thumb: { width: 20, height: 20, borderRadius: 10 },
   about: { borderTopWidth: 1, paddingTop: 16 },
+  accentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 28 },
+  accentButton: { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
+  accentDot: { width: 12, height: 12, borderRadius: 6 },
+  accentLabel: { fontSize: 12, textTransform: 'capitalize' },
+  currencySetting: { padding: 14, borderRadius: 8, borderWidth: 1 },
+  currencyRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  currencyButton: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
 });
