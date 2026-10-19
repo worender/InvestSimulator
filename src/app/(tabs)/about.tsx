@@ -1,9 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 
 export default function AboutScreen() {
   const { colors } = useTheme();
+  const { bottom } = useSafeAreaInsets();
   const lessons = [
     ['01', 'Ryzyko i zysk', 'Dlaczego większy potencjalny zysk oznacza też większe ryzyko?'],
     ['02', 'Dywersyfikacja', 'Jak nie wkładać wszystkich jajek do jednego koszyka.'],
@@ -11,7 +13,7 @@ export default function AboutScreen() {
   ];
 
   return (
-    <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={styles.content}>
+    <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={[styles.content, { paddingBottom: 120 + bottom }]}>
       <Text style={[styles.eyebrow, { color: colors.accent }]}>CENTRUM WIEDZY</Text>
       <Text style={[styles.title, { color: colors.text }]}>Inwestowanie bez skrótów</Text>
       <Text style={[styles.lead, { color: colors.textMuted }]}>Poznaj podstawy, zanim podejmiesz decyzję. Tutaj ćwiczysz na fikcyjnych danych, bez ryzyka utraty pieniędzy.</Text>
