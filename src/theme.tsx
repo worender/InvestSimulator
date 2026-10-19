@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 
 export type ThemeMode = 'dark' | 'light';
+export type ThemeAccent = 'blue' | 'violet' | 'green' | 'orange';
 
 const darkColors = {
   background: '#0d1117',
@@ -33,16 +34,34 @@ type ThemeContextValue = {
   mode: ThemeMode;
   colors: typeof darkColors;
   toggleMode: () => void;
+  accent: ThemeAccent;
+  setAccent: (accent: ThemeAccent) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: PropsWithChildren) {
   const [mode, setMode] = useState<ThemeMode>('dark');
-  const colors = mode === 'dark' ? darkColors : lightColors;
+  const [accent, setAccent] = useState<ThemeAccent>('blue');
+  const colors = useMemo(() => {
+    const baseColors = mode === 'dark' ? darkColors : lightColors;
+    const accentColors: Record<ThemeAccent, string> = {
+      blue: mode === 'dark' ? '#58a6ff' : '#0969da',
+      violet: mode === 'dark' ? '#bc8cff' : '#8250df',
+      green: mode === 'dark' ? '#3fb950' : '#1a7f37',
+      orange: mode === 'dark' ? '#f0883e' : '#bc4c00',
+    };
+    return { ...baseColors, accent: accentColors[accent] };
+  }, [mode, accent]);
   const value = useMemo(
-    () => ({ mode, colors, toggleMode: () => setMode((current) => (current === 'dark' ? 'light' : 'dark')) }),
-    [mode, colors],
+    () => ({
+      mode,
+      colors,
+      accent,
+      setAccent,
+      toggleMode: () => setMode((current) => (current === 'dark' ? 'light' : 'dark')),
+    }),
+    [mode, accent, colors],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

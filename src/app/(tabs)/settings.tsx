@@ -1,9 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from '../../theme';
+import { ThemeAccent, useTheme } from '../../theme';
 
 export default function SettingsScreen() {
-  const { mode, colors, toggleMode } = useTheme();
+  const { mode, colors, toggleMode, accent, setAccent } = useTheme();
   const isDark = mode === 'dark';
 
   return (
@@ -21,6 +21,16 @@ export default function SettingsScreen() {
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: isDark }} onPress={toggleMode} style={[styles.switch, { backgroundColor: isDark ? colors.accent : colors.surfaceMuted }]}>
           <View style={[styles.thumb, { backgroundColor: isDark ? '#ffffff' : colors.textMuted, transform: [{ translateX: isDark ? 18 : 2 }] }]} />
         </Pressable>
+      </View>
+      <Text style={[styles.section, { color: colors.textMuted }]}>KOLOR AKCENTU</Text>
+      <View style={styles.accentRow}>
+        {(['blue', 'violet', 'green', 'orange'] as ThemeAccent[]).map((item) => (
+          <Pressable key={item} accessibilityRole="button" onPress={() => setAccent(item)}
+            style={[styles.accentButton, { backgroundColor: item === accent ? colors.surface : colors.surfaceMuted, borderColor: item === accent ? colors.accent : colors.border }]}>
+            <View style={[styles.accentDot, { backgroundColor: { blue: '#0969da', violet: '#8250df', green: '#1a7f37', orange: '#bc4c00' }[item] }]} />
+            <Text style={[styles.accentLabel, { color: colors.text }]}>{item}</Text>
+          </Pressable>
+        ))}
       </View>
       <Text style={[styles.section, { color: colors.textMuted }]}>O APLIKACJI</Text>
       <View style={[styles.about, { borderColor: colors.border }]}>
@@ -43,4 +53,8 @@ const styles = StyleSheet.create({
   switch: { width: 40, height: 24, borderRadius: 12, justifyContent: 'center' },
   thumb: { width: 20, height: 20, borderRadius: 10 },
   about: { borderTopWidth: 1, paddingTop: 16 },
+  accentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 28 },
+  accentButton: { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
+  accentDot: { width: 12, height: 12, borderRadius: 6 },
+  accentLabel: { fontSize: 12, textTransform: 'capitalize' },
 });
