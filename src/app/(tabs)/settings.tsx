@@ -1,13 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Currency, ThemeAccent, useTheme } from '../../theme';
 
 export default function SettingsScreen() {
   const { mode, colors, toggleMode, accent, setAccent, defaultCurrency, setDefaultCurrency, multiCurrency, setMultiCurrency } = useTheme();
+  const { bottom } = useSafeAreaInsets();
   const isDark = mode === 'dark';
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={[styles.container, { paddingBottom: 120 + bottom }]}>
       <Text style={[styles.intro, { color: colors.textMuted }]}>Dostosuj aplikację do swoich preferencji.</Text>
       <Text style={[styles.section, { color: colors.textMuted }]}>WYGLĄD</Text>
       <View style={[styles.settingRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -63,7 +65,7 @@ export default function SettingsScreen() {
         <Text style={[styles.title, { color: colors.text }]}>InvestSimulator</Text>
         <Text style={[styles.subtitle, { color: colors.textMuted }]}>Wersja edukacyjna 1.0</Text>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 

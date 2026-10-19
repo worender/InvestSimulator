@@ -41,6 +41,33 @@ fs.writeFileSync(
 const stockCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minut
 
+const normalizeYahooSymbol = (value, exchange) => {
+  const symbol = String(value).trim().toUpperCase();
+  if (!symbol) return symbol;
+
+  const normalizedExchange = String(exchange || '').trim().toUpperCase();
+  if (normalizedExchange === 'GPW' || normalizedExchange === 'WARSAW') {
+    return symbol.endsWith('.WA') ? symbol : `${symbol}.WA`;
+  }
+  if (normalizedExchange === 'LSE' || normalizedExchange === 'LONDON') {
+    return symbol.includes('.') ? symbol : `${symbol}.L`;
+  }
+  if (normalizedExchange === 'EURONEXT_PARIS' || normalizedExchange === 'PARIS') {
+    return symbol.includes('.') ? symbol : `${symbol}.PA`;
+  }
+  if (normalizedExchange === 'NASDAQ' || normalizedExchange === 'NYSE') {
+    return symbol.replace(/\.WA$/, '');
+  }
+  if (normalizedExchange) {
+    return symbol;
+  }
+  if (symbol.includes('.') || symbol.includes('-') || symbol.includes('=') || symbol.startsWith('^')) {
+    return symbol;
+  }
+
+  return `${symbol}.WA`;
+};
+
 app.post('/api/guest', (req, res) => {
   const { deviceId } = req.body;
   if (!deviceId) return res.status(400).json({ error: 'Brak ID urządzenia' });
@@ -49,7 +76,6 @@ app.post('/api/guest', (req, res) => {
   console.log('Generowanie nowego tokenu JWT:', token);
   res.json({ token });
 });
-
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -64,19 +90,93 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+app.get('/api/instruments/search', authenticateToken, async (req, res) => {
+  const query = String(req.query.q || '').trim();
+  const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 25);
+  if (query.length < 2) return res.json([]);
+
+  try {
+    const result = await yahooFinance.search(query, { quotesCount: limit, newsCount: 0 });
+    const instruments = (result.quotes || [])
+      .filter((quote) => quote.isYahooFinance !== false && quote.symbol)
+      .slice(0, limit)
+      .map((quote) => ({
+        symbol: quote.symbol,
+        name: quote.longname || quote.shortname || quote.symbol,
+        exchange: quote.exchange || '',
+        exchangeName: quote.exchDisp || quote.exchange || 'Yahoo Finance',
+        quoteType: quote.quoteType || 'EQUITY',
+      }));
+
+    res.json(instruments);
+  } catch (error) {
+    console.error('Błąd wyszukiwania instrumentów:', error.message);
+    res.status(502).json({ error: 'Nie udało się wyszukać instrumentów' });
+  }
+});
+
+app.get('/api/instruments/quote', authenticateToken, async (req, res) => {
+  const requestedSymbol = String(req.query.symbol || '').trim();
+  const exchange = req.query.exchange;
+  if (!requestedSymbol) return res.status(400).json({ error: 'Brak symbolu instrumentu' });
+
+  const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
+  try {
+    const quote = await yahooFinance.quote(symbol, {}, { validate: false });
+    if (!quote) return res.status(404).json({ error: 'Brak notowania instrumentu' });
+
+    const marketState = quote.marketState || 'CLOSED';
+    const activeStates = new Set(['REGULAR', 'PRE', 'POST', 'PREPRE', 'POSTPOST']);
+    res.json({
+      symbol,
+      exchange: quote.fullExchangeName || quote.exchange || 'Yahoo Finance',
+      marketState,
+      isOpen: activeStates.has(marketState),
+    });
+  } catch (error) {
+    console.error(`Błąd pobierania statusu giełdy dla ${symbol}:`, error.message);
+    res.status(502).json({ error: 'Nie udało się pobrać statusu giełdy' });
+  }
+});
+
+app.get('/api/trends', authenticateToken, async (req, res) => {
+  const screens = {
+    gainers: 'day_gainers',
+    active: 'most_actives',
+    technology: 'growth_technology_stocks',
+    undervalued: 'undervalued_large_caps',
+  };
+  const category = String(req.query.category || 'gainers');
+  const screen = screens[category] || screens.gainers;
+
+  try {
+    const result = await yahooFinance.screener(screen, { count: 5 });
+    res.json((result.quotes || []).slice(0, 5).map((quote) => ({
+      symbol: quote.symbol,
+      name: quote.shortName || quote.longName || quote.symbol,
+      exchange: quote.exchange || '',
+      exchangeName: quote.fullExchangeName || quote.exchange || 'Yahoo Finance',
+      changePercent: quote.regularMarketChangePercent ?? 0,
+    })));
+  } catch (error) {
+    console.error(`Błąd pobierania trendów ${category}:`, error.message);
+    res.status(502).json({ error: 'Nie udało się pobrać dynamicznych trendów' });
+  }
+});
+
 // GET /api/candles?symbol=PKO
 // GET /api/candles?symbol=CDR&interval=1h&days=7
 // GET /api/candles?symbol=KGH&interval=15m&days=2
 app.get('/api/candles', authenticateToken, async (req, res) => {
-  let symbol = req.query.symbol;
+  const requestedSymbol = String(req.query.symbol || '');
+  const exchange = req.query.exchange;
+  let symbol = requestedSymbol;
   let interval = req.query.interval ? req.query.interval : '1d';
   let days = req.query.days ? req.query.days : 30;
   if (!symbol) return res.status(400).json({ error: 'Brak symbolu akcji' });
 
-  symbol = symbol.toUpperCase();
-  // if (!symbol.includes('.') && !symbol.includes('-') && !symbol.includes('=') && !symbol.startsWith('^')) {
-  //   symbol = `${symbol}.WA`; // Domyślnie GPW
-  // }
+  symbol = normalizeYahooSymbol(symbol, exchange);
+  console.log(`Normalizacja symbolu: ${requestedSymbol} [${exchange || 'domyślna giełda'}] -> ${symbol}`);
 
   
   const cacheKey = `${symbol}_${interval}_${days}`;

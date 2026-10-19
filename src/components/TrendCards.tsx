@@ -1,39 +1,117 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LineChart } from 'react-native-wagmi-charts';
-import { CandleData, getStockCandles } from '../api/marketService';
+import { CandleData, DynamicTrendAsset, getDynamicTrends, getStockCandles } from '../api/marketService';
 import { useTheme } from '../theme';
+import { Skeleton } from './Skeleton';
 
-type Asset = { symbol: string; name: string; market: string; icon: keyof typeof Ionicons.glyphMap; unit: string };
-const categories: Record<string, Asset[]> = {
-  Hot: [{ symbol: 'GC=F', name: 'Złoto', market: 'COMEX', icon: 'sparkles-outline', unit: 'USD / uncję' }, { symbol: 'BTC-USD', name: 'Bitcoin', market: 'Krypto', icon: 'logo-bitcoin', unit: 'USD' }, { symbol: 'CL=F', name: 'Ropa WTI', market: 'NYMEX', icon: 'flame-outline', unit: 'USD / baryłkę' }],
-  Tech: [{ symbol: 'AAPL', name: 'Apple', market: 'NASDAQ', icon: 'logo-apple', unit: 'USD' }, { symbol: 'MSFT', name: 'Microsoft', market: 'NASDAQ', icon: 'desktop-outline', unit: 'USD' }, { symbol: 'NVDA', name: 'NVIDIA', market: 'NASDAQ', icon: 'hardware-chip-outline', unit: 'USD' }],
-  Space: [{ symbol: 'RKLB', name: 'Rocket Lab', market: 'NASDAQ', icon: 'rocket-outline', unit: 'USD' }, { symbol: 'SPCE', name: 'Virgin Galactic', market: 'NYSE', icon: 'planet-outline', unit: 'USD' }, { symbol: 'BA', name: 'Boeing', market: 'NYSE', icon: 'airplane-outline', unit: 'USD' }],
-};
+type Category = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap };
+const categories: Category[] = [
+  { key: 'gainers', label: 'Rosnące', icon: 'flame-outline' },
+  { key: 'active', label: 'Aktywne', icon: 'pulse-outline' },
+  { key: 'technology', label: 'Tech', icon: 'hardware-chip-outline' },
+  { key: 'undervalued', label: 'Wartościowe', icon: 'diamond-outline' },
+];
 
 export function TrendCards() {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
-  const [category, setCategory] = useState('Hot');
+  const [category, setCategory] = useState('gainers');
+  const [assets, setAssets] = useState<DynamicTrendAsset[]>([]);
   const [data, setData] = useState<Record<string, CandleData[]>>({});
   const [loadedCategory, setLoadedCategory] = useState('');
-  const assets = categories[category];
   const loading = loadedCategory !== category;
+
   useEffect(() => {
     let active = true;
-    Promise.all(assets.map(async (asset) => [asset.symbol, (await getStockCandles(asset.symbol, '1d', 30)) ?? []] as const)).then((result) => {
-      if (active) { setData(Object.fromEntries(result)); setLoadedCategory(category); }
+    getDynamicTrends(category).then((result) => {
+      if (!active) return;
+      setAssets(result);
+      Promise.all(result.map(async (asset) => [asset.symbol, (await getStockCandles(asset.symbol, '1d', 30, asset.exchange)) ?? []] as const)).then((candles) => {
+        if (active) {
+          setData(Object.fromEntries(candles));
+          setLoadedCategory(category);
+        }
+      });
     });
     return () => { active = false; };
-  }, [assets, category]);
-  return <View><View style={styles.heading}><View><Text style={[styles.title, { color: colors.text }]}>Warte uwagi</Text><Text style={[styles.subtitle, { color: colors.textMuted }]}>Ciekawe trendy rynkowe</Text></View><Ionicons name="flame-outline" size={22} color={colors.accent} /></View>
-    <View style={styles.categories}>{Object.keys(categories).map((item) => <Text key={item} onPress={() => setCategory(item)} style={[styles.category, { color: item === category ? colors.accent : colors.textMuted, borderBottomColor: item === category ? colors.accent : 'transparent' }]}>{item}</Text>)}</View>
-    {loading ? <View style={styles.loading}><ActivityIndicator color={colors.accent} /></View> : assets.map((asset) => <TrendCard key={asset.symbol} asset={asset} candles={data[asset.symbol] ?? []} colors={colors} width={Math.max(width - 68, 1)} />)}
+  }, [category]);
+
+  return <View>
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionContent}>
+        <Text style={[styles.title, { color: colors.text }]}>Warte uwagi</Text>
+        <View style={styles.categories}>
+          {categories.map((item) => <Text key={item.key} onPress={() => setCategory(item.key)} style={[styles.category, { color: item.key === category ? colors.accent : colors.textMuted, borderBottomColor: item.key === category ? colors.accent : 'transparent' }]}>{item.label}</Text>)}
+        </View>
+      </View>
+      <Ionicons name={categories.find((item) => item.key === category)?.icon ?? 'flame-outline'} size={34} color={colors.accent} />
+    </View>
+    {loading ? <View style={styles.panel}>{[1, 2, 3].map((item) => <View key={item} style={[styles.item, item < 3 && { borderBottomColor: colors.border }]}>
+      <View style={styles.row}><Skeleton width={34} height={34} radius={17} /><View style={styles.copy}><Skeleton width="55%" height={14} /><Skeleton width="38%" height={10} style={{ marginTop: 6 }} /></View><Skeleton width={42} height={14} /></View>
+      <View style={styles.chartSkeleton}><Skeleton width="100%" height={1} radius={0} style={styles.chartLineTop} /><Skeleton width="100%" height={1} radius={0} style={styles.chartLineMiddle} /><Skeleton width="100%" height={1} radius={0} style={styles.chartLineBottom} /><Skeleton width="70%" height={4} radius={3} style={styles.chartStroke} /></View>
+    </View>)}</View> : <View style={styles.panel}>{assets.slice(0, 3).map((asset, index) => <TrendCard key={asset.symbol} asset={asset} candles={data[asset.symbol] ?? []} colors={colors} width={Math.max(width - 68, 1)} showSeparator={index < Math.min(assets.length, 3) - 1} />)}</View>}
   </View>;
 }
-function TrendCard({ asset, candles, colors, width }: { asset: Asset; candles: CandleData[]; colors: ReturnType<typeof useTheme>['colors']; width: number }) {
-  const first = candles[0]; const latest = candles[candles.length - 1]; const values = candles.map((item) => ({ timestamp: item.timestamp, value: item.close })); const change = first ? ((latest.close - first.close) / first.close) * 100 : 0;
-  return <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={styles.row}><View style={[styles.icon, { backgroundColor: colors.surfaceMuted }]}><Ionicons name={asset.icon} size={18} color={colors.accent} /></View><View style={styles.copy}><Text style={[styles.name, { color: colors.text }]}>{asset.name}</Text><Text style={[styles.meta, { color: colors.textMuted }]}>{asset.market} · {asset.unit}</Text></View><Text style={{ color: change >= 0 ? colors.positive : colors.negative, fontWeight: '700' }}>{change >= 0 ? '+' : ''}{change.toFixed(2)}%</Text></View>{values.length > 1 && <LineChart.Provider data={values}><LineChart width={width} height={70} yGutter={10}><LineChart.Path color={change >= 0 ? colors.positive : colors.negative} width={2} /></LineChart></LineChart.Provider>}</View>;
+
+function TrendCard({ asset, candles, colors, width, showSeparator }: { asset: DynamicTrendAsset; candles: CandleData[]; colors: ReturnType<typeof useTheme>['colors']; width: number; showSeparator: boolean }) {
+  const first = candles[0];
+  const latest = candles[candles.length - 1];
+  const values = candles.map((item) => ({ timestamp: item.timestamp, value: item.close }));
+  const change = first && latest ? ((latest.close - first.close) / first.close) * 100 : asset.changePercent;
+  const lowest = candles.length ? Math.min(...candles.map((item) => item.low)) : 0;
+  const highest = candles.length ? Math.max(...candles.map((item) => item.high)) : 0;
+  const firstDate = first ? formatDate(first.timestamp) : '';
+  const lastDate = latest ? formatDate(latest.timestamp) : '';
+  return <View style={[styles.item, showSeparator && { borderBottomColor: colors.border }]}>
+    <View style={styles.row}><View style={styles.icon}><Ionicons name="trending-up-outline" size={18} color={colors.accent} /></View><View style={styles.copy}><Text numberOfLines={1} ellipsizeMode="tail" style={[styles.name, { color: colors.text }]}>{truncate(asset.name, 24)}</Text><Text numberOfLines={1} style={[styles.meta, { color: colors.textMuted }]}>{asset.exchangeName} · USD</Text></View><Text style={{ color: change >= 0 ? colors.positive : colors.negative, fontWeight: '700' }}>{change >= 0 ? '+' : ''}{change.toFixed(2)}%</Text></View>
+    {values.length > 1 && <View style={styles.chartBlock}>
+      <View style={styles.chartCaption}><Text style={[styles.chartDescription, { color: colors.textMuted }]}>Cena zamknięcia (USD)</Text><Text style={[styles.chartDescription, { color: colors.textMuted }]}>Ostatnie 30 dni</Text></View>
+      <View style={styles.chartArea}>
+        <View style={styles.axisLabels}><Text style={[styles.axisLabel, { color: colors.textMuted }]}>{formatPrice(highest)}</Text><Text style={[styles.axisLabel, { color: colors.textMuted }]}>{formatPrice(lowest)}</Text></View>
+        <View style={styles.chartContent}>
+          <View pointerEvents="none" style={styles.grid}>
+            {Array.from({ length: 9 }, (_, line) => <View key={`h-${line}`} style={[styles.gridHorizontal, { top: `${(line / 8) * 100}%`, backgroundColor: colors.border }]} />)}
+            {Array.from({ length: 11 }, (_, line) => <View key={`v-${line}`} style={[styles.gridVertical, { left: `${(line / 10) * 100}%`, backgroundColor: colors.border }]} />)}
+          </View>
+          <LineChart.Provider data={values}><LineChart width={Math.max(width - 44, 1)} height={70} yGutter={10}><LineChart.Path color={change >= 0 ? colors.positive : colors.negative} width={2} /></LineChart></LineChart.Provider>
+          <View style={styles.timeLabels}><Text style={[styles.axisLabel, { color: colors.textMuted }]}>{firstDate}</Text><Text style={[styles.axisLabel, { color: colors.textMuted }]}>{lastDate}</Text></View>
+        </View>
+      </View>
+    </View>}
+  </View>;
 }
-const styles = StyleSheet.create({ heading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }, title: { fontSize: 18, fontWeight: '700' }, subtitle: { fontSize: 12, marginTop: 2 }, categories: { flexDirection: 'row', gap: 22, marginBottom: 12 }, category: { fontSize: 13, fontWeight: '700', paddingBottom: 6, borderBottomWidth: 2 }, loading: { height: 80, justifyContent: 'center', alignItems: 'center' }, card: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 10 }, row: { flexDirection: 'row', alignItems: 'center' }, icon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' }, copy: { flex: 1, marginLeft: 10 }, name: { fontWeight: '700', fontSize: 14 }, meta: { fontSize: 11, marginTop: 3 } });
+
+function formatPrice(value: number) {
+  return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(value >= 100 ? 0 : 2);
+}
+
+function formatDate(timestamp: number) {
+  return new Date(timestamp).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
+}
+
+function truncate(value: string, limit: number) {
+  return value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}…` : value;
+}
+
+const styles = StyleSheet.create({
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  sectionContent: { flex: 1 },
+  title: { fontSize: 18, fontWeight: '700' }, subtitle: { fontSize: 12, marginTop: 2 },
+  categories: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 8, marginBottom: 2 },
+  category: { fontSize: 12, fontWeight: '700', paddingBottom: 6, borderBottomWidth: 2 },
+  panel: {},
+  item: { padding: 14, borderBottomWidth: 1, borderBottomColor: 'transparent' },
+  row: { flexDirection: 'row', alignItems: 'center' }, icon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  copy: { flex: 1, marginLeft: 10 }, name: { fontWeight: '700', fontSize: 14 }, meta: { fontSize: 11, marginTop: 3 },
+  chartBlock: { marginTop: 12 }, chartCaption: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  chartDescription: { fontSize: 9, fontWeight: '600' }, chartArea: { flexDirection: 'row' }, axisLabels: { width: 44, height: 70, justifyContent: 'space-between', paddingVertical: 2 },
+  chartContent: { flex: 1, height: 86 }, grid: { position: 'absolute', top: 0, left: 0, right: 0, height: 70, zIndex: 0 },
+  gridHorizontal: { position: 'absolute', left: 0, right: 0, height: 1, opacity: 0.65 },
+  gridVertical: { position: 'absolute', top: 0, bottom: 0, width: 1, opacity: 0.65 },
+  timeLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }, axisLabel: { fontSize: 9 },
+  chartSkeleton: { height: 70, marginTop: 12, position: 'relative' }, chartLineTop: { position: 'absolute', top: 8, left: 0, right: 0 },
+  chartLineMiddle: { position: 'absolute', top: 34, left: 0, right: 0 }, chartLineBottom: { position: 'absolute', top: 60, left: 0, right: 0 },
+  chartStroke: { position: 'absolute', top: 35, left: 10 },
+});

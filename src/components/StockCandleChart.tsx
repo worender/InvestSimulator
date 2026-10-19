@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CandlestickChart } from 'react-native-wagmi-charts';
-import { CandleData, getStockCandles } from '../api/marketService';
+import { CandleData, getInstrumentQuote, getStockCandles, InstrumentQuote } from '../api/marketService';
+import { Skeleton } from './Skeleton';
 import { useTheme } from '../theme';
 
 type CandleInterval = '1m' | '5m' | '15m' | '1h' | '1d' | '1wk';
@@ -20,16 +21,17 @@ const DEFAULT_RANGE_INDEX = 1;
 const DEFAULT_INTERVAL: CandleInterval = '1h';
 const intraday = (value: CandleInterval) => ['1m', '5m', '15m', '1h'].includes(value);
 
-type StockCandleChartProps = { stock?: string; title?: string };
+type StockCandleChartProps = { stock?: string; title?: string; exchange?: string };
 
 type CurrencySymbol = 'zł' | '€' | '$';
 
-export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI', currency = 'zł' }: StockCandleChartProps & { currency?: CurrencySymbol }) {
+export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI', currency = 'zł', exchange = 'GPW' }: StockCandleChartProps & { currency?: CurrencySymbol }) {
   const { colors } = useTheme();
   const [candles, setCandles] = useState<CandleData[]>([]);
   const [rangeIndex, setRangeIndex] = useState(DEFAULT_RANGE_INDEX);
   const [interval, setInterval] = useState<CandleInterval>(DEFAULT_INTERVAL);
   const [loading, setLoading] = useState(true);
+  const [quote, setQuote] = useState<InstrumentQuote | null>(null);
   const range = ranges[rangeIndex];
   const intradayDisabled = range.days > 60;
   const latest = candles[candles.length - 1];
@@ -42,16 +44,21 @@ export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI', cur
     let active = true;
     const load = async () => {
       setLoading(true);
+      setQuote(null);
       const requestedInterval = intradayDisabled && intraday(interval) ? '1d' : interval;
-      const data = await getStockCandles(stock, requestedInterval, range.days);
+      const [data, currentQuote] = await Promise.all([
+        getStockCandles(stock, requestedInterval, range.days, exchange),
+        getInstrumentQuote(stock, exchange),
+      ]);
       if (active) {
         setCandles(data ?? []);
+        setQuote(currentQuote);
         setLoading(false);
       }
     };
     load();
     return () => { active = false; };
-  }, [stock, range.days, interval, intradayDisabled]);
+  }, [stock, range.days, interval, intradayDisabled, exchange]);
 
   const axis = candles.length > 2 ? [candles[0], candles[Math.floor(candles.length / 2)], latest] : candles;
 
@@ -66,8 +73,9 @@ export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI', cur
           </Text>
         </View>
         <View style={[styles.badge, { backgroundColor: colors.surfaceMuted }]}>
-          <View style={[styles.dot, { backgroundColor: colors.positive }]} />
-          <Text style={[styles.badgeText, { color: colors.textMuted }]}>GPW</Text>
+          <View style={[styles.dot, { backgroundColor: quote?.isOpen ? colors.positive : colors.negative }]} />
+          <Text style={[styles.badgeText, { color: colors.textMuted }]}>{quote?.exchange ?? 'Ładowanie...'}</Text>
+          {quote && <Text style={[styles.marketState, { color: quote.isOpen ? colors.positive : colors.negative }]}>{quote.isOpen ? 'open' : 'closed'}</Text>}
         </View>
       </View>
       <Text style={[styles.controlLabel, { color: colors.textMuted }]}>ZAKRES</Text>
@@ -88,7 +96,14 @@ export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI', cur
         ))}
       </ScrollView>
       <View style={styles.chart}>
-        {loading ? <View style={styles.placeholder}><ActivityIndicator color={colors.accent} /><Text style={[styles.muted, { color: colors.textMuted }]}>Pobieranie danych...</Text></View>
+        {loading ? <View style={styles.skeletonChart}>
+          <View style={styles.skeletonHeader}><Skeleton width="42%" height={16} /><Skeleton width={72} height={16} /></View>
+          <Skeleton width="100%" height={1} radius={0} style={styles.skeletonLine} />
+          <Skeleton width="100%" height={1} radius={0} style={styles.skeletonLine} />
+          <Skeleton width="100%" height={1} radius={0} style={styles.skeletonLine} />
+          <Skeleton width="72%" height={5} radius={3} style={styles.skeletonTrend} />
+          <Text style={[styles.muted, { color: colors.textMuted }]}>Pobieranie danych...</Text>
+        </View>
           : candles.length === 0 ? <View style={styles.placeholder}><Ionicons name="calendar-outline" size={40} color={colors.textMuted} /><Text style={[styles.muted, { color: colors.textMuted }]}>Brak notowań dla tego zakresu.</Text></View>
             : <CandlestickChart.Provider data={candles}>
               <CandlestickChart height={280}><CandlestickChart.Candles useAnimations={false} /><CandlestickChart.Crosshair><CandlestickChart.Tooltip /></CandlestickChart.Crosshair></CandlestickChart>
@@ -119,12 +134,15 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 16, padding: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   titleCopy: { flex: 1 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
-  price: { fontSize: 30, fontWeight: '700', marginTop: 6 }, badge: { flexDirection: 'row', gap: 6, padding: 8, borderRadius: 8 },
-  dot: { width: 7, height: 7, borderRadius: 4 }, badgeText: { fontSize: 10, fontWeight: '700' },
+  price: { fontSize: 30, fontWeight: '700', marginTop: 6 }, badge: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 8, borderRadius: 8 },
+  dot: { width: 7, height: 7, borderRadius: 4 }, badgeText: { fontSize: 10, fontWeight: '700' }, marketState: { fontSize: 9, fontWeight: '700' },
   description: { fontSize: 12, lineHeight: 18, marginTop: 10 }, controlLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginTop: 18, marginBottom: 8 },
   controls: { flexDirection: 'row', gap: 8, paddingRight: 8 }, button: { minHeight: 34, paddingHorizontal: 12, borderRadius: 7, justifyContent: 'center' },
   hint: { fontSize: 11, lineHeight: 16, marginBottom: 8 }, chart: { minHeight: 280, marginTop: 16, overflow: 'hidden' },
   placeholder: { minHeight: 280, alignItems: 'center', justifyContent: 'center', gap: 9 }, muted: { fontSize: 13, textAlign: 'center' },
+  skeletonChart: { minHeight: 280, justifyContent: 'center', gap: 22, paddingVertical: 20 },
+  skeletonHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  skeletonLine: { marginTop: 4 }, skeletonTrend: { marginTop: 18 },
   crosshair: { alignItems: 'center', marginTop: 4 }, axis: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, paddingTop: 8 },
   axisText: { flex: 1, fontSize: 10, textAlign: 'center' },
 });

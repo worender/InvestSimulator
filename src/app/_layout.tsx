@@ -10,7 +10,7 @@ function AppStack() {
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-      <Stack>
+      <Stack screenOptions={{ gestureEnabled: true, fullScreenGestureEnabled: true }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
     </>

@@ -1,12 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 
 export default function PortfolioScreen() {
   const { colors } = useTheme();
+  const { bottom } = useSafeAreaInsets();
 
   return (
-    <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={styles.content}>
+    <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={[styles.content, { paddingBottom: 120 + bottom }]}>
       <Text style={[styles.intro, { color: colors.textMuted }]}>Twoje decyzje, Twoje tempo nauki.</Text>
       <View style={[styles.summary, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.label, { color: colors.textMuted }]}>WARTOŚĆ PORTFELA</Text>

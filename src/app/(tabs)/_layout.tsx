@@ -11,6 +11,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      backBehavior="history"
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
@@ -23,6 +24,7 @@ export default function TabLayout() {
         options={{
           title: 'Rynki',
           headerTitle: 'Rynki',
+          headerShown: false,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'trending-up' : 'trending-up-outline'} size={22} color={color} />
           ),
@@ -165,5 +167,5 @@ const styles = StyleSheet.create({
   bar: { width: '100%', height: 54, borderWidth: 1, borderRadius: 27, paddingHorizontal: 6, paddingVertical: 4, flexDirection: 'row', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, elevation: 8, overflow: 'hidden' },
   item: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, position: 'relative', borderRadius: 16 },
   selection: { position: 'absolute', top: 3, left: 6, height: 48, borderWidth: 1.5, borderRadius: 23 },
-  hiddenBar: { width: 64, height: 7, borderRadius: 5, position: 'absolute', bottom: -5 },
+  hiddenBar: { width: 86, height: 5, borderRadius: 5, position: 'absolute', bottom: -6 },
 });
