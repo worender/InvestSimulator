@@ -74,9 +74,9 @@ app.get('/api/candles', authenticateToken, async (req, res) => {
   if (!symbol) return res.status(400).json({ error: 'Brak symbolu akcji' });
 
   symbol = symbol.toUpperCase();
-  if (!symbol.includes('.') && !symbol.includes('-') && !symbol.includes('=') && !symbol.startsWith('^')) {
-    symbol = `${symbol}.WA`; // Domyślnie GPW
-  }
+  // if (!symbol.includes('.') && !symbol.includes('-') && !symbol.includes('=') && !symbol.startsWith('^')) {
+  //   symbol = `${symbol}.WA`; // Domyślnie GPW
+  // }
 
   
   const cacheKey = `${symbol}_${interval}_${days}`;
