@@ -52,7 +52,7 @@ export default function Index() {
   const { colors } = useTheme();
   const { bottom } = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
-  const symbol = 'PKO';
+  const symbol = 'PKO.WA';
   const chartWidth = Math.max(screenWidth - 80, 1);
   const trendChartWidth = Math.max(screenWidth - 76, 1);
   const range = ranges[selectedRange];
