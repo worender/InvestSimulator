@@ -1,18 +1,29 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PortfolioOverviewCard } from '../../components/PortfolioOverviewCard';
 import { StockCandleChart } from '../../components/StockCandleChart';
 import { TrendCards } from '../../components/TrendCards';
 import { useNavigationVisibility } from '../../navigationVisibility';
-import { useTheme } from '../../theme';
+import { Currency, useTheme } from '../../theme';
+
+const portfolioStocks: Record<Currency, { currency: Currency; stock: string; title: string; symbol: 'zł' | '€' | '$' }> = {
+  PLN: { currency: 'PLN', stock: 'PKO', title: 'PKO BANK POLSKI', symbol: 'zł' },
+  EUR: { currency: 'EUR', stock: 'MC.PA', title: 'LOUIS VUITTON / LVMH', symbol: '€' },
+  USD: { currency: 'USD', stock: 'AAPL', title: 'APPLE', symbol: '$' },
+};
 
 export default function Index() {
-  const { colors } = useTheme();
+  const { colors, defaultCurrency, multiCurrency } = useTheme();
   const { bottom } = useSafeAreaInsets();
   const { setVisible } = useNavigationVisibility();
   const lastOffset = useRef(0);
-  const [portfolioStock, setPortfolioStock] = useState({ stock: 'PKO', title: 'PKO BANK POLSKI' });
+  const [portfolioStock, setPortfolioStock] = useState(() => portfolioStocks[defaultCurrency]);
+  const defaultStock = portfolioStocks[defaultCurrency];
+  const chartStock = multiCurrency ? portfolioStock : defaultStock;
+  const handleStockChange = useCallback((stock: string, title: string, currency: Currency) => {
+    setPortfolioStock({ ...portfolioStocks[currency], stock, title });
+  }, []);
 
   return (
     <ScrollView
@@ -28,8 +39,8 @@ export default function Index() {
     >
       <Text style={[styles.eyebrow, { color: colors.accent }]}>EDUKACYJNY SYMULATOR</Text>
       <Text style={[styles.title, { color: colors.text }]}>Dzień dobry, inwestorze</Text>
-      <View style={styles.section}><PortfolioOverviewCard onStockChange={(stock, title) => setPortfolioStock({ stock, title })} /></View>
-      <View style={styles.section}><StockCandleChart stock={portfolioStock.stock} title={portfolioStock.title} /></View>
+      <View style={styles.section}><PortfolioOverviewCard key={`${defaultCurrency}-${multiCurrency}`} onStockChange={handleStockChange} /></View>
+      <View style={styles.section}><StockCandleChart stock={chartStock.stock} title={chartStock.title} currency={chartStock.symbol} /></View>
       <View style={styles.section}><TrendCards /></View>
       <Text style={[styles.disclaimer, { color: colors.textMuted }]}>Dane są edukacyjne i nie stanowią rekomendacji inwestycyjnej.</Text>
     </ScrollView>

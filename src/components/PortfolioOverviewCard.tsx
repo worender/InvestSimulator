@@ -1,10 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LineChart } from 'react-native-wagmi-charts';
-import { useTheme } from '../theme';
+import { Currency, useTheme } from '../theme';
 
-type Currency = 'PLN' | 'EUR' | 'USD';
 const currencyOrder: Currency[] = ['PLN', 'EUR', 'USD'];
 type Portfolio = { symbol: string; total: string; active: string; inactive: string; accent: string; stock: string; stockName: string; values: { timestamp: number; value: number }[] };
 const cards: Record<Currency, Portfolio> = {
@@ -13,29 +12,37 @@ const cards: Record<Currency, Portfolio> = {
   USD: { symbol: '$', total: '2 520,00', active: '1 940,00', inactive: '580,00', accent: '#059669', stock: 'AAPL', stockName: 'Apple', values: [{ timestamp: 1, value: 1750 }, { timestamp: 2, value: 1860 }, { timestamp: 3, value: 1940 }] },
 };
 
-export function PortfolioOverviewCard({ onStockChange }: { onStockChange?: (stock: string, title: string) => void }) {
-  const { colors } = useTheme();
+export function PortfolioOverviewCard({ onStockChange }: { onStockChange?: (stock: string, title: string, currency: Currency) => void }) {
+  const { colors, defaultCurrency, multiCurrency } = useTheme();
   const { width } = useWindowDimensions();
-  const [deckOrder, setDeckOrder] = useState<Currency[]>(currencyOrder);
+  const [deckOrder, setDeckOrder] = useState<Currency[]>(() => {
+    const selected = currencyOrder.filter((item) => item !== defaultCurrency);
+    return [defaultCurrency, ...selected];
+  });
   const [travel] = useState(() => new Animated.Value(0));
   const lastTap = useRef(0);
   const animating = useRef(false);
-  const currency = deckOrder[0];
+  const selectedOrder = [defaultCurrency, ...currencyOrder.filter((item) => item !== defaultCurrency)];
+  const activeOrder = multiCurrency && deckOrder[0] !== defaultCurrency ? deckOrder : selectedOrder;
+  const currency = activeOrder[0];
   const data = cards[currency];
+  useEffect(() => {
+    onStockChange?.(data.stock, data.stockName, currency);
+  }, [currency, data.stock, data.stockName, onStockChange]);
   const changeCurrency = useCallback(() => {
-    if (animating.current) return;
+    if (animating.current || !multiCurrency) return;
     animating.current = true;
-    const nextOrder = [...deckOrder.slice(1), deckOrder[0]];
+    const nextOrder = [...activeOrder.slice(1), activeOrder[0]];
     const next = cards[nextOrder[0]];
     Animated.timing(travel, { toValue: 1, duration: 220, useNativeDriver: true }).start(({ finished }) => {
       if (finished) {
         setDeckOrder(nextOrder);
-        onStockChange?.(next.stock, next.stockName);
+        onStockChange?.(next.stock, next.stockName, nextOrder[0]);
         travel.setValue(0);
         animating.current = false;
       }
     });
-  }, [deckOrder, onStockChange, travel]);
+  }, [activeOrder, multiCurrency, onStockChange, travel]);
   const handleCardPress = () => {
     const now = Date.now();
     if (now - lastTap.current < 320) {
@@ -49,7 +56,7 @@ export function PortfolioOverviewCard({ onStockChange }: { onStockChange?: (stoc
 
   return (
     <View style={styles.deck}>
-      {deckOrder.slice(1).map((item, index) => (
+      {multiCurrency && activeOrder.slice(1).map((item, index) => (
         <Animated.View
           key={item}
           style={[
@@ -87,7 +94,7 @@ export function PortfolioOverviewCard({ onStockChange }: { onStockChange?: (stoc
           <Ionicons name="trending-up-outline" size={16} color={data.accent} />
           <Text style={[styles.stockText, { color: colors.text }]}>{data.stockName} · {data.stock}</Text>
         </View>
-        <Text style={[styles.swipeHint, { color: colors.textMuted }]}>Dotknij karty dwa razy, aby zmienić portfel · {currency}</Text>
+        <Text style={[styles.swipeHint, { color: colors.textMuted }]}>{multiCurrency ? `Dotknij karty dwa razy, aby zmienić portfel · ${currency}` : `Domyślna waluta portfela · ${currency}`}</Text>
         <View style={styles.breakdown}><Text style={[styles.breakdownText, { color: colors.textMuted }]}>Aktywne <Text style={{ color: colors.text }}>{data.active} {data.symbol}</Text></Text><Text style={[styles.breakdownText, { color: colors.textMuted }]}>Nieaktywne <Text style={{ color: colors.text }}>{data.inactive} {data.symbol}</Text></Text></View>
         <View style={styles.chartRow}>
           <View style={styles.yAxis}>

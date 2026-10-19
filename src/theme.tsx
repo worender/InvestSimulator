@@ -3,6 +3,7 @@ import type { PropsWithChildren } from 'react';
 
 export type ThemeMode = 'dark' | 'light';
 export type ThemeAccent = 'blue' | 'violet' | 'green' | 'orange';
+export type Currency = 'PLN' | 'EUR' | 'USD';
 
 const darkColors = {
   background: '#0d1117',
@@ -36,6 +37,10 @@ type ThemeContextValue = {
   toggleMode: () => void;
   accent: ThemeAccent;
   setAccent: (accent: ThemeAccent) => void;
+  defaultCurrency: Currency;
+  setDefaultCurrency: (currency: Currency) => void;
+  multiCurrency: boolean;
+  setMultiCurrency: (enabled: boolean) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -43,6 +48,8 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: PropsWithChildren) {
   const [mode, setMode] = useState<ThemeMode>('dark');
   const [accent, setAccent] = useState<ThemeAccent>('blue');
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency>('PLN');
+  const [multiCurrency, setMultiCurrency] = useState(false);
   const colors = useMemo(() => {
     const baseColors = mode === 'dark' ? darkColors : lightColors;
     const accentColors: Record<ThemeAccent, string> = {
@@ -59,9 +66,13 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       colors,
       accent,
       setAccent,
+      defaultCurrency,
+      setDefaultCurrency,
+      multiCurrency,
+      setMultiCurrency,
       toggleMode: () => setMode((current) => (current === 'dark' ? 'light' : 'dark')),
     }),
-    [mode, accent, colors],
+    [mode, accent, colors, defaultCurrency, multiCurrency],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

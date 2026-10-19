@@ -22,7 +22,9 @@ const intraday = (value: CandleInterval) => ['1m', '5m', '15m', '1h'].includes(v
 
 type StockCandleChartProps = { stock?: string; title?: string };
 
-export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI' }: StockCandleChartProps) {
+type CurrencySymbol = 'zł' | '€' | '$';
+
+export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI', currency = 'zł' }: StockCandleChartProps & { currency?: CurrencySymbol }) {
   const { colors } = useTheme();
   const [candles, setCandles] = useState<CandleData[]>([]);
   const [rangeIndex, setRangeIndex] = useState(DEFAULT_RANGE_INDEX);
@@ -58,9 +60,9 @@ export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI' }: S
       <View style={styles.header}>
         <View style={styles.titleCopy}>
           <Text style={[styles.label, { color: colors.textMuted }]}>{title}</Text>
-          <Text style={[styles.price, { color: colors.text }]}>{formatPrice(latest?.close)} zł</Text>
+          <Text style={[styles.price, { color: colors.text }]}>{formatPrice(latest?.close)} {currency}</Text>
           <Text style={{ color: change >= 0 ? colors.positive : colors.negative }}>
-            {change >= 0 ? '+' : ''}{formatPrice(change)} zł ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)
+            {change >= 0 ? '+' : ''}{formatPrice(change)} {currency} ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)
           </Text>
         </View>
         <View style={[styles.badge, { backgroundColor: colors.surfaceMuted }]}>
