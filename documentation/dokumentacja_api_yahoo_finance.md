@@ -18,7 +18,7 @@ Aplikacja kliencka (React Native / Expo) nie komunikuje się bezpośrednio z ser
 ### Warstwa serwerowa (Backend)
 * **Środowisko i framework:** Node.js + Express.js (`cors`, `dotenv`).
 * **Klient danych rynkowych:** `yahoo-finance2` (v3.x) – Biblioteka automatycznie zarządza sesją Yahoo, wymaganymi ciasteczkami (cookies).
-* **Autoryzacja (JWT):** Dostęp do wszystkich endpointów rynkowych jest chroniony przez middleware `authenticateToken`. Klient uzyskuje bezstanowy token JWT (ważny przez **7 dni**) poprzez rejestrację unikalnego identyfikatora urządzenia (`POST /api/guest`).
+* **Autoryzacja (JWT):** Dostęp do wszystkich endpointów rynkowych jest chroniony przez middleware `authenticateToken`. Klient uzyskuje bezstanowy token JWT (ważny przez **7 dni**) poprzez rejestrację unikalnego identyfikatora urządzenia.
 * **Pamięć podręczna (In-Memory Cache):** Wykorzystuje natywną strukturę `Map` (`stockCache`) dla zasobożernych zapytań o dane historyczne (`/api/candles`). Klucz cache'u ma postać `${symbol}_${interval}_${days}`, a czas życia danych (**TTL**) wynosi **5 minut** (`300 000 ms`).
 * **Automatyczna detekcja sieci lokalnej:** Przy starcie serwer skanuje interfejsy sieciowe (`os.networkInterfaces()`), wykrywa lokalny adres IPv4 i zapisuje konfigurację do pliku `server-address.json`, nasłuchując na porcie 3000.
 
