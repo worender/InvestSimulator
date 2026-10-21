@@ -9,6 +9,7 @@ import { StockCandleChart } from '../../components/StockCandleChart';
 import { TrendCards } from '../../components/TrendCards';
 import { useNavigationVisibility } from '../../navigationVisibility';
 import { Currency, useTheme } from '../../theme';
+import { initializeDatabase } from '../../database/database';
 
 const portfolioStocks: Record<Currency, { currency: Currency; stock: string; title: string; symbol: 'zł' | '€' | '$'; exchange: string }> = {
   PLN: { currency: 'PLN', stock: 'PKO', title: 'PKO BANK POLSKI', symbol: 'zł', exchange: 'GPW' },
@@ -32,6 +33,12 @@ export default function Index() {
   const handleStockChange = useCallback((stock: string, title: string, currency: Currency) => {
     setPortfolioStock({ ...portfolioStocks[currency], stock, title });
   }, []);
+
+
+  useEffect(() => {
+    initializeDatabase();
+  }, []);
+
   useEffect(() => {
     const timeout = setTimeout(async () => {
       if (searchQuery.trim().length < 2) {
