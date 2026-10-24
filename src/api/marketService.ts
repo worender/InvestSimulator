@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
+import { notify } from '../notificationBus';
 
 const getApiBaseUrl = (): string => {
   const configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
@@ -160,10 +161,16 @@ export const getStockCandles = async (
     return await response.json();
   } catch (error) {
     console.error('Błąd pobierania świec giełdowych:', error);
+    notify({
+      variant: 'warning',
+      title: 'Brak notowań',
+      message: 'Nie udało się pobrać danych wykresu. Spróbuj ponownie za chwilę.',
+    });
     return null;
   }
 };
 
+// Funckja obsługująca wyszukiwarkę instrumentów giełdowych
 export const searchInstruments = async (query: string): Promise<InstrumentSearchResult[]> => {
   const normalizedQuery = query.trim();
   if (normalizedQuery.length < 2) return [];
@@ -195,10 +202,16 @@ export const searchInstruments = async (query: string): Promise<InstrumentSearch
     return data as InstrumentSearchResult[];
   } catch (error) {
     console.error('Błąd wyszukiwania instrumentów:', error);
+    notify({
+      variant: 'error',
+      title: 'Wyszukiwanie nie powiodło się',
+      message: 'Nie udało się pobrać wyników. Sprawdź połączenie z internetem i spróbuj ponownie.',
+    });
     return [];
   }
 };
 
+// Funckja pobierająca dane dotyczące ceny instrumentu giełdowego
 export const getInstrumentQuote = async (symbol: string, exchange?: string): Promise<InstrumentQuote | null> => {
   const request = async (token: string) => fetch(
     `${BASE_URL}/api/instruments/quote?symbol=${encodeURIComponent(symbol)}${exchange ? `&exchange=${encodeURIComponent(exchange)}` : ''}`,
@@ -230,6 +243,7 @@ export const getInstrumentQuote = async (symbol: string, exchange?: string): Pro
   }
 };
 
+// Funkcja pobierająca dynamiczne trendy giełdowe z Yahoo
 export const getDynamicTrends = async (category: string): Promise<DynamicTrendAsset[]> => {
   const token = await getValidToken();
   if (!token) return [];
@@ -246,30 +260,310 @@ export const getDynamicTrends = async (category: string): Promise<DynamicTrendAs
   }
 };
 
-//Finhub API response type
-// export const getStockData = async (symbol: string): Promise< StockData | null> => {
-//   const token = await getValidToken();
-//   if (!token) {
-//     console.error('Nie udało się uzyskać tokenu JWT');
-//     return null;
-//   }
+export interface StockPerformanceData {
+  performance1Y: number;
+  performance3Y: number;
+  performance5Y: number;
+  performanceYTD: number;
+  oneYearAvgReturn: number;
+  threeYearAvgReturn: number;
+  fiveYearAvgReturn: number;
+}
 
-//   try {
-//     const response = await fetch(`${BASE_URL}/api/quote?symbol=${symbol}`, {
-//       headers: { 'Authorization': `Bearer ${token}` }
-//     });
+export interface StockQuoteDetails {
+  symbol: string;
+  currency: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  averageVolume: number;
+  marketCap: number;
+  trailingPE?: number;
+  forwardPE?: number;
+  priceToBook?: number;
+  sharesOutstanding?: number;
+  bookValue?: number;
+  dividendRate?: number;
+  dividendYield?: number;
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+  fiftyTwoWeekChangePercent?: number;
+}
 
-//     // Jeśli token wygasł (status 403), można usunąć go z pamięci i spróbować ponownie
-//     if (response.status === 403) {
-//       await SecureStore.deleteItemAsync('jwtToken');
-//       return getStockData(symbol); // Ponowienie próby
-//     }
+export interface StockFinancialData {
+  symbol: string;
+  currency: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  averageVolume: number;
+  marketCap: number;
+  sharesOutstanding: number;
+  bookValue: number;
+  dividendRate: number;
+  dividendYield: number;
+  exDividendDate?: string;
+  payoutRatio: number;
+  fiveYearAvgDividendYield: number;
+  beta: number;
+  trailingPE: number;
+  forwardPE: number;
+  priceToBook: number;
+  priceToSales: number;
+  enterpriseValue: number;
+  enterpriseValueToRevenue: number;
+  enterpriseValueToEbitda: number;
+  priceToFreeCashFlow: number;
+  profitMargins: number;
+  floatShares: number;
+  sharesShort: number;
+  shortRatio: number;
+  shortPercentOfFloat: number;
+  lastSplitFactor: string;
+  lastSplitDate?: string;
+  fiveYearAvgReturn: number;
+  threeYearAvgReturn: number;
+  oneYearAvgReturn: number;
+  performance1Y?: number;
+  performance3Y?: number;
+  performance5Y?: number;
+  performanceYTD?: number;
+}
 
-//     if (!response.ok) throw new Error('Błąd połączenia');
+// Funckja autentyfikująca żądania do API z użyciem tokenu JWT
+const authenticatedFetch = async (endpointPath: string): Promise<Response | null> => {
+  const request = async (token: string) =>
+    fetch(`${BASE_URL}${endpointPath}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-//     return await response.json();
-//   } catch (error) {
-//     console.error('Błąd pobierania danych giełdowych:', error);
-//     return null;
-//   }
-// };
+  try {
+    let token = await getValidToken();
+    if (!token) return null;
+
+    let response = await request(token);
+    if (response.status === 401 || response.status === 403) {
+      await deleteItem('jwtToken');
+      token = await getValidToken();
+      if (!token) return null;
+      response = await request(token);
+    }
+
+    return response;
+  } catch (error) {
+    console.error(`Błąd authenticatedFetch dla ${endpointPath}:`, error);
+    return null;
+  }
+};
+
+// Funckja pobierająca dane finansowe instrumentu giełdowego
+export const getStockData = async (symbol: string, exchange?: string): Promise<StockFinancialData | null> => {
+  const exchangeParam = exchange ? `&exchange=${encodeURIComponent(exchange)}` : '';
+  const endpoint = `/api/instruments/financials?symbol=${encodeURIComponent(symbol)}${exchangeParam}`;
+
+  try {
+    const response = await authenticatedFetch(endpoint);
+    if (!response || !response.ok) {
+      throw new Error(`Błąd pobierania danych finansowych: ${response?.status}`);
+    }
+
+    const data: unknown = await response.json();
+    if (!data || typeof data !== 'object') {
+      throw new Error('Nieprawidłowy format danych finansowych');
+    }
+
+    return data as StockFinancialData;
+  } catch (error) {
+    console.error(`Błąd getStockData dla ${symbol}:`, error);
+    return null;
+  }
+};
+
+// Funckja pobierająca dane dotyczące wyników historycznych instrumentu giełdowego
+export const getStockPerformance = async (
+  symbol: string,
+  exchange?: string,
+): Promise<StockPerformanceData | null> => {
+  const exchangeParam = exchange ? `&exchange=${encodeURIComponent(exchange)}` : '';
+  const endpoint = `/api/instruments/performance?symbol=${encodeURIComponent(symbol)}${exchangeParam}`;
+
+  try {
+    const response = await authenticatedFetch(endpoint);
+    if (!response || !response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as StockPerformanceData;
+  } catch (error) {
+    console.error(`Błąd getStockPerformance dla ${symbol}:`, error);
+    return null;
+  }
+};
+
+// Funckja pobierająca szczegółowe dane notowania instrumentu giełdowego
+export const getStockQuoteDetails = async (
+  symbol: string,
+  exchange?: string,
+): Promise<StockQuoteDetails | null> => {
+  const exchangeParam = exchange ? `&exchange=${encodeURIComponent(exchange)}` : '';
+  const endpoint = `/api/instruments/quote-details?symbol=${encodeURIComponent(symbol)}${exchangeParam}`;
+
+  try {
+    const response = await authenticatedFetch(endpoint);
+    if (!response || !response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as StockQuoteDetails;
+  } catch (error) {
+    console.error(`Błąd getStockQuoteDetails dla ${symbol}:`, error);
+    return null;
+  }
+};
+
+// Funckja pobierająca dane dotyczące instrumentu giełdowego (łączy dane finansowe, notowania i wyniki historyczne)
+export const enrichFinancialData = async (
+  data: StockFinancialData,
+  symbol: string,
+  exchange?: string,
+): Promise<StockFinancialData> => {
+  let enriched = { ...data };
+
+  const needsPerformance =
+    enriched.performance1Y === undefined ||
+    enriched.performance3Y === undefined ||
+    enriched.performance5Y === undefined ||
+    enriched.performanceYTD === undefined ||
+    (!enriched.oneYearAvgReturn && !enriched.threeYearAvgReturn && !enriched.fiveYearAvgReturn);
+
+  const needsQuote =
+    !enriched.price ||
+    !enriched.volume ||
+    !enriched.marketCap ||
+    !enriched.averageVolume;
+
+  const tasks: Promise<void>[] = [];
+
+  if (needsPerformance) {
+    tasks.push(
+      (async () => {
+        try {
+          const perf = await getStockPerformance(symbol, exchange);
+          if (perf) {
+            enriched = {
+              ...enriched,
+              performance1Y: enriched.performance1Y ?? perf.performance1Y,
+              performance3Y: enriched.performance3Y ?? perf.performance3Y,
+              performance5Y: enriched.performance5Y ?? perf.performance5Y,
+              performanceYTD: enriched.performanceYTD ?? perf.performanceYTD,
+              oneYearAvgReturn: enriched.oneYearAvgReturn || perf.oneYearAvgReturn,
+              threeYearAvgReturn: enriched.threeYearAvgReturn || perf.threeYearAvgReturn,
+              fiveYearAvgReturn: enriched.fiveYearAvgReturn || perf.fiveYearAvgReturn,
+            };
+          }
+        } catch (e) {
+          console.warn('Nie udało się uzupełnić wyników historycznych:', e);
+        }
+      })(),
+    );
+  }
+
+  if (needsQuote) {
+    tasks.push(
+      (async () => {
+        try {
+          const quote = await getStockQuoteDetails(symbol, exchange);
+          if (quote) {
+            enriched = {
+              ...enriched,
+              price: enriched.price || quote.price,
+              change: enriched.change || quote.change,
+              changePercent: enriched.changePercent || quote.changePercent,
+              volume: enriched.volume || quote.volume,
+              averageVolume: enriched.averageVolume || quote.averageVolume,
+              marketCap: enriched.marketCap || quote.marketCap,
+              currency: enriched.currency || quote.currency,
+              trailingPE: enriched.trailingPE || quote.trailingPE || 0,
+              forwardPE: enriched.forwardPE || quote.forwardPE || 0,
+              priceToBook: enriched.priceToBook || quote.priceToBook || 0,
+              sharesOutstanding: enriched.sharesOutstanding || quote.sharesOutstanding || 0,
+              bookValue: enriched.bookValue || quote.bookValue || 0,
+              dividendRate: enriched.dividendRate || quote.dividendRate || 0,
+              dividendYield: enriched.dividendYield || quote.dividendYield || 0,
+            };
+          }
+        } catch (e) {
+          console.warn('Nie udało się uzupełnić danych notowania:', e);
+        }
+      })(),
+    );
+  }
+
+  if (tasks.length > 0) {
+    await Promise.all(tasks);
+  }
+
+  return enriched;
+};
+
+// Funckja budująca dane rezerwowe dla instrumentu giełdowego, jeśli nie udało się pobrać pełnych danych
+export const buildFallbackFinancialData = async (
+  symbol: string,
+  exchange?: string,
+  fallbackCurrency = 'USD',
+): Promise<StockFinancialData | null> => {
+  try {
+    const [quote, perf] = await Promise.all([
+      getStockQuoteDetails(symbol, exchange),
+      getStockPerformance(symbol, exchange),
+    ]);
+
+    if (!quote && !perf) return null;
+
+    return {
+      symbol,
+      currency: quote?.currency || fallbackCurrency,
+      price: quote?.price ?? 0,
+      change: quote?.change ?? 0,
+      changePercent: quote?.changePercent ?? 0,
+      volume: quote?.volume ?? 0,
+      averageVolume: quote?.averageVolume ?? 0,
+      marketCap: quote?.marketCap ?? 0,
+      sharesOutstanding: quote?.sharesOutstanding ?? 0,
+      bookValue: quote?.bookValue ?? 0,
+      dividendRate: quote?.dividendRate ?? 0,
+      dividendYield: quote?.dividendYield ?? 0,
+      exDividendDate: '',
+      payoutRatio: 0,
+      fiveYearAvgDividendYield: 0,
+      beta: 0,
+      trailingPE: quote?.trailingPE ?? 0,
+      forwardPE: quote?.forwardPE ?? 0,
+      priceToBook: quote?.priceToBook ?? 0,
+      priceToSales: 0,
+      enterpriseValue: 0,
+      enterpriseValueToRevenue: 0,
+      enterpriseValueToEbitda: 0,
+      priceToFreeCashFlow: 0,
+      profitMargins: 0,
+      floatShares: 0,
+      sharesShort: 0,
+      shortRatio: 0,
+      shortPercentOfFloat: 0,
+      lastSplitFactor: '',
+      lastSplitDate: '',
+      fiveYearAvgReturn: perf?.fiveYearAvgReturn ?? 0,
+      threeYearAvgReturn: perf?.threeYearAvgReturn ?? 0,
+      oneYearAvgReturn: perf?.oneYearAvgReturn ?? 0,
+      performance1Y: perf?.performance1Y ?? quote?.fiftyTwoWeekChangePercent,
+      performance3Y: perf?.performance3Y,
+      performance5Y: perf?.performance5Y,
+      performanceYTD: perf?.performanceYTD,
+    };
+  } catch (error) {
+    console.error('Błąd budowania danych rezerwowych:', error);
+    return null;
+  }
+};

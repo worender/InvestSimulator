@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Animated, StyleSheet, ViewStyle } from 'react-native';
 import { useTheme } from '../theme';
 
+// Komponent wyświetlający "szkielet" (placeholder) dla elementów, które jeszcze się ładują
 export function Skeleton({ width, height, radius = 8, style }: { width: number | `${number}%`; height: number; radius?: number; style?: ViewStyle }) {
   const { colors } = useTheme();
   const [opacity] = useState(() => new Animated.Value(0.45));
