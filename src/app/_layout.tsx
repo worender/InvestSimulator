@@ -1,9 +1,11 @@
 import { Stack } from "expo-router";
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ThemeProvider, useTheme } from '../theme';
 import { NavigationVisibilityProvider } from '../navigationVisibility';
+import { NotificationProvider } from '../notifications';
+import { ThemeProvider, useTheme } from '../theme';
 
+// Główny komponent aplikacji, który ustawia kontekst motywu, widoczności nawigacji i powiadomień. Zawiera również stos ekranów (Stack) dla nawigacji w aplikacji.
 function AppStack() {
   const { mode } = useTheme();
 
@@ -22,7 +24,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <NavigationVisibilityProvider>
-          <AppStack />
+          <NotificationProvider>
+            <AppStack />
+          </NotificationProvider>
         </NavigationVisibilityProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

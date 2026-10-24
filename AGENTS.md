@@ -1,5 +1,11 @@
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
+# Workflow
+- Source of truth for work: .opencode/plans/tasks.md (checklist).
+- Never work on more than one unchecked task at a time.
+- After finishing a task: run the project's tests, show `git diff --stat`, write a 3-line summary, then STOP and wait for my approval.
+- Do not start the next task without an explicit /next.
+
 ## Expo has changed — do not trust your training data
 
 Expo ships breaking changes every SDK release. APIs you remember are likely renamed, moved, or removed. Before writing any code that touches an Expo, EAS, or React Native API:
