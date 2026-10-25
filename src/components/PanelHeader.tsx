@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
   type LayoutChangeEvent,
+  type TextInputInstance,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
@@ -46,7 +47,7 @@ export function PanelHeader({ title, left, right, search }: PanelHeaderProps) {
   const { top } = useSafeAreaInsets();
   const [width, setWidth] = useState(0);
   const [progress] = useState(() => new Animated.Value(0));
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const pressHandledRef = useRef(false);
   const searchOpen = search?.open ?? false;
   const hasValue = (search?.value ?? '').length > 0;

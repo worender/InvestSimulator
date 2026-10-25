@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs, usePathname, useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
+import { Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
@@ -116,8 +117,8 @@ export default function TabLayout() {
             title: 'Start',
             headerTitle: 'Panel inwestora',
             headerShown: false,
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? 'analytics' : 'analytics-outline'} size={21} color={color} />
+            tabBarIcon: ({ focused }) => (
+              <Ionicons name={focused ? 'analytics' : 'analytics-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
             ),
           }}
         />
@@ -127,8 +128,8 @@ export default function TabLayout() {
             title: 'Rynek',
             headerTitle: 'Rynek giełdowy',
             headerShown: false,
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? 'trending-up' : 'trending-up-outline'} size={21} color={color} />
+            tabBarIcon: ({ focused }) => (
+              <Ionicons name={focused ? 'trending-up' : 'trending-up-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
             ),
           }}
         />
@@ -137,8 +138,8 @@ export default function TabLayout() {
           options={{
             title: 'Portfolio',
             headerTitle: 'Moje portfolio',
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? 'briefcase' : 'briefcase-outline'} size={21} color={color} />
+            tabBarIcon: ({ focused }) => (
+              <Ionicons name={focused ? 'briefcase' : 'briefcase-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
             ),
           }}
         />
@@ -147,8 +148,8 @@ export default function TabLayout() {
           options={{
             title: 'Nauka',
             headerTitle: 'O inwestowaniu',
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? 'book' : 'book-outline'} size={21} color={color} />
+            tabBarIcon: ({ focused }) => (
+              <Ionicons name={focused ? 'book' : 'book-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
             ),
           }}
         />
@@ -157,8 +158,8 @@ export default function TabLayout() {
           options={{
             title: 'Ustawienia',
             headerTitle: 'Ustawienia',
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? 'settings' : 'settings-outline'} size={21} color={color} />
+            tabBarIcon: ({ focused }) => (
+              <Ionicons name={focused ? 'settings' : 'settings-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
             ),
           }}
         />
@@ -167,14 +168,11 @@ export default function TabLayout() {
   );
 }
 
-type FloatingTabBarProps = {
-  state: { index: number; routes: { key: string; name: string }[] };
-  navigation: { navigate: (name: string) => void };
-};
+type FloatingTabBarProps = Pick<BottomTabBarProps, 'state' | 'navigateToTab'>;
 
 
 // Komponent obsługujący pasek zakładek, który jest wyświetlany na dole ekranu i umożliwia przełączanie między zakładkami
-function FloatingTabBar({ state, navigation }: FloatingTabBarProps) {
+function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
   const { colors } = useTheme();
   const { bottom } = useSafeAreaInsets();
   const { visible } = useNavigationVisibility();
@@ -257,7 +255,7 @@ function FloatingTabBar({ state, navigation }: FloatingTabBarProps) {
               key={route.key}
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}
-              onPress={() => navigation.navigate(route.name)}
+              onPress={() => navigateToTab(route.key)}
               style={styles.item}
             >
               <Ionicons

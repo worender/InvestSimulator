@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
@@ -31,7 +31,7 @@ export default function SettingsScreen() {
   } = useTheme();
   const { bottom } = useSafeAreaInsets();
   const scrollNav = useScrollAwareNavigation();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const isDark = mode === 'dark';
 
   return (
