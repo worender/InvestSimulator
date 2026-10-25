@@ -5,7 +5,7 @@ import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { notify } from '../notificationBus';
 
-const getApiBaseUrl = (): string => {
+const getApiBaseUrl = async (): Promise<string> => {
   const configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (configuredUrl) {
     return configuredUrl.replace(/\/$/, '');
@@ -21,10 +21,35 @@ const getApiBaseUrl = (): string => {
     }
   }
 
+  // Pobieramy adres z backendu
+  try {
+    const defaultBaseUrl = 'http://localhost:3000';
+    const response = await fetch(`${defaultBaseUrl}/api/config`);
+    if (response.ok) {
+      const config = await response.json();
+      return config.url || defaultBaseUrl;
+    }
+  } catch (error) {
+    console.error('Błąd pobierania adresu API:', error);
+  }
+
   return 'http://localhost:3000';
 };
 
-const BASE_URL = getApiBaseUrl();
+let BASE_URL: string;
+
+// Inicjalizacja BASE_URL - tylko dla dewelopera
+if (process.env.EXPO_PUBLIC_API_URL) {
+  BASE_URL = process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
+} else if (Platform.OS !== 'web' && Constants.expoConfig?.hostUri) {
+  const hostUri = Constants.expoConfig.hostUri;
+  const host = new URL(hostUri.includes('://') ? hostUri : `http://${hostUri}`).hostname;
+  BASE_URL = `http://${host}:3000`;
+} else {
+  BASE_URL = 'http://localhost:3000';
+}
+
+export { getApiBaseUrl };
 
 export interface CandleData {
   timestamp: number;
@@ -97,7 +122,8 @@ const getValidToken = async (): Promise<string | null> => {
     }
 
     try{
-      const response = await fetch(`${BASE_URL}/api/guest`, {
+      const defaultBaseUrl = 'http://localhost:3000';
+      const response = await fetch(`${defaultBaseUrl}/api/guest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deviceId })
@@ -256,6 +282,11 @@ export const getDynamicTrends = async (category: string): Promise<DynamicTrendAs
     return Array.isArray(data) ? data as DynamicTrendAsset[] : [];
   } catch (error) {
     console.error('Błąd pobierania dynamicznych trendów:', error);
+    notify({
+      variant: 'warning',
+      title: 'Brak trendów',
+      message: 'Nie udało się pobrać danych trendów. Spróbuj ponownie za chwilę.',
+    });
     return [];
   }
 };
@@ -377,6 +408,11 @@ export const getStockData = async (symbol: string, exchange?: string): Promise<S
     return data as StockFinancialData;
   } catch (error) {
     console.error(`Błąd getStockData dla ${symbol}:`, error);
+    notify({
+      variant: 'error',
+      title: 'Błąd danych finansowych',
+      message: `Nie udało się pobrać danych finansowych dla ${symbol}. Sprawdź połączenie i spróbuj ponownie.`,
+    });
     return null;
   }
 };
@@ -398,6 +434,11 @@ export const getStockPerformance = async (
     return (await response.json()) as StockPerformanceData;
   } catch (error) {
     console.error(`Błąd getStockPerformance dla ${symbol}:`, error);
+    notify({
+      variant: 'warning',
+      title: 'Brak danych wyników',
+      message: `Nie udało się pobrać wyników historycznych dla ${symbol}. Dane mogą być niepełne.`,
+    });
     return null;
   }
 };
@@ -419,6 +460,11 @@ export const getStockQuoteDetails = async (
     return (await response.json()) as StockQuoteDetails;
   } catch (error) {
     console.error(`Błąd getStockQuoteDetails dla ${symbol}:`, error);
+    notify({
+      variant: 'error',
+      title: 'Błąd danych notowań',
+      message: `Nie udało się pobrać szczegółów notowań dla ${symbol}. Dane mogą być niepełne.`,
+    });
     return null;
   }
 };
@@ -465,6 +511,11 @@ export const enrichFinancialData = async (
           }
         } catch (e) {
           console.warn('Nie udało się uzupełnić wyników historycznych:', e);
+          notify({
+            variant: 'warning',
+            title: 'Brak danych wyników',
+            message: 'Nie udało się uzupełnić danych o wyniki historyczne. Wyświetlona zostanie podstawowa wersja.',
+          });
         }
       })(),
     );
@@ -496,6 +547,11 @@ export const enrichFinancialData = async (
           }
         } catch (e) {
           console.warn('Nie udało się uzupełnić danych notowania:', e);
+          notify({
+            variant: 'warning',
+            title: 'Brak danych notowań',
+            message: 'Nie udało się uzupełnić danych o szczegóły notowań. Wyświetlona zostanie podstawowa wersja.',
+          });
         }
       })(),
     );
@@ -564,6 +620,11 @@ export const buildFallbackFinancialData = async (
     };
   } catch (error) {
     console.error('Błąd budowania danych rezerwowych:', error);
+    notify({
+      variant: 'error',
+      title: 'Brak danych finansowych',
+      message: 'Nie udało się pobrać żadnych danych finansowych. Sprawdź połączenie z internetem.',
+    });
     return null;
   }
 };
