@@ -1,55 +1,76 @@
 import Constants from 'expo-constants';
+import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
 import { notify } from '../notificationBus';
 
-const getApiBaseUrl = async (): Promise<string> => {
-  const configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-  if (configuredUrl) {
-    return configuredUrl.replace(/\/$/, '');
-  }
+const API_PORT = 3000;
+const LOCAL_BASE_URL = `http://localhost:${API_PORT}`;
 
-  if (Platform.OS !== 'web') {
-    const hostUri = Constants.expoConfig?.hostUri;
-    if (hostUri) {
-      const host = new URL(
-        hostUri.includes('://') ? hostUri : `http://${hostUri}`,
-      ).hostname;
-      return `http://${host}:3000`;
-    }
-  }
+const normalizeBaseUrl = (url: string) => url.trim().replace(/\/+$/, '');
 
-  // Pobieramy adres z backendu
+// Adres serwera Metro jest użyteczny tylko w sieci lokalnej (LAN, Tailscale).
+// Dla tunelu Expo (np. *.exp.direct) nie wskazuje backendu - wtedy trzeba użyć EXPO_PUBLIC_API_URL.
+const isLocalHost = (host: string) =>
+  host === 'localhost' ||
+  host === '::1' ||
+  host === '[::1]' ||
+  host.endsWith('.local') ||
+  /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+
+const getDevServerHost = (): string | null => {
+  const hostUri = Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost;
+  if (!hostUri) return null;
+
   try {
-    const defaultBaseUrl = 'http://localhost:3000';
-    const response = await fetch(`${defaultBaseUrl}/api/config`);
-    if (response.ok) {
-      const config = await response.json();
-      return config.url || defaultBaseUrl;
+    const host = new URL(hostUri.includes('://') ? hostUri : `http://${hostUri}`).hostname;
+    if (!isLocalHost(host)) {
+      console.warn(
+        `Pomijam adres serwera deweloperskiego "${host}" (tunel Expo). Ustaw EXPO_PUBLIC_API_URL, aby wskazać adres backendu.`,
+      );
+      return null;
     }
-  } catch (error) {
-    console.error('Błąd pobierania adresu API:', error);
+    return host;
+  } catch {
+    return null;
   }
-
-  return 'http://localhost:3000';
 };
 
-let BASE_URL: string;
+// Adres backendu: EXPO_PUBLIC_API_URL > host serwera Metro > /api/config > localhost.
+// Dzięki EXPO_PUBLIC_API_URL ten sam kod obsługuje pracę lokalną i przez tunel (Tailscale, cloudflared itp.).
+const resolveApiBaseUrl = async (): Promise<string> => {
+  const configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (configuredUrl) {
+    return normalizeBaseUrl(configuredUrl);
+  }
 
-// Inicjalizacja BASE_URL - tylko dla dewelopera
-if (process.env.EXPO_PUBLIC_API_URL) {
-  BASE_URL = process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
-} else if (Platform.OS !== 'web' && Constants.expoConfig?.hostUri) {
-  const hostUri = Constants.expoConfig.hostUri;
-  const host = new URL(hostUri.includes('://') ? hostUri : `http://${hostUri}`).hostname;
-  BASE_URL = `http://${host}:3000`;
-} else {
-  BASE_URL = 'http://localhost:3000';
-}
+  const devServerHost = getDevServerHost();
+  if (devServerHost) {
+    return `http://${devServerHost}:${API_PORT}`;
+  }
 
-export { getApiBaseUrl };
+  // Ostatnia szansa: backend zapisuje swój adres w /api/config
+  try {
+    const response = await fetch(`${LOCAL_BASE_URL}/api/config`);
+    if (response.ok) {
+      const config = await response.json();
+      if (typeof config?.url === 'string' && config.url.trim()) {
+        return normalizeBaseUrl(config.url);
+      }
+    }
+  } catch (error) {
+    console.warn('Nie udało się pobrać adresu API z /api/config:', error);
+  }
+
+  return LOCAL_BASE_URL;
+};
+
+let apiBaseUrlPromise: Promise<string> | null = null;
+
+export const getApiBaseUrl = (): Promise<string> => {
+  apiBaseUrlPromise ??= resolveApiBaseUrl();
+  return apiBaseUrlPromise;
+};
 
 export interface CandleData {
   timestamp: number;
@@ -109,47 +130,59 @@ const deleteItem = async (key: string) => {
 
 
 // Funkcja pobierająca token JWT (lub generująca nowy)
-const getValidToken = async (): Promise<string | null> => {
-  let token = await getItem('jwtToken');
-  
-  if (!token) {
-    
+const requestToken = async (): Promise<string | null> => {
+  try {
+    const storedToken = await getItem('jwtToken');
+    if (storedToken) {
+      return storedToken;
+    }
+
     let deviceId = await getItem('deviceId');
     if (!deviceId) {
-      deviceId = uuidv4();
+      deviceId = Crypto.randomUUID();
       console.log('Generowanie nowego anonimowego ID urządzenia:', deviceId);
       await setItem('deviceId', deviceId);
     }
 
-    try{
-      const defaultBaseUrl = 'http://localhost:3000';
-      const response = await fetch(`${defaultBaseUrl}/api/guest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId })
-      });
+    const baseUrl = await getApiBaseUrl();
+    const response = await fetch(`${baseUrl}/api/guest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId }),
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        token = data.token;
-        if (token) {
-          console.log('Zapisywanie nowego tokenu JWT:', token);
-          await setItem('jwtToken', token);
-          console.log('Odebrano token JWT z serwera');
-        }else {
-          console.error('Nie otrzymano tokenu JWT z serwera');
-          return null;
-        }
-      }
-    } catch (error) {
-      console.error('Błąd podczas pobierania tokenu JWT:', error);
+    if (!response.ok) {
+      const details = await response.text();
+      console.error(
+        `Nie udało się pobrać tokenu JWT: ${response.status}${details ? ` - ${details}` : ''} (${baseUrl}/api/guest)`,
+      );
       return null;
     }
-  }else{
-    console.log('Używam zapisanego tokenu JWT:');
+
+    const data: unknown = await response.json();
+    const token = (data as { token?: string } | null)?.token;
+    if (!token) {
+      console.error('Serwer nie zwrócił tokenu JWT w odpowiedzi /api/guest');
+      return null;
+    }
+
+    await setItem('jwtToken', token);
+    console.log('Odebrano i zapisano nowy token JWT');
+    return token;
+  } catch (error) {
+    console.error('Błąd podczas pobierania tokenu JWT:', error);
+    return null;
   }
-  
-  return token;
+};
+
+// Jedno żądanie tokenu na raz - kilka ekranów prosi o niego równolegle
+let tokenRequest: Promise<string | null> | null = null;
+
+const getValidToken = (): Promise<string | null> => {
+  tokenRequest ??= requestToken().finally(() => {
+    tokenRequest = null;
+  });
+  return tokenRequest;
 };
 
 // Funkcja pobierająca dane świec giełdowych
@@ -166,18 +199,24 @@ export const getStockCandles = async (
   }
 
   try {
+    const baseUrl = await getApiBaseUrl();
     const exchangeQuery = exchange ? `&exchange=${encodeURIComponent(exchange)}` : '';
-    const url = `${BASE_URL}/api/candles?symbol=${encodeURIComponent(symbol)}&interval=${interval}&days=${days}${exchangeQuery}`;
+    const url = `${baseUrl}/api/candles?symbol=${encodeURIComponent(symbol)}&interval=${interval}&days=${days}${exchangeQuery}`;
     console.log(`Pobieranie świec: ${symbol} (${exchange || 'domyślna giełda'})`);
-    
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
+
+    const request = (authToken: string) => fetch(url, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
     });
 
-    // Token wygasł (status 403), usuwamy go i ponawiamy próbę
-    if (response.status === 403) {
+    let response = await request(token);
+
+    // Token wygasł (401/403), usuwamy go i ponawiamy próbę tylko raz
+    if (response.status === 401 || response.status === 403) {
       await deleteItem('jwtToken');
-      return getStockCandles(symbol, interval, days, exchange);
+      const refreshedToken = await getValidToken();
+      if (refreshedToken && refreshedToken !== token) {
+        response = await request(refreshedToken);
+      }
     }
 
     if (!response.ok) {
@@ -201,12 +240,13 @@ export const searchInstruments = async (query: string): Promise<InstrumentSearch
   const normalizedQuery = query.trim();
   if (normalizedQuery.length < 2) return [];
 
-  const request = async (token: string) => fetch(
-    `${BASE_URL}/api/instruments/search?q=${encodeURIComponent(normalizedQuery)}&limit=20`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-
   try {
+    const baseUrl = await getApiBaseUrl();
+    const request = (token: string) => fetch(
+      `${baseUrl}/api/instruments/search?q=${encodeURIComponent(normalizedQuery)}&limit=20`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
     let token = await getValidToken();
     if (!token) return [];
 
@@ -239,12 +279,13 @@ export const searchInstruments = async (query: string): Promise<InstrumentSearch
 
 // Funckja pobierająca dane dotyczące ceny instrumentu giełdowego
 export const getInstrumentQuote = async (symbol: string, exchange?: string): Promise<InstrumentQuote | null> => {
-  const request = async (token: string) => fetch(
-    `${BASE_URL}/api/instruments/quote?symbol=${encodeURIComponent(symbol)}${exchange ? `&exchange=${encodeURIComponent(exchange)}` : ''}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-
   try {
+    const baseUrl = await getApiBaseUrl();
+    const request = (token: string) => fetch(
+      `${baseUrl}/api/instruments/quote?symbol=${encodeURIComponent(symbol)}${exchange ? `&exchange=${encodeURIComponent(exchange)}` : ''}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
     let token = await getValidToken();
     if (!token) return null;
     let response = await request(token);
@@ -271,10 +312,11 @@ export const getInstrumentQuote = async (symbol: string, exchange?: string): Pro
 
 // Funkcja pobierająca dynamiczne trendy giełdowe z Yahoo
 export const getDynamicTrends = async (category: string): Promise<DynamicTrendAsset[]> => {
-  const token = await getValidToken();
-  if (!token) return [];
   try {
-    const response = await fetch(`${BASE_URL}/api/trends?category=${encodeURIComponent(category)}`, {
+    const token = await getValidToken();
+    if (!token) return [];
+    const baseUrl = await getApiBaseUrl();
+    const response = await fetch(`${baseUrl}/api/trends?category=${encodeURIComponent(category)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok) throw new Error(`Błąd trendów: ${response.status}`);
@@ -365,12 +407,13 @@ export interface StockFinancialData {
 
 // Funckja autentyfikująca żądania do API z użyciem tokenu JWT
 const authenticatedFetch = async (endpointPath: string): Promise<Response | null> => {
-  const request = async (token: string) =>
-    fetch(`${BASE_URL}${endpointPath}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
   try {
+    const baseUrl = await getApiBaseUrl();
+    const request = (token: string) =>
+      fetch(`${baseUrl}${endpointPath}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
     let token = await getValidToken();
     if (!token) return null;
 
