@@ -513,6 +513,16 @@ app.get('/api/quote', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/config', (req, res) => {
+  try {
+    const config = fs.readFileSync(serverAddressFile, 'utf8');
+    res.json(JSON.parse(config));
+  } catch (error) {
+    console.error('Błąd pobierania konfiguracji API:', error.message);
+    res.status(500).json({ error: 'Nie udało się pobrać konfiguracji API' });
+  }
+});
+
 
 
 app.listen(PORT, '0.0.0.0', () => {
