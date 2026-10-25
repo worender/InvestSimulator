@@ -4,11 +4,20 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationVisibilityProvider } from '../navigationVisibility';
 import { NotificationProvider } from '../notifications';
 import { ThemeProvider, useTheme } from '../theme';
+import { initializeDatabase } from '../database/database';
+import { useEffect } from "react";
+
+
 
 // Główny komponent aplikacji, który ustawia kontekst motywu, widoczności nawigacji i powiadomień. Zawiera również stos ekranów (Stack) dla nawigacji w aplikacji.
 function AppStack() {
   const { mode } = useTheme();
 
+
+  useEffect(() => {
+    initializeDatabase();
+  });
+  
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />

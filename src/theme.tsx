@@ -4,7 +4,8 @@
  */
 
 import type { PropsWithChildren } from 'react';
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect ,useMemo, useState } from 'react';
+import {getUserProfile, updateUserProfile } from './database/database';
 
 export type ThemeMode = 'dark' | 'light';
 export type ThemeAccent = 'Niebieski' | 'Fioletowy' | 'Zielony' | 'Pomarańczowy';
@@ -82,23 +83,65 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     };
     return { ...baseColors, accent: accentColors[accent] };
   }, [mode, accent]);
+  const changeAccent = (nextAccent: ThemeAccent) => {
+    setAccent(nextAccent);
+    updateUserProfile({
+      color_mode: nextAccent,
+    });
+  };
+  const changeCurrency = (nextCurrency: Currency) => {
+    setDefaultCurrency(nextCurrency);
+    updateUserProfile({
+      currency_default: nextCurrency,
+    });
+  }
+  const changeMultiCurrency = (enabled: boolean) => {
+    setMultiCurrency(enabled);
+    updateUserProfile({
+      multi_currency: enabled ? 1 : 0,
+    });
+  }
+
   const value = useMemo(
     () => ({
       mode,
       colors,
       accent,
-      setAccent,
+      setAccent: changeAccent,
       defaultCurrency,
-      setDefaultCurrency,
+      setDefaultCurrency: changeCurrency,
       multiCurrency,
-      setMultiCurrency,
-      toggleMode: () => setMode((current) => (current === 'dark' ? 'light' : 'dark')),
+      setMultiCurrency: changeMultiCurrency,
+      toggleMode: () => {
+        
+          const nextMode: ThemeMode = mode === 'dark' ? 'light' : 'dark';
+          setMode(nextMode);
+
+          updateUserProfile({
+            dark_mode: nextMode === 'dark' ? 1 : 0,
+          });
+          
+        
+      },
       spacing: themeBase.spacing,
       fontSize: themeBase.fontSize,
       radius: themeBase.radius,
     }),
     [mode, accent, colors, defaultCurrency, multiCurrency],
   );
+
+   useEffect(() => {
+      const profile = getUserProfile();
+
+      if (!profile) {
+        return;
+      }
+
+      setMode(profile.dark_mode === 1 ? 'dark' : 'light');
+      setAccent(profile.color_mode as ThemeAccent);
+      setDefaultCurrency(profile.currency_default as Currency);
+      setMultiCurrency(profile.multi_currency === 1);
+    });
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
