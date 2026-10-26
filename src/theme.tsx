@@ -54,7 +54,7 @@ const lightColors = {
 type ThemeContextValue = {
   mode: ThemeMode;
   colors: typeof darkColors;
-  toggleMode: () => void;
+  toggleMode: () => Promise<void>;
   accent: ThemeAccent;
   setAccent: (accent: ThemeAccent) => Promise<void>;
   defaultCurrency: Currency;
@@ -112,12 +112,12 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       setDefaultCurrency: changeCurrency,
       multiCurrency,
       setMultiCurrency: changeMultiCurrency,
-      toggleMode: () => {
+      toggleMode: async () => {
         
           const nextMode: ThemeMode = mode === 'dark' ? 'light' : 'dark';
           setMode(nextMode);
 
-          updateUserProfile({
+          await updateUserProfile({
             dark_mode: nextMode === 'dark' ? 1 : 0,
           });
           
@@ -133,18 +133,21 @@ export function ThemeProvider({ children }: PropsWithChildren) {
    useEffect(() => {
     let active = true;
     const loadProfile = async () => {
+      try {
+        const profile = await getUserProfile();
+      
 
-      const profile = await getUserProfile();
-    
+        if (!active || !profile) {
+          return;
+        }
 
-      if (!active || !profile) {
-        return;
+        setMode(profile.dark_mode === 1 ? 'dark' : 'light');
+        setAccent(profile.color_mode as ThemeAccent);
+        setDefaultCurrency(profile.currency_default as Currency);
+        setMultiCurrency(profile.multi_currency === 1);
+      } catch (error) {
+        console.error('Nie udało się wczytać profilu z SQLite:', error);
       }
-
-      setMode(profile.dark_mode === 1 ? 'dark' : 'light');
-      setAccent(profile.color_mode as ThemeAccent);
-      setDefaultCurrency(profile.currency_default as Currency);
-      setMultiCurrency(profile.multi_currency === 1);
     };
 
     void loadProfile();

@@ -1,11 +1,14 @@
 import * as SQLite from 'expo-sqlite';
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let initializationPromise: Promise<void> | null = null;
 
 function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   databasePromise ??= SQLite.openDatabaseAsync('invest-simulator.db');
   return databasePromise;
 }
+
+
 
 export type TransactionType = 'BUY' | 'SELL';
 
@@ -49,7 +52,8 @@ export interface CreateTransactionInput {
   createdAt?: number;
 }
 
-export async function initializeDatabase(): Promise<void> {
+export function initializeDatabase(): Promise<void> {
+  initializationPromise ??= (async () => {
   const database = await getDatabase();
 
   await database.execAsync(`
@@ -95,6 +99,14 @@ export async function initializeDatabase(): Promise<void> {
     INSERT OR IGNORE INTO wallet (id, id_user)
     VALUES (1, 1);
   `);
+})();
+
+  return initializationPromise;
+}
+
+async function getReadyDatabase(): Promise<SQLite.SQLiteDatabase> {
+  await initializeDatabase();
+  return getDatabase();
 }
 
 const requirePositive = (value: number, fieldName: string): void => {
@@ -110,7 +122,7 @@ const requireNonNegative = (value: number, fieldName: string): void => {
 };
 
 export async function getPortfolio(): Promise<PortfolioItem[]> {
-  const database = await getDatabase();
+  const database = await getReadyDatabase();
 
   return database.getAllAsync<PortfolioItem>(
     'SELECT symbol, quantity, average_price FROM portfolio WHERE quantity > 0 ORDER BY symbol',
@@ -118,7 +130,7 @@ export async function getPortfolio(): Promise<PortfolioItem[]> {
 }
 
 export async function getPortfolioItem(symbol: string): Promise<PortfolioItem | null> {
-  const database = await getDatabase();
+  const database = await getReadyDatabase();
 
   return database.getFirstAsync<PortfolioItem>(
     'SELECT symbol, quantity, average_price FROM portfolio WHERE symbol = ?',
@@ -128,7 +140,7 @@ export async function getPortfolioItem(symbol: string): Promise<PortfolioItem | 
 
 export async function getUserProfile(userId = 1): Promise<UserProfile | null> {
 
-  const database = await getDatabase();
+  const database = await getReadyDatabase();
   
   return database.getFirstAsync<UserProfile>(
     `SELECT id, username, avatar_uri, dark_mode, color_mode,
@@ -156,7 +168,7 @@ export async function updateUserProfile(
     multiCurrency: changes.multi_currency ?? current.multi_currency,
   };
 
-   await database.runSync(
+   await database.runAsync(
     `UPDATE user_profil
      SET username = ?, avatar_uri = ?, dark_mode = ?, color_mode = ?,
          currency_default = ?, "multi_currency" = ?
@@ -180,7 +192,7 @@ export async function updateUserProfile(
 }
 
 export async function getWallet(userId = 1): Promise<Wallet | null> {
-  const database = await getDatabase();
+  const database = await getReadyDatabase();
   
   return await database.getFirstAsync<Wallet>(
     'SELECT id, balance, currency, id_user FROM wallet WHERE id_user = ?',
@@ -194,9 +206,9 @@ export async function updateWalletBalance(
 ): Promise<Wallet> {
   requireNonNegative(amount, 'Saldo');
 
-  const database = await getDatabase();
+  const database = await getReadyDatabase();
 
-  await database.runSync(
+  await database.runAsync(
     'UPDATE wallet SET balance = ? WHERE id_user = ?',
     amount,
     userId,
@@ -208,7 +220,7 @@ export async function updateWalletBalance(
 }
 
 export async function getTransactions(symbol?: string): Promise<Transaction[]> {
-  const database = await getDatabase();
+  const database = await getReadyDatabase();
   
   if (symbol) {
     return database.getAllAsync<Transaction>(
@@ -229,7 +241,7 @@ export async function getTransactions(symbol?: string): Promise<Transaction[]> {
 
 export async function addTransaction(input: CreateTransactionInput): Promise<Transaction> {
   
-  const database = await getDatabase();
+  const database = await getReadyDatabase();
   const symbol = input.symbol.trim().toUpperCase();
   if (!symbol) throw new Error('Symbol instrumentu jest wymagany');
   requirePositive(input.quantity, 'Liczba jednostek');
@@ -249,7 +261,7 @@ export async function addTransaction(input: CreateTransactionInput): Promise<Tra
           newQuantity
         : input.price;
 
-      await database.runSync(
+      await database.runAsync(
         `INSERT INTO portfolio (symbol, quantity, average_price)
          VALUES (?, ?, ?)
          ON CONFLICT(symbol) DO UPDATE SET
@@ -264,14 +276,14 @@ export async function addTransaction(input: CreateTransactionInput): Promise<Tra
         throw new Error('Niewystarczająca liczba jednostek aktywa');
       }
 
-      await database.runSync(
+      await database.runAsync(
         'UPDATE portfolio SET quantity = quantity - ? WHERE symbol = ?',
         input.quantity,
         symbol,
       );
     }
 
-    const result = await database.runSync(
+    const result = await database.runAsync(
       `INSERT INTO transactions (symbol, type, quantity, price, created_at)
        VALUES (?, ?, ?, ?, ?)`,
       symbol,
@@ -294,10 +306,10 @@ export async function addTransaction(input: CreateTransactionInput): Promise<Tra
 }
 
 export async function clearLocalDatabase(): Promise<void> {
-  const database = await getDatabase();
+  const database = await getReadyDatabase();
   await database.withTransactionAsync(async () => {
-    await database.runSync('DELETE FROM transactions');
-    await database.runSync('DELETE FROM portfolio');
-    await database.runSync('UPDATE wallet SET balance = 10000 WHERE id = 1');
+    await database.runAsync('DELETE FROM transactions');
+    await database.runAsync('DELETE FROM portfolio');
+    await database.runAsync('UPDATE wallet SET balance = 10000 WHERE id = 1');
   });
 }

@@ -4,8 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationVisibilityProvider } from '../navigationVisibility';
 import { NotificationProvider } from '../notifications';
 import { ThemeProvider, useTheme } from '../theme';
-import { initializeDatabase } from '../database/database';
-import { useEffect } from "react";
+
 
 
 
@@ -14,9 +13,7 @@ function AppStack() {
   const { mode } = useTheme();
 
 
-  useEffect(() => {
-    initializeDatabase();
-  }, []);
+  
   
   return (
     <>
