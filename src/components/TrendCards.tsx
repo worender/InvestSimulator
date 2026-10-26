@@ -2,7 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LineChart } from 'react-native-wagmi-charts';
-import { CandleData, DynamicTrendAsset, getDynamicTrends, getStockCandles } from '../api/marketService';
+import { CandleData, DynamicTrendAsset, canRetryFetch, getDynamicTrends, getStockCandles, lastFetchErrorMap } from '../api/marketService';
+import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
 import { Skeleton } from './Skeleton';
 
@@ -26,16 +27,58 @@ export function TrendCards() {
 
   useEffect(() => {
     let active = true;
-    getDynamicTrends(category).then((result) => {
-      if (!active) return;
-      setAssets(result);
-      Promise.all(result.map(async (asset) => [asset.symbol, (await getStockCandles(asset.symbol, '1d', 30, asset.exchange)) ?? []] as const)).then((candles) => {
+    
+    const loadTrendsAndCandles = async () => {
+      try {
+        // Pobierz trendy
+        const trends = await getDynamicTrends(category);
+        
+        if (!active) return;
+        setAssets(trends);
+
+        // Pobierz świec dla każdego aktywa
+        const candlesResults = await Promise.all(
+          trends.map(async (asset) => {
+            try {
+              // Sprawdź czy można ponowić próbę po błędzie
+              if (!canRetryFetch(asset.symbol)) {
+                const state = lastFetchErrorMap.get(asset.symbol);
+                const elapsedSeconds = Math.floor((Date.now() - (state?.timestamp ?? 0)) / 1000);
+                notify({
+                  variant: 'error',
+                  title: 'Opóźnione pobieranie danych',
+                  message: `Oczekiwanie na ponowną próbę pobrania danych świec dla ${asset.symbol}. Próba za ${elapsedSeconds} sekund...`,
+                });
+                return [asset.symbol, []] as const;
+              }
+              
+              const candles = await getStockCandles(asset.symbol, '1d', 30, asset.exchange);
+              return [asset.symbol, candles ?? []] as const;
+            } catch (error) {
+              console.error(`Błąd pobierania świec dla ${asset.symbol}:`, error);
+              return [asset.symbol, []] as const;
+            }
+          })
+        );
+
         if (active) {
-          setData(Object.fromEntries(candles));
+          setData(Object.fromEntries(candlesResults));
           setLoadedCategory(category);
         }
-      });
-    });
+      } catch (error) {
+        console.error('Błąd ładowania trendów:', error);
+        if (active) {
+          notify({
+            variant: 'error',
+            title: 'Błąd ładowania trendów',
+            message: 'Nie udało się pobrać danych trendów. Spróbuj ponownie później.',
+          });
+        }
+      }
+    };
+
+    loadTrendsAndCandles();
+    
     return () => { active = false; };
   }, [category]);
 
