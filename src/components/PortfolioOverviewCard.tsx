@@ -12,7 +12,7 @@ import Reanimated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-// import { LineChart } from 'react-native-wagmi-charts';
+import { LineChart } from 'react-native-wagmi-charts';
 import { Currency, useTheme } from '../theme';
 import { GlassSurface } from './GlassSurface';
 
@@ -142,11 +142,11 @@ function PortfolioCard({ data, currency, index, isFront, width, multiCurrency, p
                     <View key={gridIndex} style={[styles.gridLine, { top: gridIndex * 54, backgroundColor: colors.border }]} />
                   ))}
                 </View>
-                {/* <LineChart.Provider data={data.values}>
+                <LineChart.Provider data={data.values}>
                   <LineChart height={110} width={Math.max(width - 124, 1)}>
                     <LineChart.Path color={data.accent} width={2.5} />
                   </LineChart>
-                </LineChart.Provider> */}
+                </LineChart.Provider>
               </View>
             </View>
             <Text style={{ color: colors.positive, fontWeight: '700' }}>+8,70% · wynik za ostatnie 3 miesiące</Text>

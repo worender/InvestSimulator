@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-// import { LineChart } from 'react-native-wagmi-charts';
+import { LineChart } from 'react-native-wagmi-charts';
 import { CandleData, DynamicTrendAsset, getDynamicTrends, getStockCandles } from '../api/marketService';
 import { useTheme } from '../theme';
 import { Skeleton } from './Skeleton';
@@ -108,7 +108,7 @@ function TrendCard({ asset, candles, colors, width, showSeparator }: { asset: Dy
             {Array.from({ length: 9 }, (_, line) => <View key={`h-${line}`} style={[styles.gridHorizontal, { top: `${(line / 8) * 100}%`, backgroundColor: colors.border }]} />)}
             {Array.from({ length: 11 }, (_, line) => <View key={`v-${line}`} style={[styles.gridVertical, { left: `${(line / 10) * 100}%`, backgroundColor: colors.border }]} />)}
           </View>
-          {/* <LineChart.Provider data={values}><LineChart width={Math.max(width - 44, 1)} height={70} yGutter={10}><LineChart.Path color={change >= 0 ? colors.positive : colors.negative} width={2} /></LineChart></LineChart.Provider> */}
+          <LineChart.Provider data={values}><LineChart width={Math.max(width - 44, 1)} height={70} yGutter={10}><LineChart.Path color={change >= 0 ? colors.positive : colors.negative} width={2} /></LineChart></LineChart.Provider>
           <View style={styles.timeLabels}><Text style={[styles.axisLabel, { color: colors.textMuted }]}>{firstDate}</Text><Text style={[styles.axisLabel, { color: colors.textMuted }]}>{lastDate}</Text></View>
         </View>
       </View>
