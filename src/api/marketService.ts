@@ -185,6 +185,41 @@ const getValidToken = (): Promise<string | null> => {
   return tokenRequest;
 };
 
+// State do śledzenia błędów fetchowania świec
+const lastFetchErrorMap = new Map<string, { error: Error | null; timestamp: number }>();
+const FETCH_RETRY_MINUTES = 1; // 60 sekund
+
+// Funkcja sprawdzająca czy można ponowić próbę pobierania świec dla danego symbolu
+const canRetryFetch = (symbol?: string): boolean => {
+  if (!symbol) return true;
+  const state = lastFetchErrorMap.get(symbol);
+  if (state?.error && state.timestamp) {
+    const elapsedMinutes = (Date.now() - state.timestamp) / 60000;
+    return elapsedMinutes >= FETCH_RETRY_MINUTES;
+  }
+  return true;
+};
+
+// Funkcja zapisująca błąd fetchowania dla danego symbolu
+const recordFetchError = (symbol: string, error: Error): void => {
+  lastFetchErrorMap.set(symbol, {
+    error,
+    timestamp: Date.now(),
+  });
+};
+
+// Funkcja czyszcząca state po pomyślnym pobraniu
+const clearFetchError = (symbol?: string): void => {
+  if (!symbol) {
+    lastFetchErrorMap.clear();
+  } else {
+    lastFetchErrorMap.delete(symbol);
+  }
+};
+
+// Eksport funkcji pomocniczych dla komponentów
+export { canRetryFetch, lastFetchErrorMap };
+
 // Funkcja pobierająca dane świec giełdowych
 export const getStockCandles = async (
   symbol: string,
@@ -203,6 +238,19 @@ export const getStockCandles = async (
     const exchangeQuery = exchange ? `&exchange=${encodeURIComponent(exchange)}` : '';
     const url = `${baseUrl}/api/candles?symbol=${encodeURIComponent(symbol)}&interval=${interval}&days=${days}${exchangeQuery}`;
     console.log(`Pobieranie świec: ${symbol} (${exchange || 'domyślna giełda'})`);
+
+    // Sprawdź czy można ponowić próbę po błędzie
+    if (!canRetryFetch(symbol)) {
+      const state = lastFetchErrorMap.get(symbol);
+      const elapsedSeconds = Math.floor((Date.now() - state?.timestamp ?? 0) / 1000);
+      notify({
+        variant: 'error',
+        title: 'Opóźnione pobieranie danych',
+        message: `Oczekiwanie na ponowną próbę pobrania danych świec dla ${symbol}. Próba za ${elapsedSeconds} sekund...`,
+      });
+      // Zwróć null - dane nie będą dostępne do czasu retry
+      return null;
+    }
 
     const request = (authToken: string) => fetch(url, {
       headers: { 'Authorization': `Bearer ${authToken}` }
@@ -223,13 +271,17 @@ export const getStockCandles = async (
       throw new Error(`Błąd serwera: ${response.status}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+    clearFetchError(symbol);
+    return data;
   } catch (error) {
     console.error('Błąd pobierania świec giełdowych:', error);
+    // Zapisz błąd i czas, aby uniknąć nieskończonego oczekiwania
+    recordFetchError(symbol, error as Error);
     notify({
       variant: 'warning',
       title: 'Brak notowań',
-      message: 'Nie udało się pobrać danych wykresu. Spróbuj ponownie za chwilę.',
+      message: `Nie udało się pobrać danych wykresu dla ${symbol}. Spróbuj ponownie za chwilę.`,
     });
     return null;
   }
