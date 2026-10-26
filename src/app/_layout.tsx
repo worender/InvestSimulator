@@ -5,10 +5,16 @@ import { NavigationVisibilityProvider } from '../navigationVisibility';
 import { NotificationProvider } from '../notifications';
 import { ThemeProvider, useTheme } from '../theme';
 
+
+
+
 // Główny komponent aplikacji, który ustawia kontekst motywu, widoczności nawigacji i powiadomień. Zawiera również stos ekranów (Stack) dla nawigacji w aplikacji.
 function AppStack() {
   const { mode } = useTheme();
 
+
+  
+  
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />

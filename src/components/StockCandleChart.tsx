@@ -7,6 +7,7 @@ import { currencySymbol } from '../currency';
 import { useTheme } from '../theme';
 import { Skeleton } from './Skeleton';
 
+
 type CandleInterval = '1m' | '5m' | '15m' | '1h' | '1d' | '1wk';
 type ChartRange = { label: string; days: number };
 
@@ -123,6 +124,7 @@ export function StockCandleChart({
               <CandlestickChart height={280}><CandlestickChart.Candles useAnimations={false} /><CandlestickChart.Crosshair minDurationMs={320}><CandlestickChart.Tooltip /></CandlestickChart.Crosshair></CandlestickChart>
               <View style={styles.crosshair}><CandlestickChart.DatetimeText locale="pl-PL" style={{ color: colors.textMuted, fontSize: 11 }} /></View>
             </CandlestickChart.Provider>}
+            
       </View>
       {candles.length > 0 && <View style={[styles.axis, { borderTopColor: colors.borderGlass }]}>
         {axis.map((item, index) => <Text key={`${item.timestamp}-${index}`} style={[styles.axisText, { color: colors.textMuted }]}>{formatTime(item.timestamp, interval)}</Text>)}

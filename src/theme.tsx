@@ -4,7 +4,8 @@
  */
 
 import type { PropsWithChildren } from 'react';
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect ,useMemo, useState } from 'react';
+import {getUserProfile, updateUserProfile } from './database/database';
 
 export type ThemeMode = 'dark' | 'light';
 export type ThemeAccent = 'Niebieski' | 'Fioletowy' | 'Zielony' | 'Pomarańczowy';
@@ -53,13 +54,13 @@ const lightColors = {
 type ThemeContextValue = {
   mode: ThemeMode;
   colors: typeof darkColors;
-  toggleMode: () => void;
+  toggleMode: () => Promise<void>;
   accent: ThemeAccent;
-  setAccent: (accent: ThemeAccent) => void;
+  setAccent: (accent: ThemeAccent) => Promise<void>;
   defaultCurrency: Currency;
-  setDefaultCurrency: (currency: Currency) => void;
+  setDefaultCurrency: (currency: Currency) => Promise<void>;
   multiCurrency: boolean;
-  setMultiCurrency: (enabled: boolean) => void;
+  setMultiCurrency: (enabled: boolean) => Promise<void>;
   spacing: typeof themeBase.spacing;
   fontSize: typeof themeBase.fontSize;
   radius: typeof themeBase.radius;
@@ -82,17 +83,46 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     };
     return { ...baseColors, accent: accentColors[accent] };
   }, [mode, accent]);
+  const changeAccent = async (nextAccent: ThemeAccent) => {
+    setAccent(nextAccent);
+    await updateUserProfile({
+      color_mode: nextAccent,
+    });
+  };
+  const changeCurrency = async (nextCurrency: Currency) => {
+    setDefaultCurrency(nextCurrency);
+    await updateUserProfile({
+      currency_default: nextCurrency,
+    });
+  }
+  const changeMultiCurrency = async (enabled: boolean) => {
+    setMultiCurrency(enabled);
+    await updateUserProfile({
+      multi_currency: enabled ? 1 : 0,
+    });
+  }
+
   const value = useMemo(
     () => ({
       mode,
       colors,
       accent,
-      setAccent,
+      setAccent: changeAccent,
       defaultCurrency,
-      setDefaultCurrency,
+      setDefaultCurrency: changeCurrency,
       multiCurrency,
-      setMultiCurrency,
-      toggleMode: () => setMode((current) => (current === 'dark' ? 'light' : 'dark')),
+      setMultiCurrency: changeMultiCurrency,
+      toggleMode: async () => {
+        
+          const nextMode: ThemeMode = mode === 'dark' ? 'light' : 'dark';
+          setMode(nextMode);
+
+          await updateUserProfile({
+            dark_mode: nextMode === 'dark' ? 1 : 0,
+          });
+          
+        
+      },
       spacing: themeBase.spacing,
       fontSize: themeBase.fontSize,
       radius: themeBase.radius,
@@ -100,7 +130,35 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     [mode, accent, colors, defaultCurrency, multiCurrency],
   );
 
+   useEffect(() => {
+    let active = true;
+    const loadProfile = async () => {
+      try {
+        const profile = await getUserProfile();
+      
+
+        if (!active || !profile) {
+          return;
+        }
+
+        setMode(profile.dark_mode === 1 ? 'dark' : 'light');
+        setAccent(profile.color_mode as ThemeAccent);
+        setDefaultCurrency(profile.currency_default as Currency);
+        setMultiCurrency(profile.multi_currency === 1);
+      } catch (error) {
+        console.error('Nie udało się wczytać profilu z SQLite:', error);
+      }
+    };
+
+    void loadProfile();
+
+    return () => {
+      active = false; 
+    };
+    }, []);
+
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  
 }
 
 const themeBase = {
