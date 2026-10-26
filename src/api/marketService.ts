@@ -242,7 +242,7 @@ export const getStockCandles = async (
     // Sprawdź czy można ponowić próbę po błędzie
     if (!canRetryFetch(symbol)) {
       const state = lastFetchErrorMap.get(symbol);
-      const elapsedSeconds = Math.floor((Date.now() - state?.timestamp ?? 0) / 1000);
+      const elapsedSeconds = Math.floor((Date.now() - (state?.timestamp ?? 0)) / 1000);
       notify({
         variant: 'error',
         title: 'Opóźnione pobieranie danych',

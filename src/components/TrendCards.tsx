@@ -2,10 +2,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LineChart } from 'react-native-wagmi-charts';
-import { CandleData, DynamicTrendAsset, getDynamicTrends, getStockCandles, canRetryFetch, lastFetchErrorMap } from '../api/marketService';
+import { CandleData, DynamicTrendAsset, canRetryFetch, getDynamicTrends, getStockCandles, lastFetchErrorMap } from '../api/marketService';
+import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
 import { Skeleton } from './Skeleton';
-import { notify } from '../notificationBus';
 
 type Category = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap };
 const categories: Category[] = [
@@ -43,7 +43,7 @@ export function TrendCards() {
               // Sprawdź czy można ponowić próbę po błędzie
               if (!canRetryFetch(asset.symbol)) {
                 const state = lastFetchErrorMap.get(asset.symbol);
-                const elapsedSeconds = Math.floor((Date.now() - state?.timestamp ?? 0) / 1000);
+                const elapsedSeconds = Math.floor((Date.now() - (state?.timestamp ?? 0)) / 1000);
                 notify({
                   variant: 'error',
                   title: 'Opóźnione pobieranie danych',
