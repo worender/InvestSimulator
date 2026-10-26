@@ -16,7 +16,7 @@ function AppStack() {
 
   useEffect(() => {
     initializeDatabase();
-  });
+  }, []);
   
   return (
     <>

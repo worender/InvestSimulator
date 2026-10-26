@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { CandlestickChart } from 'react-native-wagmi-charts';
+// import { CandlestickChart } from 'react-native-wagmi-charts';
 import { CandleData, getStockCandles } from '../api/marketService';
 import { currencySymbol } from '../currency';
 import { useTheme } from '../theme';
@@ -119,10 +119,22 @@ export function StockCandleChart({
           <Text style={[styles.muted, { color: colors.textMuted }]}>Pobieranie danych...</Text>
         </View>
           : candles.length === 0 ? <View style={styles.placeholder}><Ionicons name="calendar-outline" size={40} color={colors.textMuted} /><Text style={[styles.muted, { color: colors.textMuted }]}>Brak notowań dla tego zakresu.</Text></View>
-            : <CandlestickChart.Provider data={candles}>
-              <CandlestickChart height={280}><CandlestickChart.Candles useAnimations={false} /><CandlestickChart.Crosshair minDurationMs={320}><CandlestickChart.Tooltip /></CandlestickChart.Crosshair></CandlestickChart>
-              <View style={styles.crosshair}><CandlestickChart.DatetimeText locale="pl-PL" style={{ color: colors.textMuted, fontSize: 11 }} /></View>
-            </CandlestickChart.Provider>}
+            // : <CandlestickChart.Provider data={candles}>
+            //   <CandlestickChart height={280}><CandlestickChart.Candles useAnimations={false} /><CandlestickChart.Crosshair minDurationMs={320}><CandlestickChart.Tooltip /></CandlestickChart.Crosshair></CandlestickChart>
+            //   <View style={styles.crosshair}><CandlestickChart.DatetimeText locale="pl-PL" style={{ color: colors.textMuted, fontSize: 11 }} /></View>
+            // </CandlestickChart.Provider>}
+            : (
+              <View style={styles.placeholder}>
+                <Ionicons
+                  name="analytics-outline"
+                  size={40}
+                  color={colors.textMuted}
+                />
+                <Text style={[styles.muted, { color: colors.textMuted }]}>
+                  Wykres świecowy jest niedostępny w wersji przeglądarkowej.
+                </Text>
+              </View>
+            )}
       </View>
       {candles.length > 0 && <View style={[styles.axis, { borderTopColor: colors.borderGlass }]}>
         {axis.map((item, index) => <Text key={`${item.timestamp}-${index}`} style={[styles.axisText, { color: colors.textMuted }]}>{formatTime(item.timestamp, interval)}</Text>)}

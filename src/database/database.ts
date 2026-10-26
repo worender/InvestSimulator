@@ -1,6 +1,11 @@
 import * as SQLite from 'expo-sqlite';
 
-const database = SQLite.openDatabaseSync('invest-simulator.db');
+let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
+
+function getDatabase(): Promise<SQLite.SQLiteDatabase> {
+  databasePromise ??= SQLite.openDatabaseAsync('invest-simulator.db');
+  return databasePromise;
+}
 
 export type TransactionType = 'BUY' | 'SELL';
 
@@ -44,8 +49,10 @@ export interface CreateTransactionInput {
   createdAt?: number;
 }
 
-export function initializeDatabase(): void {
-  database.execSync(`
+export async function initializeDatabase(): Promise<void> {
+  const database = await getDatabase();
+
+  await database.execAsync(`
     PRAGMA foreign_keys = ON;
 
     CREATE TABLE IF NOT EXISTS portfolio (
@@ -102,21 +109,28 @@ const requireNonNegative = (value: number, fieldName: string): void => {
   }
 };
 
-export function getPortfolio(): PortfolioItem[] {
-  return database.getAllSync<PortfolioItem>(
+export async function getPortfolio(): Promise<PortfolioItem[]> {
+  const database = await getDatabase();
+
+  return database.getAllAsync<PortfolioItem>(
     'SELECT symbol, quantity, average_price FROM portfolio WHERE quantity > 0 ORDER BY symbol',
   );
 }
 
-export function getPortfolioItem(symbol: string): PortfolioItem | null {
-  return database.getFirstSync<PortfolioItem>(
+export async function getPortfolioItem(symbol: string): Promise<PortfolioItem | null> {
+  const database = await getDatabase();
+
+  return database.getFirstAsync<PortfolioItem>(
     'SELECT symbol, quantity, average_price FROM portfolio WHERE symbol = ?',
     symbol.trim().toUpperCase(),
   ) ?? null;
 }
 
-export function getUserProfile(userId = 1): UserProfile | null {
-  return database.getFirstSync<UserProfile>(
+export async function getUserProfile(userId = 1): Promise<UserProfile | null> {
+
+  const database = await getDatabase();
+  
+  return database.getFirstAsync<UserProfile>(
     `SELECT id, username, avatar_uri, dark_mode, color_mode,
             currency_default, multi_currency
      FROM user_profil
@@ -125,11 +139,12 @@ export function getUserProfile(userId = 1): UserProfile | null {
   ) ?? null;
 }
 
-export function updateUserProfile(
+export async function updateUserProfile(
   changes: Partial<Omit<UserProfile, 'id'>>,
   userId = 1,
-): UserProfile {
-  const current = getUserProfile(userId);
+): Promise<UserProfile> {
+  const database = await getDatabase();
+  const current = await getUserProfile(userId);
   if (!current) throw new Error('Nie znaleziono profilu użytkownika');
 
   const next = {
@@ -141,7 +156,7 @@ export function updateUserProfile(
     multiCurrency: changes.multi_currency ?? current.multi_currency,
   };
 
-  database.runSync(
+   await database.runSync(
     `UPDATE user_profil
      SET username = ?, avatar_uri = ?, dark_mode = ?, color_mode = ?,
          currency_default = ?, "multi_currency" = ?
@@ -155,36 +170,48 @@ export function updateUserProfile(
     userId,
   );
 
-  return getUserProfile(userId) as UserProfile;
+  const profile = await getUserProfile(userId);
+
+  if (!profile) {
+    throw new Error('Nie udało się odczytać zaktualizowanego profilu');
+  }
+
+  return profile;
 }
 
-export function getWallet(userId = 1): Wallet | null {
-  return database.getFirstSync<Wallet>(
+export async function getWallet(userId = 1): Promise<Wallet | null> {
+  const database = await getDatabase();
+  
+  return await database.getFirstAsync<Wallet>(
     'SELECT id, balance, currency, id_user FROM wallet WHERE id_user = ?',
     userId,
   ) ?? null;
 }
 
-export function updateWalletBalance(
+export async function updateWalletBalance(
   amount: number,
   userId = 1,
-): Wallet {
+): Promise<Wallet> {
   requireNonNegative(amount, 'Saldo');
 
-  database.runSync(
+  const database = await getDatabase();
+
+  await database.runSync(
     'UPDATE wallet SET balance = ? WHERE id_user = ?',
     amount,
     userId,
   );
 
-  const wallet = getWallet(userId);
+  const wallet = await getWallet(userId);
   if (!wallet) throw new Error('Nie znaleziono portfela użytkownika');
   return wallet;
 }
 
-export function getTransactions(symbol?: string): Transaction[] {
+export async function getTransactions(symbol?: string): Promise<Transaction[]> {
+  const database = await getDatabase();
+  
   if (symbol) {
-    return database.getAllSync<Transaction>(
+    return database.getAllAsync<Transaction>(
       `SELECT id, symbol, type, quantity, price, created_at
        FROM transactions
        WHERE symbol = ?
@@ -193,14 +220,16 @@ export function getTransactions(symbol?: string): Transaction[] {
     );
   }
 
-  return database.getAllSync<Transaction>(
+  return await database.getAllAsync<Transaction>(
     `SELECT id, symbol, type, quantity, price, created_at
      FROM transactions
      ORDER BY created_at DESC, id DESC`,
   );
 }
 
-export function addTransaction(input: CreateTransactionInput): Transaction {
+export async function addTransaction(input: CreateTransactionInput): Promise<Transaction> {
+  
+  const database = await getDatabase();
   const symbol = input.symbol.trim().toUpperCase();
   if (!symbol) throw new Error('Symbol instrumentu jest wymagany');
   requirePositive(input.quantity, 'Liczba jednostek');
@@ -209,8 +238,8 @@ export function addTransaction(input: CreateTransactionInput): Transaction {
   const createdAt = input.createdAt ?? Date.now();
   let transactionId = 0;
 
-  database.withTransactionSync(() => {
-    const existing = getPortfolioItem(symbol);
+  await database.withTransactionAsync(async () => {
+    const existing = await getPortfolioItem(symbol);
 
     if (input.type === 'BUY') {
       const oldQuantity = existing?.quantity ?? 0;
@@ -220,7 +249,7 @@ export function addTransaction(input: CreateTransactionInput): Transaction {
           newQuantity
         : input.price;
 
-      database.runSync(
+      await database.runSync(
         `INSERT INTO portfolio (symbol, quantity, average_price)
          VALUES (?, ?, ?)
          ON CONFLICT(symbol) DO UPDATE SET
@@ -235,14 +264,14 @@ export function addTransaction(input: CreateTransactionInput): Transaction {
         throw new Error('Niewystarczająca liczba jednostek aktywa');
       }
 
-      database.runSync(
+      await database.runSync(
         'UPDATE portfolio SET quantity = quantity - ? WHERE symbol = ?',
         input.quantity,
         symbol,
       );
     }
 
-    const result = database.runSync(
+    const result = await database.runSync(
       `INSERT INTO transactions (symbol, type, quantity, price, created_at)
        VALUES (?, ?, ?, ?, ?)`,
       symbol,
@@ -254,7 +283,7 @@ export function addTransaction(input: CreateTransactionInput): Transaction {
     transactionId = result.lastInsertRowId;
   });
 
-  const transaction = database.getFirstSync<Transaction>(
+  const transaction = await database.getFirstAsync<Transaction>(
     `SELECT id, symbol, type, quantity, price, created_at
      FROM transactions
      WHERE id = ?`,
@@ -264,10 +293,11 @@ export function addTransaction(input: CreateTransactionInput): Transaction {
   return transaction;
 }
 
-export function clearLocalDatabase(): void {
-  database.withTransactionSync(() => {
-    database.runSync('DELETE FROM transactions');
-    database.runSync('DELETE FROM portfolio');
-    database.runSync('UPDATE wallet SET balance = 10000 WHERE id = 1');
+export async function clearLocalDatabase(): Promise<void> {
+  const database = await getDatabase();
+  await database.withTransactionAsync(async () => {
+    await database.runSync('DELETE FROM transactions');
+    await database.runSync('DELETE FROM portfolio');
+    await database.runSync('UPDATE wallet SET balance = 10000 WHERE id = 1');
   });
 }

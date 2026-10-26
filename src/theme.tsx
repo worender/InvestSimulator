@@ -56,11 +56,11 @@ type ThemeContextValue = {
   colors: typeof darkColors;
   toggleMode: () => void;
   accent: ThemeAccent;
-  setAccent: (accent: ThemeAccent) => void;
+  setAccent: (accent: ThemeAccent) => Promise<void>;
   defaultCurrency: Currency;
-  setDefaultCurrency: (currency: Currency) => void;
+  setDefaultCurrency: (currency: Currency) => Promise<void>;
   multiCurrency: boolean;
-  setMultiCurrency: (enabled: boolean) => void;
+  setMultiCurrency: (enabled: boolean) => Promise<void>;
   spacing: typeof themeBase.spacing;
   fontSize: typeof themeBase.fontSize;
   radius: typeof themeBase.radius;
@@ -83,21 +83,21 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     };
     return { ...baseColors, accent: accentColors[accent] };
   }, [mode, accent]);
-  const changeAccent = (nextAccent: ThemeAccent) => {
+  const changeAccent = async (nextAccent: ThemeAccent) => {
     setAccent(nextAccent);
-    updateUserProfile({
+    await updateUserProfile({
       color_mode: nextAccent,
     });
   };
-  const changeCurrency = (nextCurrency: Currency) => {
+  const changeCurrency = async (nextCurrency: Currency) => {
     setDefaultCurrency(nextCurrency);
-    updateUserProfile({
+    await updateUserProfile({
       currency_default: nextCurrency,
     });
   }
-  const changeMultiCurrency = (enabled: boolean) => {
+  const changeMultiCurrency = async (enabled: boolean) => {
     setMultiCurrency(enabled);
-    updateUserProfile({
+    await updateUserProfile({
       multi_currency: enabled ? 1 : 0,
     });
   }
@@ -131,9 +131,13 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   );
 
    useEffect(() => {
-      const profile = getUserProfile();
+    let active = true;
+    const loadProfile = async () => {
 
-      if (!profile) {
+      const profile = await getUserProfile();
+    
+
+      if (!active || !profile) {
         return;
       }
 
@@ -141,9 +145,17 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       setAccent(profile.color_mode as ThemeAccent);
       setDefaultCurrency(profile.currency_default as Currency);
       setMultiCurrency(profile.multi_currency === 1);
-    });
+    };
+
+    void loadProfile();
+
+    return () => {
+      active = false; 
+    };
+    }, []);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  
 }
 
 const themeBase = {
