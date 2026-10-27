@@ -2,9 +2,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CandlestickChart } from 'react-native-wagmi-charts';
-import { CandleData, getInstrumentQuote, getStockCandles, InstrumentQuote } from '../api/marketService';
-import { Skeleton } from './Skeleton';
+import { CandleData, getStockCandles } from '../api/marketService';
+import { currencySymbol } from '../currency';
 import { useTheme } from '../theme';
+import { Skeleton } from './Skeleton';
+
 
 type CandleInterval = '1m' | '5m' | '15m' | '1h' | '1d' | '1wk';
 type ChartRange = { label: string; days: number };
@@ -21,17 +23,27 @@ const DEFAULT_RANGE_INDEX = 1;
 const DEFAULT_INTERVAL: CandleInterval = '1h';
 const intraday = (value: CandleInterval) => ['1m', '5m', '15m', '1h'].includes(value);
 
-type StockCandleChartProps = { stock?: string; title?: string; exchange?: string };
+type StockCandleChartProps = {
+  stock?: string;
+  title?: string;
+  exchange?: string;
+  currency?: string;
+  variant?: 'card' | 'embedded';
+};
 
-type CurrencySymbol = 'zł' | '€' | '$';
-
-export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI', currency = 'zł', exchange = 'GPW' }: StockCandleChartProps & { currency?: CurrencySymbol }) {
+// Komponent wyświetlający wykres świecowy dla danego aktywa giełdowego
+export function StockCandleChart({
+  stock = 'PKO',
+  title = 'PKO BANK POLSKI',
+  currency = 'zł',
+  exchange = 'GPW',
+  variant = 'card',
+}: StockCandleChartProps) {
   const { colors } = useTheme();
   const [candles, setCandles] = useState<CandleData[]>([]);
   const [rangeIndex, setRangeIndex] = useState(DEFAULT_RANGE_INDEX);
   const [interval, setInterval] = useState<CandleInterval>(DEFAULT_INTERVAL);
   const [loading, setLoading] = useState(true);
-  const [quote, setQuote] = useState<InstrumentQuote | null>(null);
   const range = ranges[rangeIndex];
   const intradayDisabled = range.days > 60;
   const latest = candles[candles.length - 1];
@@ -44,15 +56,10 @@ export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI', cur
     let active = true;
     const load = async () => {
       setLoading(true);
-      setQuote(null);
       const requestedInterval = intradayDisabled && intraday(interval) ? '1d' : interval;
-      const [data, currentQuote] = await Promise.all([
-        getStockCandles(stock, requestedInterval, range.days, exchange),
-        getInstrumentQuote(stock, exchange),
-      ]);
+      const data = await getStockCandles(stock, requestedInterval, range.days, exchange);
       if (active) {
         setCandles(data ?? []);
-        setQuote(currentQuote);
         setLoading(false);
       }
     };
@@ -62,20 +69,28 @@ export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI', cur
 
   const axis = candles.length > 2 ? [candles[0], candles[Math.floor(candles.length / 2)], latest] : candles;
 
+  const isEmbedded = variant === 'embedded';
+  const unit = currencySymbol(currency);
+
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View
+      style={
+        isEmbedded
+          ? styles.embedded
+          : styles.card
+      }
+    >
       <View style={styles.header}>
         <View style={styles.titleCopy}>
           <Text style={[styles.label, { color: colors.textMuted }]}>{title}</Text>
-          <Text style={[styles.price, { color: colors.text }]}>{formatPrice(latest?.close)} {currency}</Text>
-          <Text style={{ color: change >= 0 ? colors.positive : colors.negative }}>
-            {change >= 0 ? '+' : ''}{formatPrice(change)} {currency} ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)
+          <Text style={[styles.price, { color: colors.text }]}>{formatPrice(latest?.close)} {unit}</Text>
+          <Text style={{ color: change >= 0 ? colors.positive : colors.negative, fontWeight: '600' }}>
+            {change >= 0 ? '+' : ''}{formatPrice(change)} {unit} ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)
           </Text>
         </View>
-        <View style={[styles.badge, { backgroundColor: colors.surfaceMuted }]}>
-          <View style={[styles.dot, { backgroundColor: quote?.isOpen ? colors.positive : colors.negative }]} />
-          <Text style={[styles.badgeText, { color: colors.textMuted }]}>{quote?.exchange ?? 'Ładowanie...'}</Text>
-          {quote && <Text style={[styles.marketState, { color: quote.isOpen ? colors.positive : colors.negative }]}>{quote.isOpen ? 'open' : 'closed'}</Text>}
+        <View style={[styles.badge, { backgroundColor: colors.surfaceMutedGlass, borderColor: colors.borderGlass }]}>
+          <Ionicons name="business-outline" size={12} color={colors.textMuted} />
+          <Text style={[styles.badgeText, { color: colors.textMuted }]}>{exchange}</Text>
         </View>
       </View>
       <Text style={[styles.controlLabel, { color: colors.textMuted }]}>ZAKRES</Text>
@@ -106,23 +121,42 @@ export function StockCandleChart({ stock = 'PKO', title = 'PKO BANK POLSKI', cur
         </View>
           : candles.length === 0 ? <View style={styles.placeholder}><Ionicons name="calendar-outline" size={40} color={colors.textMuted} /><Text style={[styles.muted, { color: colors.textMuted }]}>Brak notowań dla tego zakresu.</Text></View>
             : <CandlestickChart.Provider data={candles}>
-              <CandlestickChart height={280}><CandlestickChart.Candles useAnimations={false} /><CandlestickChart.Crosshair><CandlestickChart.Tooltip /></CandlestickChart.Crosshair></CandlestickChart>
+              <CandlestickChart height={280}><CandlestickChart.Candles useAnimations={false} /><CandlestickChart.Crosshair minDurationMs={320}><CandlestickChart.Tooltip /></CandlestickChart.Crosshair></CandlestickChart>
               <View style={styles.crosshair}><CandlestickChart.DatetimeText locale="pl-PL" style={{ color: colors.textMuted, fontSize: 11 }} /></View>
             </CandlestickChart.Provider>}
+            
       </View>
-      {candles.length > 0 && <View style={[styles.axis, { borderTopColor: colors.border }]}>
+      {candles.length > 0 && <View style={[styles.axis, { borderTopColor: colors.borderGlass }]}>
         {axis.map((item, index) => <Text key={`${item.timestamp}-${index}`} style={[styles.axisText, { color: colors.textMuted }]}>{formatTime(item.timestamp, interval)}</Text>)}
       </View>}
     </View>
   );
 }
 
+// Komponent przycisku wyboru zakresu lub interwału wykresu
 function ChartButton({ label, active, disabled = false, onPress, colors }: { label: string; active: boolean; disabled?: boolean; onPress: () => void; colors: ReturnType<typeof useTheme>['colors'] }) {
-  return <Pressable disabled={disabled} onPress={onPress} accessibilityRole="button" style={[styles.button, { backgroundColor: active ? colors.accent : colors.surfaceMuted, opacity: disabled ? 0.4 : 1 }]}>
-    <Text style={{ color: active ? colors.background : colors.textMuted, fontSize: 12, fontWeight: '700' }}>{label}</Text>
-  </Pressable>;
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      accessibilityRole="button"
+      style={[
+        styles.button,
+        {
+          backgroundColor: active ? colors.accent : colors.surfaceMutedGlass,
+          borderColor: active ? colors.accent : colors.borderGlass,
+          opacity: disabled ? 0.35 : 1,
+        },
+      ]}
+    >
+      <Text style={{ color: active ? '#ffffff' : colors.textMuted, fontSize: 12, fontWeight: '700' }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
+// Funkcja formatująca znacznik czasu na czytelną datę i godzinę w zależności od interwału wykresu
 function formatTime(timestamp: number, interval: CandleInterval) {
   const options: Intl.DateTimeFormatOptions = intraday(interval)
     ? { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }
@@ -130,19 +164,31 @@ function formatTime(timestamp: number, interval: CandleInterval) {
   return new Date(timestamp).toLocaleString('pl-PL', options);
 }
 
+// Stylesheet dla komponentu StockCandleChart (wykres świecowy)
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 16, padding: 16 },
+  card: { overflow: 'hidden' },
+  embedded: { backgroundColor: 'transparent', paddingVertical: 8, paddingHorizontal: 4 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  titleCopy: { flex: 1 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
-  price: { fontSize: 30, fontWeight: '700', marginTop: 6 }, badge: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 8, borderRadius: 8 },
-  dot: { width: 7, height: 7, borderRadius: 4 }, badgeText: { fontSize: 10, fontWeight: '700' }, marketState: { fontSize: 9, fontWeight: '700' },
-  description: { fontSize: 12, lineHeight: 18, marginTop: 10 }, controlLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginTop: 18, marginBottom: 8 },
-  controls: { flexDirection: 'row', gap: 8, paddingRight: 8 }, button: { minHeight: 34, paddingHorizontal: 12, borderRadius: 7, justifyContent: 'center' },
-  hint: { fontSize: 11, lineHeight: 16, marginBottom: 8 }, chart: { minHeight: 280, marginTop: 16, overflow: 'hidden' },
-  placeholder: { minHeight: 280, alignItems: 'center', justifyContent: 'center', gap: 9 }, muted: { fontSize: 13, textAlign: 'center' },
+  titleCopy: { flex: 1 },
+  label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
+  price: { fontSize: 28, fontWeight: '800', marginTop: 4, letterSpacing: -0.5 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1 },
+  badgeText: { fontSize: 10, fontWeight: '700' },
+  description: { fontSize: 12, lineHeight: 18, marginTop: 10 },
+  controlLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginTop: 18, marginBottom: 8 },
+  controls: { flexDirection: 'row', gap: 8, paddingRight: 8 },
+  button: { minHeight: 32, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  hint: { fontSize: 11, lineHeight: 16, marginBottom: 8 },
+  chart: { minHeight: 280, marginTop: 16, overflow: 'hidden' },
+  placeholder: { minHeight: 280, alignItems: 'center', justifyContent: 'center', gap: 9 },
+  muted: { fontSize: 13, textAlign: 'center' },
   skeletonChart: { minHeight: 280, justifyContent: 'center', gap: 22, paddingVertical: 20 },
   skeletonHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  skeletonLine: { marginTop: 4 }, skeletonTrend: { marginTop: 18 },
-  crosshair: { alignItems: 'center', marginTop: 4 }, axis: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, paddingTop: 8 },
-  axisText: { flex: 1, fontSize: 10, textAlign: 'center' },
+  skeletonLine: { marginVertical: 4 },
+  skeletonTrend: { alignSelf: 'center', marginTop: 8 },
+  crosshair: { alignItems: 'center', marginTop: 4 },
+  interactionHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 8 },
+  interactionHintText: { fontSize: 10, fontWeight: '600' },
+  axis: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, paddingTop: 10, marginTop: 4 },
+  axisText: { fontSize: 10, fontWeight: '500' },
 });

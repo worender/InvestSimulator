@@ -32,13 +32,20 @@ const getLocalIpv4Address = () => {
 const localAddress = getLocalIpv4Address();
 const serverAddressFile = path.join(__dirname, 'server-address.json');
 
-fs.writeFileSync(
-  serverAddressFile,
-  `${JSON.stringify({ host: localAddress, port: PORT, url: `http://${localAddress}:${PORT}` }, null, 2)}\n`,
-);
+try {
+  fs.writeFileSync(
+    serverAddressFile,
+    `${JSON.stringify({ host: localAddress, port: PORT, url: `http://${localAddress}:${PORT}` }, null, 2)}\n`,
+  );
+} catch (error) {
+  console.warn('Nie udało się zapisać pliku server-address.json:', error.message);
+}
 
 // MEMORY CACHE
 const stockCache = new Map();
+const financialsCache = new Map();
+const performanceCache = new Map();
+const quoteDetailsCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minut
 
 const normalizeYahooSymbol = (value, exchange) => {
@@ -230,23 +237,291 @@ app.get('/api/candles', authenticateToken, async (req, res) => {
   }
 });
 
-// Finnhub API endpoint to get stock quote
-// app.get('/api/quote', authenticateToken, async (req, res) => {
-//   const symbol = req.query.symbol;
-//   try {
-//     const response = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${process.env.FINNHUB_API_KEY}`);
-//     res.json({ currentPrice: response.data.c, changePercent: response.data.dp });
-    
-//   } catch (error) {
-//     if (error.response) {
-      
-//       console.log('Błąd API Finnhub:', error.response.status, error.response.data);
-//     } else {
-//       console.log('Inny błąd serwera:', error.message);
-//     }
-//     res.status(500).json({ error: 'Błąd serwera' });
-//   }
-// });
+const calculatePerformance = async (symbol) => {
+  const cacheKey = `perf_${symbol}`;
+  const now = Date.now();
+  if (performanceCache.has(cacheKey)) {
+    const cached = performanceCache.get(cacheKey);
+    if (now - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+  }
+
+  try {
+    const nowObj = new Date();
+    const fiveYearsAgo = new Date(nowObj.getFullYear() - 5, nowObj.getMonth(), nowObj.getDate());
+    const chart = await yahooFinance.chart(symbol, { period1: fiveYearsAgo, interval: '1mo' }, { validate: false });
+    const quotes = (chart?.quotes || []).filter((q) => q && q.close != null);
+    if (!quotes.length) return null;
+
+    const currentPrice = quotes[quotes.length - 1].close;
+    const nowYear = nowObj.getFullYear();
+    const ytdQuote = quotes.find((q) => new Date(q.date).getFullYear() === nowYear) || quotes[quotes.length - 1];
+    const q1Y = quotes.length >= 13 ? quotes[quotes.length - 13] : quotes[0];
+    const q3Y = quotes.length >= 37 ? quotes[quotes.length - 37] : quotes[0];
+    const q5Y = quotes[0];
+
+    const calcRet = (base) => (base && base.close ? ((currentPrice - base.close) / base.close) * 100 : 0);
+    const p1Y = calcRet(q1Y);
+    const p3Y = calcRet(q3Y);
+    const p5Y = calcRet(q5Y);
+    const pYTD = calcRet(ytdQuote);
+
+    const perfData = {
+      performance1Y: Math.round(p1Y * 100) / 100,
+      performance3Y: Math.round(p3Y * 100) / 100,
+      performance5Y: Math.round(p5Y * 100) / 100,
+      performanceYTD: Math.round(pYTD * 100) / 100,
+      oneYearAvgReturn: Math.round(p1Y * 100) / 100,
+      threeYearAvgReturn: p3Y > -100 ? Math.round((Math.pow(Math.max(0.001, 1 + p3Y / 100), 1 / 3) - 1) * 10000) / 100 : 0,
+      fiveYearAvgReturn: p5Y > -100 ? Math.round((Math.pow(Math.max(0.001, 1 + p5Y / 100), 1 / 5) - 1) * 10000) / 100 : 0,
+    };
+
+    performanceCache.set(cacheKey, { timestamp: now, data: perfData });
+    return perfData;
+  } catch (error) {
+    console.warn(`Nie udało się obliczyć wyników historycznych dla ${symbol}:`, error.message);
+    return null;
+  }
+};
+
+app.get('/api/instruments/financials', authenticateToken, async (req, res) => {
+  const requestedSymbol = String(req.query.symbol || '').trim();
+  const exchange = req.query.exchange;
+  if (!requestedSymbol) return res.status(400).json({ error: 'Brak symbolu akcji' });
+
+  const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
+  const cacheKey = `financials_${symbol}`;
+  const now = Date.now();
+
+  if (financialsCache.has(cacheKey)) {
+    const cached = financialsCache.get(cacheKey);
+    if (now - cached.timestamp < CACHE_TTL) {
+      return res.json(cached.data);
+    }
+  }
+
+  try {
+    const [quoteSummary, quote, perf] = await Promise.all([
+      yahooFinance.quoteSummary(
+        symbol,
+        { modules: ['summaryDetail', 'defaultKeyStatistics', 'financialData', 'price'] },
+        { validate: false },
+      ).catch((err) => {
+        console.warn(`Błąd quoteSummary dla ${symbol}:`, err.message);
+        return null;
+      }),
+      yahooFinance.quote(symbol, {}, { validate: false }).catch((err) => {
+        console.warn(`Błąd quote dla ${symbol}:`, err.message);
+        return null;
+      }),
+      calculatePerformance(symbol).catch(() => null),
+    ]);
+
+    if (!quoteSummary && !quote) {
+      return res.status(404).json({ error: 'Brak danych finansowych dla podanego symbolu' });
+    }
+
+    const price = quoteSummary?.price || {};
+    const summaryDetail = quoteSummary?.summaryDetail || {};
+    const defaultKeyStatistics = quoteSummary?.defaultKeyStatistics || {};
+    const finData = quoteSummary?.financialData || {};
+
+    const normalizePercent = (val) => {
+      if (val === undefined || val === null || Number.isNaN(val)) return undefined;
+      return Math.abs(val) <= 1 ? val * 100 : val;
+    };
+
+    const regularMarketPrice = quote?.regularMarketPrice ?? price?.regularMarketPrice ?? finData?.currentPrice ?? 0;
+    const regularMarketChange = quote?.regularMarketChange ?? price?.regularMarketChange ?? 0;
+    const regularMarketChangePercent = quote?.regularMarketChangePercent != null
+      ? quote.regularMarketChangePercent
+      : (price?.regularMarketChangePercent != null ? price.regularMarketChangePercent * 100 : 0);
+
+    const dividendYieldRaw = summaryDetail?.dividendYield ?? quote?.dividendYield;
+    const dividendYield = dividendYieldRaw != null ? normalizePercent(dividendYieldRaw) : undefined;
+
+    const payoutRatioRaw = summaryDetail?.payoutRatio;
+    const payoutRatio = payoutRatioRaw != null ? normalizePercent(payoutRatioRaw) : undefined;
+
+    const fiveYearAvgDividendYieldRaw = summaryDetail?.fiveYearAvgDividendYield;
+    const fiveYearAvgDividendYield = fiveYearAvgDividendYieldRaw != null ? normalizePercent(fiveYearAvgDividendYieldRaw) : undefined;
+
+    const profitMarginsRaw = finData?.profitMargins;
+    const profitMargins = profitMarginsRaw != null ? normalizePercent(profitMarginsRaw) : undefined;
+
+    const shortPercentOfFloatRaw = defaultKeyStatistics?.shortPercentOfFloat;
+    const shortPercentOfFloat = shortPercentOfFloatRaw != null ? normalizePercent(shortPercentOfFloatRaw) : undefined;
+
+    const marketCapVal = summaryDetail?.marketCap ?? price?.marketCap ?? quote?.marketCap;
+    const freeCashflowVal = finData?.freeCashflow;
+    const priceToFreeCashFlow = freeCashflowVal && marketCapVal ? marketCapVal / freeCashflowVal : undefined;
+
+    const lastSplitDateVal = defaultKeyStatistics?.lastSplitDate;
+    const lastSplitDate = lastSplitDateVal
+      ? (typeof lastSplitDateVal === 'number'
+          ? new Date(lastSplitDateVal * 1000).toISOString()
+          : new Date(lastSplitDateVal).toISOString())
+      : undefined;
+
+    const exDividendDateVal = summaryDetail?.exDividendDate;
+    const exDividendDate = exDividendDateVal
+      ? (typeof exDividendDateVal === 'number'
+          ? new Date(exDividendDateVal * 1000).toISOString()
+          : new Date(exDividendDateVal).toISOString())
+      : undefined;
+
+    const perf1Y = perf?.performance1Y ?? (quote?.fiftyTwoWeekChangePercent != null
+      ? quote.fiftyTwoWeekChangePercent
+      : (defaultKeyStatistics?.['52WeekChange'] != null ? defaultKeyStatistics['52WeekChange'] * 100 : undefined));
+
+    const result = {
+      symbol: requestedSymbol,
+      currency: price?.currency || quote?.currency || 'USD',
+      price: regularMarketPrice,
+      change: regularMarketChange,
+      changePercent: regularMarketChangePercent,
+      volume: quote?.regularMarketVolume ?? price?.regularMarketVolume ?? summaryDetail?.regularMarketVolume ?? 0,
+      averageVolume: summaryDetail?.averageDailyVolume10Day ?? summaryDetail?.averageVolume10days ?? quote?.averageDailyVolume10Day ?? 0,
+      marketCap: marketCapVal ?? 0,
+      sharesOutstanding: defaultKeyStatistics?.sharesOutstanding ?? quote?.sharesOutstanding ?? 0,
+      bookValue: defaultKeyStatistics?.bookValue ?? quote?.bookValue ?? 0,
+      dividendRate: summaryDetail?.dividendRate ?? quote?.dividendRate ?? 0,
+      dividendYield: dividendYield ?? 0,
+      exDividendDate: exDividendDate,
+      payoutRatio: payoutRatio ?? 0,
+      fiveYearAvgDividendYield: fiveYearAvgDividendYield ?? 0,
+      beta: summaryDetail?.beta ?? defaultKeyStatistics?.beta ?? 0,
+      trailingPE: summaryDetail?.trailingPE ?? quote?.trailingPE ?? 0,
+      forwardPE: summaryDetail?.forwardPE ?? quote?.forwardPE ?? defaultKeyStatistics?.forwardPE ?? 0,
+      priceToBook: defaultKeyStatistics?.priceToBook ?? quote?.priceToBook ?? 0,
+      priceToSales: summaryDetail?.priceToSalesTrailing12Months ?? 0,
+      enterpriseValue: defaultKeyStatistics?.enterpriseValue ?? 0,
+      enterpriseValueToRevenue: defaultKeyStatistics?.enterpriseToRevenue ?? 0,
+      enterpriseValueToEbitda: defaultKeyStatistics?.enterpriseToEbitda ?? 0,
+      priceToFreeCashFlow: priceToFreeCashFlow ?? 0,
+      profitMargins: profitMargins ?? 0,
+      floatShares: defaultKeyStatistics?.floatShares ?? 0,
+      sharesShort: defaultKeyStatistics?.sharesShort ?? 0,
+      shortRatio: defaultKeyStatistics?.shortRatio ?? 0,
+      shortPercentOfFloat: shortPercentOfFloat ?? 0,
+      lastSplitFactor: defaultKeyStatistics?.lastSplitFactor || '',
+      lastSplitDate: lastSplitDate,
+      fiveYearAvgReturn: perf?.fiveYearAvgReturn ?? 0,
+      threeYearAvgReturn: perf?.threeYearAvgReturn ?? 0,
+      oneYearAvgReturn: perf?.oneYearAvgReturn ?? 0,
+      performance1Y: perf1Y,
+      performance3Y: perf?.performance3Y,
+      performance5Y: perf?.performance5Y,
+      performanceYTD: perf?.performanceYTD,
+    };
+
+    financialsCache.set(cacheKey, { timestamp: now, data: result });
+    res.json(result);
+  } catch (error) {
+    console.error(`Błąd pobierania danych finansowych dla ${symbol}:`, error.message);
+    res.status(500).json({ error: 'Błąd podczas pobierania danych finansowych' });
+  }
+});
+
+app.get('/api/instruments/performance', authenticateToken, async (req, res) => {
+  const requestedSymbol = String(req.query.symbol || '').trim();
+  const exchange = req.query.exchange;
+  if (!requestedSymbol) return res.status(400).json({ error: 'Brak symbolu akcji' });
+
+  const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
+  try {
+    const perf = await calculatePerformance(symbol);
+    if (!perf) {
+      return res.status(404).json({ error: 'Brak danych o wynikach historycznych' });
+    }
+    res.json(perf);
+  } catch (error) {
+    console.error(`Błąd pobierania wyników dla ${symbol}:`, error.message);
+    res.status(500).json({ error: 'Błąd pobierania wyników historycznych' });
+  }
+});
+
+app.get('/api/instruments/quote-details', authenticateToken, async (req, res) => {
+  const requestedSymbol = String(req.query.symbol || '').trim();
+  const exchange = req.query.exchange;
+  if (!requestedSymbol) return res.status(400).json({ error: 'Brak symbolu akcji' });
+
+  const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
+  const cacheKey = `quote_details_${symbol}`;
+  const now = Date.now();
+
+  if (quoteDetailsCache.has(cacheKey)) {
+    const cached = quoteDetailsCache.get(cacheKey);
+    if (now - cached.timestamp < CACHE_TTL) {
+      return res.json(cached.data);
+    }
+  }
+
+  try {
+    const quote = await yahooFinance.quote(symbol, {}, { validate: false });
+    if (!quote) {
+      return res.status(404).json({ error: 'Brak szczegółów notowania' });
+    }
+
+    const data = {
+      symbol: requestedSymbol,
+      currency: quote.currency || 'USD',
+      price: quote.regularMarketPrice ?? 0,
+      change: quote.regularMarketChange ?? 0,
+      changePercent: quote.regularMarketChangePercent ?? 0,
+      volume: quote.regularMarketVolume ?? 0,
+      averageVolume: quote.averageDailyVolume10Day ?? quote.averageDailyVolume3Month ?? 0,
+      marketCap: quote.marketCap ?? 0,
+      trailingPE: quote.trailingPE ?? 0,
+      forwardPE: quote.forwardPE ?? 0,
+      priceToBook: quote.priceToBook ?? 0,
+      sharesOutstanding: quote.sharesOutstanding ?? 0,
+      bookValue: quote.bookValue ?? 0,
+      dividendRate: quote.dividendRate ?? quote.trailingAnnualDividendRate ?? 0,
+      dividendYield: quote.dividendYield ?? quote.trailingAnnualDividendYield ?? 0,
+      fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? 0,
+      fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? 0,
+      fiftyTwoWeekChangePercent: quote.fiftyTwoWeekChangePercent ?? 0,
+    };
+
+    quoteDetailsCache.set(cacheKey, { timestamp: now, data });
+    res.json(data);
+  } catch (error) {
+    console.error(`Błąd pobierania szczegółów notowania dla ${symbol}:`, error.message);
+    res.status(500).json({ error: 'Błąd pobierania szczegółów notowania' });
+  }
+});
+
+app.get('/api/quote', authenticateToken, async (req, res) => {
+  const requestedSymbol = String(req.query.symbol || '').trim();
+  const exchange = req.query.exchange;
+  if (!requestedSymbol) return res.status(400).json({ error: 'Brak symbolu' });
+
+  const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
+  try {
+    const quote = await yahooFinance.quote(symbol, {}, { validate: false });
+    res.json({
+      symbol: requestedSymbol,
+      currentPrice: quote?.regularMarketPrice ?? 0,
+      change: quote?.regularMarketChange ?? 0,
+      changePercent: quote?.regularMarketChangePercent ?? 0,
+    });
+  } catch (error) {
+    console.error(`Błąd pobierania notowania dla ${symbol}:`, error.message);
+    res.status(500).json({ error: 'Błąd notowania' });
+  }
+});
+
+app.get('/api/config', (req, res) => {
+  try {
+    const config = fs.readFileSync(serverAddressFile, 'utf8');
+    res.json(JSON.parse(config));
+  } catch (error) {
+    console.error('Błąd pobierania konfiguracji API:', error.message);
+    res.status(500).json({ error: 'Nie udało się pobrać konfiguracji API' });
+  }
+});
 
 
 
