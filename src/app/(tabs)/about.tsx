@@ -1,7 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { BlurTargetView } from 'expo-blur';
+import { useRef, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PanelHeader } from '../../components/PanelHeader';
+import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { useTheme } from '../../theme';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
@@ -15,12 +17,15 @@ const lessons = [
 
 export default function AboutScreen() {
   const { colors } = useTheme();
-  const { bottom } = useSafeAreaInsets();
+  const { bottom, top } = useSafeAreaInsets();
+  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
+  const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
+        blurTarget={blurTargetRef}
         title="O inwestowaniu"
         left={
           <Pressable disabled accessibilityLabel="Zapisane lekcje" hitSlop={8}>
@@ -33,45 +38,48 @@ export default function AboutScreen() {
           </Pressable>
         }
       />
-      <ScrollView
-        style={{ backgroundColor: colors.background }}
-        contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom }]}
-        {...scrollNav}
-      >
-        <Text style={[styles.eyebrow, { color: colors.accent }]}>CENTRUM WIEDZY</Text>
-        <Text style={[styles.title, { color: colors.text }]}>Inwestowanie bez skrótów</Text>
-        <Text style={[styles.lead, { color: colors.textMuted }]}>
-          Poznaj podstawy, zanim podejmiesz decyzję. Tutaj ćwiczysz na fikcyjnych danych, bez ryzyka utraty pieniędzy.
-        </Text>
+      <BlurTargetView ref={blurTargetRef} style={styles.blurTarget}>
+        <ScrollView
+          style={{ backgroundColor: colors.background }}
+          contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom, paddingTop: top + PANEL_HEADER_HEIGHT + 8 }]}
+          {...scrollNav}
+        >
+          <Text style={[styles.eyebrow, { color: colors.accent }]}>CENTRUM WIEDZY</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Inwestowanie bez skrótów</Text>
+          <Text style={[styles.lead, { color: colors.textMuted }]}>
+            Poznaj podstawy, zanim podejmiesz decyzję. Tutaj ćwiczysz na fikcyjnych danych, bez ryzyka utraty pieniędzy.
+          </Text>
 
-        <Section label="Lekcje">
-          {lessons.map(([number, title, copy], index) => (
-            <View
-              key={number}
-              style={[
-                styles.lesson,
-                index < lessons.length - 1 && {
-                  borderBottomWidth: StyleSheet.hairlineWidth,
-                  borderBottomColor: colors.borderGlass,
-                },
-              ]}
-            >
-              <Text style={[styles.number, { color: colors.accent }]}>{number}</Text>
-              <View style={styles.lessonCopy}>
-                <Text style={[styles.lessonTitle, { color: colors.text }]}>{title}</Text>
-                <Text style={[styles.copy, { color: colors.textMuted }]}>{copy}</Text>
+          <Section label="Lekcje">
+            {lessons.map(([number, title, copy], index) => (
+              <View
+                key={number}
+                style={[
+                  styles.lesson,
+                  index < lessons.length - 1 && {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: colors.borderGlass,
+                  },
+                ]}
+              >
+                <Text style={[styles.number, { color: colors.accent }]}>{number}</Text>
+                <View style={styles.lessonCopy}>
+                  <Text style={[styles.lessonTitle, { color: colors.text }]}>{title}</Text>
+                  <Text style={[styles.copy, { color: colors.textMuted }]}>{copy}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
               </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-            </View>
-          ))}
-        </Section>
-      </ScrollView>
+            ))}
+          </Section>
+        </ScrollView>
+      </BlurTargetView>
     </View>
   );
 }
 
 // Stylesheet dla komponentu AboutScreen
 const styles = StyleSheet.create({
+  blurTarget: { flex: 1 },
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },

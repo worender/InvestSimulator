@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRef } from 'react';
+import { BlurTargetView } from 'expo-blur';
+import { useRef, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PanelHeader } from '../../components/PanelHeader';
+import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { Currency, ThemeAccent, useTheme } from '../../theme';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
@@ -29,7 +30,9 @@ export default function SettingsScreen() {
     multiCurrency,
     setMultiCurrency,
   } = useTheme();
-  const { bottom } = useSafeAreaInsets();
+  const { bottom, top } = useSafeAreaInsets();
+  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
+  const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
   const scrollRef = useRef<ScrollViewInstance>(null);
   const isDark = mode === 'dark';
@@ -37,6 +40,7 @@ export default function SettingsScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
+        blurTarget={blurTargetRef}
         title="Ustawienia"
         left={
           <Pressable
@@ -57,83 +61,58 @@ export default function SettingsScreen() {
           </Pressable>
         }
       />
-      <ScrollView
-        ref={scrollRef}
-        style={{ backgroundColor: colors.background }}
-        contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom }]}
-        {...scrollNav}
-      >
-        <Text style={[styles.intro, { color: colors.textMuted }]}>Dostosuj aplikację do swoich preferencji.</Text>
+      <BlurTargetView ref={blurTargetRef} style={styles.blurTarget}>
+        <ScrollView
+          ref={scrollRef}
+          style={{ backgroundColor: colors.background }}
+          contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom, paddingTop: top + PANEL_HEADER_HEIGHT + 8 }]}
+          {...scrollNav}
+        >
+          <Text style={[styles.intro, { color: colors.textMuted }]}>Dostosuj aplikację do swoich preferencji.</Text>
 
-        <Section label="Wygląd">
-          <View style={[styles.settingRow, { borderBottomColor: colors.borderGlass }]}>
-            <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={colors.text} />
-            <View style={styles.copy}>
-              <Text style={[styles.title, { color: colors.text }]}>Tryb {isDark ? 'ciemny' : 'jasny'}</Text>
-              <Text style={[styles.subtitle, { color: colors.textMuted }]}>Motyw dopasowany do pory dnia</Text>
+          <Section label="Wygląd">
+            <View style={[styles.settingRow, { borderBottomColor: colors.borderGlass }]}>
+              <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={colors.text} />
+              <View style={styles.copy}>
+                <Text style={[styles.title, { color: colors.text }]}>Tryb {isDark ? 'ciemny' : 'jasny'}</Text>
+                <Text style={[styles.subtitle, { color: colors.textMuted }]}>Motyw dopasowany do pory dnia</Text>
+              </View>
+              <Pressable
+                accessibilityRole="switch"
+                accessibilityState={{ checked: isDark }}
+                onPress={toggleMode}
+                style={[styles.switch, { backgroundColor: isDark ? colors.accent : colors.surfaceMuted }]}
+              >
+                <View
+                  style={[
+                    styles.thumb,
+                    {
+                      backgroundColor: isDark ? '#ffffff' : colors.textMuted,
+                      transform: [{ translateX: isDark ? 18 : 2 }],
+                    },
+                  ]}
+                />
+              </Pressable>
             </View>
-            <Pressable
-              accessibilityRole="switch"
-              accessibilityState={{ checked: isDark }}
-              onPress={toggleMode}
-              style={[styles.switch, { backgroundColor: isDark ? colors.accent : colors.surfaceMuted }]}
-            >
-              <View
-                style={[
-                  styles.thumb,
-                  {
-                    backgroundColor: isDark ? '#ffffff' : colors.textMuted,
-                    transform: [{ translateX: isDark ? 18 : 2 }],
-                  },
-                ]}
-              />
-            </Pressable>
-          </View>
-        </Section>
+          </Section>
 
-        <Section label="Kolor akcentu">
-          <View style={styles.accentRow}>
-            {accentOptions.map((item) => {
-              const active = item === accent;
-              return (
-                <Pressable key={item} accessibilityRole="button" onPress={() => setAccent(item)} style={styles.accentOption}>
-                  <View
-                    style={[
-                      styles.accentDot,
-                      { backgroundColor: accentColors[item] },
-                      active && { borderWidth: 2, borderColor: colors.text },
-                    ]}
-                  />
-                  <Text
-                    style={[
-                      styles.accentLabel,
-                      { color: active ? colors.text : colors.textMuted, fontWeight: active ? '700' : '500' },
-                    ]}
-                  >
-                    {item}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </Section>
-
-        <Section label="Portfele i waluta">
-          <View style={[styles.settingBlock, { borderBottomColor: colors.borderGlass }]}>
-            <Text style={[styles.title, { color: colors.text }]}>Domyślna waluta</Text>
-            <Text style={[styles.subtitle, { color: colors.textMuted }]}>Pierwsza karta po otwarciu dashboardu</Text>
-            <View style={styles.currencyRow}>
-              {(['PLN', 'EUR', 'USD'] as Currency[]).map((item) => {
-                const active = defaultCurrency === item;
+          <Section label="Kolor akcentu">
+            <View style={styles.accentRow}>
+              {accentOptions.map((item) => {
+                const active = item === accent;
                 return (
-                  <Pressable key={item} onPress={() => setDefaultCurrency(item)} style={styles.currencyOption}>
+                  <Pressable key={item} accessibilityRole="button" onPress={() => setAccent(item)} style={styles.accentOption}>
+                    <View
+                      style={[
+                        styles.accentDot,
+                        { backgroundColor: accentColors[item] },
+                        active && { borderWidth: 2, borderColor: colors.text },
+                      ]}
+                    />
                     <Text
                       style={[
-                        styles.currencyText,
-                        {
-                          color: active ? colors.accent : colors.textMuted,
-                          borderBottomColor: active ? colors.accent : 'transparent',
-                        },
+                        styles.accentLabel,
+                        { color: active ? colors.text : colors.textMuted, fontWeight: active ? '700' : '500' },
                       ]}
                     >
                       {item}
@@ -142,46 +121,74 @@ export default function SettingsScreen() {
                 );
               })}
             </View>
-          </View>
+          </Section>
 
-          <View style={[styles.settingRow, { borderBottomColor: colors.borderGlass }]}>
-            <Ionicons name="layers-outline" size={20} color={colors.text} />
-            <View style={styles.copy}>
-              <Text style={[styles.title, { color: colors.text }]}>Wiele walut</Text>
-              <Text style={[styles.subtitle, { color: colors.textMuted }]}>Włącz zmianę kart między PLN, EUR i USD</Text>
+          <Section label="Portfele i waluta">
+            <View style={[styles.settingBlock, { borderBottomColor: colors.borderGlass }]}>
+              <Text style={[styles.title, { color: colors.text }]}>Domyślna waluta</Text>
+              <Text style={[styles.subtitle, { color: colors.textMuted }]}>Pierwsza karta po otwarciu dashboardu</Text>
+              <View style={styles.currencyRow}>
+                {(['PLN', 'EUR', 'USD'] as Currency[]).map((item) => {
+                  const active = defaultCurrency === item;
+                  return (
+                    <Pressable key={item} onPress={() => setDefaultCurrency(item)} style={styles.currencyOption}>
+                      <Text
+                        style={[
+                          styles.currencyText,
+                          {
+                            color: active ? colors.accent : colors.textMuted,
+                            borderBottomColor: active ? colors.accent : 'transparent',
+                          },
+                        ]}
+                      >
+                        {item}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
-            <Pressable
-              accessibilityRole="switch"
-              accessibilityState={{ checked: multiCurrency }}
-              onPress={() => setMultiCurrency(!multiCurrency)}
-              style={[styles.switch, { backgroundColor: multiCurrency ? colors.accent : colors.surfaceMuted }]}
-            >
-              <View
-                style={[
-                  styles.thumb,
-                  {
-                    backgroundColor: multiCurrency ? '#ffffff' : colors.textMuted,
-                    transform: [{ translateX: multiCurrency ? 18 : 2 }],
-                  },
-                ]}
-              />
-            </Pressable>
-          </View>
-        </Section>
 
-        <Section label="O aplikacji">
-          <View style={styles.about}>
-            <Text style={[styles.title, { color: colors.text }]}>InvestSimulator</Text>
-            <Text style={[styles.subtitle, { color: colors.textMuted }]}>Wersja edukacyjna 1.0</Text>
-          </View>
-        </Section>
-      </ScrollView>
+            <View style={[styles.settingRow, { borderBottomColor: colors.borderGlass }]}>
+              <Ionicons name="layers-outline" size={20} color={colors.text} />
+              <View style={styles.copy}>
+                <Text style={[styles.title, { color: colors.text }]}>Wiele walut</Text>
+                <Text style={[styles.subtitle, { color: colors.textMuted }]}>Włącz zmianę kart między PLN, EUR i USD</Text>
+              </View>
+              <Pressable
+                accessibilityRole="switch"
+                accessibilityState={{ checked: multiCurrency }}
+                onPress={() => setMultiCurrency(!multiCurrency)}
+                style={[styles.switch, { backgroundColor: multiCurrency ? colors.accent : colors.surfaceMuted }]}
+              >
+                <View
+                  style={[
+                    styles.thumb,
+                    {
+                      backgroundColor: multiCurrency ? '#ffffff' : colors.textMuted,
+                      transform: [{ translateX: multiCurrency ? 18 : 2 }],
+                    },
+                  ]}
+                />
+              </Pressable>
+            </View>
+          </Section>
+
+          <Section label="O aplikacji">
+            <View style={styles.about}>
+              <Text style={[styles.title, { color: colors.text }]}>InvestSimulator</Text>
+              <Text style={[styles.subtitle, { color: colors.textMuted }]}>Wersja edukacyjna 1.0</Text>
+            </View>
+          </Section>
+        </ScrollView>
+      </BlurTargetView>
     </View>
   );
 }
 
 // Stylesheet dla komponentu SettingsScreen (ekran "Ustawienia")
 const styles = StyleSheet.create({
+  blurTarget: { flex: 1 },
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
   intro: { fontSize: 15, lineHeight: 22 },

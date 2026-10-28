@@ -1,73 +1,183 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { BlurTargetView } from 'expo-blur';
+import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Reanimated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GlassSurface } from '../../components/GlassSurface';
-import { PanelHeader } from '../../components/PanelHeader';
+import { AssetCategoryCard } from '../../components/AssetCategoryCard';
+import { InstrumentDetailModal, ModalTab } from '../../components/InstrumentDetailModal';
+import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
+import { SinglePortfolioCard } from '../../components/SinglePortfolioCard';
+import {
+  MOCK_PORTFOLIOS,
+  MockPortfolio,
+  PortfolioAssetItem,
+  PortfolioCategory,
+} from '../../database/mockPortfolioData';
+import { notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
 export default function PortfolioScreen() {
   const { colors } = useTheme();
-  const { bottom } = useSafeAreaInsets();
+  const { bottom, top } = useSafeAreaInsets();
+  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
+  const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
+
+  // Stan portfeli użytkownika
+  const [portfolios] = useState<MockPortfolio[]>(MOCK_PORTFOLIOS);
+  const [activePortfolioIndex, setActivePortfolioIndex] = useState(0);
+
+  // Stan modalu szczegółów i zakupu instrumentu / kategorii
+  const [selectedCategory, setSelectedCategory] = useState<PortfolioCategory | null>(null);
+  const [selectedAsset, setSelectedAsset] = useState<PortfolioAssetItem | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalInitialTab, setModalInitialTab] = useState<ModalTab>('details');
+
+  // Animacja obracających się strzałek w headerze
+  const rotation = useSharedValue(0);
+  const rotationStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
+
+  const currentPortfolio = portfolios[activePortfolioIndex] || portfolios[0];
+  const hasMultiplePortfolios = portfolios.length > 1;
+  const isAddDisabled = portfolios.length >= 5;
+
+  const handleSwitchPortfolio = () => {
+    rotation.value = withTiming(rotation.value + 180, {
+      duration: 350,
+      easing: Easing.out(Easing.cubic),
+    });
+    setActivePortfolioIndex((prev) => (prev + 1) % portfolios.length);
+  };
+
+  const handleAddPortfolio = () => {
+    if (isAddDisabled) {
+      notify({
+        variant: 'info',
+        title: 'Limit osiągnięty',
+        message: 'Maksymalna liczba portfeli (5) została osiągnięta.',
+      });
+      return;
+    }
+    notify({
+      variant: 'info',
+      title: 'Tworzenie portfela',
+      message: 'Dodawanie nowych portfeli będzie dostępne wkrótce.',
+    });
+  };
+
+  const handleSelectCategory = (category: PortfolioCategory) => {
+    setSelectedCategory(category);
+    setSelectedAsset(category.items[0] || null);
+    setModalInitialTab('details');
+    setModalVisible(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalVisible(false);
+    setSelectedCategory(null);
+    setSelectedAsset(null);
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      {/* Stały tytuł headeru: Portfolio (punkt 4) */}
       <PanelHeader
-        title="Moje portfolio"
+        blurTarget={blurTargetRef}
+        title="Portfolio"
         left={
-          <Pressable disabled accessibilityLabel="Przełącz portfel" hitSlop={8}>
-            <Ionicons name="swap-horizontal" size={22} color={colors.accent} />
-          </Pressable>
+          hasMultiplePortfolios ? (
+            <Pressable
+              onPress={handleSwitchPortfolio}
+              accessibilityLabel="Zmień portfel"
+              hitSlop={8}
+              style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Reanimated.View style={rotationStyle}>
+                <Ionicons name="sync-outline" size={22} color={colors.accent} />
+              </Reanimated.View>
+            </Pressable>
+          ) : undefined
         }
         right={
-          <Pressable disabled accessibilityLabel="Dodaj aktywo" hitSlop={8}>
-            <Ionicons name="add" size={24} color={colors.textMuted} />
+          <Pressable
+            onPress={handleAddPortfolio}
+            disabled={isAddDisabled}
+            accessibilityLabel="Dodaj nowy portfel"
+            hitSlop={8}
+            style={({ pressed }) => [{ opacity: isAddDisabled ? 0.35 : pressed ? 0.7 : 1 }]}
+          >
+            <Ionicons
+              name="add"
+              size={24}
+              color={isAddDisabled ? colors.textMuted : colors.accent}
+            />
           </Pressable>
         }
       />
-      <ScrollView
-        style={{ backgroundColor: colors.background }}
-        contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom }]}
-        {...scrollNav}
-      >
-        <Text style={[styles.intro, { color: colors.textMuted }]}>Twoje decyzje, Twoje tempo nauki.</Text>
 
-        <GlassSurface tintColor={colors.accent} style={[styles.summary, { borderColor: colors.accent }]}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>WARTOŚĆ PORTFELA</Text>
-          <Text style={[styles.total, { color: colors.text }]}>10 000,00 zł</Text>
-          <View style={styles.returnRow}>
-            <Ionicons name="trending-up" size={18} color={colors.positive} />
-            <Text style={[styles.returnText, { color: colors.positive }]}>+0,00 zł (0,00%)</Text>
-          </View>
-        </GlassSurface>
+      <BlurTargetView ref={blurTargetRef} style={styles.blurTarget}>
+        <ScrollView
+          style={{ backgroundColor: colors.background }}
+          contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom, paddingTop: top + PANEL_HEADER_HEIGHT + 8 }]}
+          showsVerticalScrollIndicator={false}
+          {...scrollNav}
+        >
+          <Text style={[styles.intro, { color: colors.textMuted }]}>
+            Twoje decyzje, Twoje tempo nauki.
+          </Text>
 
-        <Section label="Twoje aktywa">
-          <View style={styles.empty}>
-            <Ionicons name="briefcase-outline" size={28} color={colors.textMuted} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>Portfolio jest puste</Text>
-            <Text style={[styles.emptyCopy, { color: colors.textMuted }]}>
-              Kup pierwsze aktywo na ekranie Rynki, aby zobaczyć tu swoją historię.
-            </Text>
-          </View>
-        </Section>
-      </ScrollView>
+          {/* Pojedyncza karta portfela 1:1 z dashboard */}
+          <SinglePortfolioCard portfolio={currentPortfolio} />
+
+          {/* Sekcja z kolorowymi kafelkami w siatce 2x2 (punkty 1, 3) */}
+          <Section label="Kategorie aktywów">
+            <View style={styles.categoriesGrid}>
+              {currentPortfolio.categories.map((category) => (
+                <AssetCategoryCard
+                  key={category.id}
+                  category={category}
+                  currencySymbol={currentPortfolio.currencySymbol}
+                  onPress={() => handleSelectCategory(category)}
+                />
+              ))}
+            </View>
+          </Section>
+        </ScrollView>
+      </BlurTargetView>
+
+      {/* Okno modalne szczegółów instrumentu i zakupu (punkty 6, 7, 8, 9, 10, 11, 12) */}
+      <InstrumentDetailModal
+        visible={modalVisible}
+        asset={selectedAsset}
+        category={selectedCategory}
+        portfolio={currentPortfolio}
+        initialTab={modalInitialTab}
+        onClose={handleCloseModal}
+      />
     </View>
   );
 }
 
 // Stylesheet dla komponentu PortfolioScreen (ekran "Portfolio")
 const styles = StyleSheet.create({
+  blurTarget: { flex: 1 },
   root: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 24 },
-  intro: { fontSize: 15, lineHeight: 22, marginBottom: 24 },
-  summary: { borderWidth: 1, borderRadius: 18, padding: 18 },
-  label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
-  total: { fontSize: 30, fontWeight: '700', marginTop: 8 },
-  returnRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
-  returnText: { fontWeight: '600' },
-  empty: { alignItems: 'center', paddingVertical: 44, paddingHorizontal: 24, gap: 8 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', marginTop: 4 },
-  emptyCopy: { fontSize: 13, textAlign: 'center', lineHeight: 19, marginTop: 7 },
+  content: { paddingHorizontal: 20, paddingTop: 16 },
+  intro: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  categoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
 });

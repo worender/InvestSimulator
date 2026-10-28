@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { usePathname, useRouter } from 'expo-router';
 import { Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -12,7 +12,16 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Reanimated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useInteractionLock } from '../../interactionLock';
 import { useNavigationVisibility } from '../../navigationVisibility';
 import { useTheme } from '../../theme';
 
@@ -26,6 +35,7 @@ export default function TabLayout() {
   const pathname = usePathname();
   const { width } = useWindowDimensions();
   const { setVisible } = useNavigationVisibility();
+  const { locked } = useInteractionLock();
 
   const currentTab = useMemo(() => {
     if (pathname === '/' || pathname === '/index') return 'index';
@@ -96,7 +106,9 @@ export default function TabLayout() {
   );
 
   return (
-    <View style={styles.tabLayoutRoot} {...panResponder.panHandlers}>
+    // Gdy otwarte jest okno modalne, nie podpinamy gestów przełączania zakładek,
+    // aby gesty wykonane na modalu nie były przechwytywane przez ekran pod spodem.
+    <View style={styles.tabLayoutRoot} {...(locked ? {} : panResponder.panHandlers)}>
       <Tabs
         backBehavior="history"
         tabBar={(props) => <FloatingTabBar {...props} />}
@@ -176,105 +188,168 @@ function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
   const { colors } = useTheme();
   const { bottom } = useSafeAreaInsets();
   const { visible } = useNavigationVisibility();
-  const [hideProgress] = useState(() => new Animated.Value(0));
-  const [selectionX] = useState(() => new Animated.Value(0));
   const [barWidth, setBarWidth] = useState(0);
+
+  // Animacje Reanimated: chowanie paska, pozycja bąbelka i skala podczas przeciągania.
+  const hideProgress = useSharedValue(visible ? 0 : 1);
+  const selectionX = useSharedValue(0);
+  const dragScale = useSharedValue(1);
+  const dragStartX = useSharedValue(0);
+
+  const itemWidth = barWidth > 0 ? (barWidth - 12) / state.routes.length : 0;
 
   // Animacja ukrywania i pokazywania paska zakładek w zależności od stanu widoczności
   useEffect(() => {
-    Animated.timing(hideProgress, {
-      toValue: visible ? 0 : 1,
-      duration: 220,
-      useNativeDriver: true,
-    }).start();
+    hideProgress.value = withTiming(visible ? 0 : 1, { duration: 220 });
   }, [hideProgress, visible]);
 
   // Animacja przesuwania wskaźnika zakładki w zależności od aktualnie wybranej zakładki
   useEffect(() => {
-    if (barWidth > 0 && state.routes.length > 0) {
-      const singleItemWidth = (barWidth - 12) / state.routes.length;
-      Animated.spring(selectionX, {
-        toValue: singleItemWidth * state.index,
-        useNativeDriver: true,
-        damping: 18,
+    if (itemWidth > 0) {
+      selectionX.value = withSpring(itemWidth * state.index, {
+        damping: 28,
         stiffness: 190,
-      }).start();
+        mass: 1,
+        overshootClamping: true,
+      });
     }
-  }, [barWidth, selectionX, state.index, state.routes.length]);
+  }, [itemWidth, selectionX, state.index]);
 
   const handleBarLayout = (event: LayoutChangeEvent) => {
     setBarWidth(event.nativeEvent.layout.width);
   };
 
-  const itemWidth = barWidth > 0 ? (barWidth - 12) / state.routes.length : 0;
+  const handleSelectIndex = useCallback(
+    (index: number) => {
+      const route = state.routes[index];
+      if (route) {
+        navigateToTab(route.key);
+      }
+    },
+    [navigateToTab, state.routes],
+  );
+
+  // Bąbelek można złapać i przeciągnąć; po puszczeniu trafiamy w najbliższą zakładkę.
+  const dragGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-6, 6])
+        .failOffsetY([-28, 28])
+        .onStart(() => {
+          'worklet';
+          // eslint-disable-next-line react-hooks/immutability
+          dragStartX.value = selectionX.value;
+          // eslint-disable-next-line react-hooks/immutability
+          dragScale.value = withSpring(1.03, { damping: 26, stiffness: 220, overshootClamping: true });
+        })
+        .onUpdate((event) => {
+          'worklet';
+          const max = itemWidth * (state.routes.length - 1);
+          // eslint-disable-next-line react-hooks/immutability
+          selectionX.value = Math.min(Math.max(dragStartX.value + event.translationX, 0), max);
+        })
+        .onEnd(() => {
+          'worklet';
+          // eslint-disable-next-line react-hooks/immutability
+          dragScale.value = withSpring(1, { damping: 26, stiffness: 220, overshootClamping: true });
+          if (!itemWidth) return;
+
+          const target = Math.min(
+            Math.max(Math.round(selectionX.value / itemWidth), 0),
+            state.routes.length - 1,
+          );
+
+          // eslint-disable-next-line react-hooks/immutability
+          selectionX.value = withSpring(target * itemWidth, { damping: 28, stiffness: 190, mass: 1, overshootClamping: true });
+
+          if (target !== state.index) {
+            runOnJS(handleSelectIndex)(target);
+          }
+        }),
+    [dragScale, dragStartX, handleSelectIndex, itemWidth, selectionX, state.index, state.routes.length],
+  );
+
+  const barAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: 1 - hideProgress.value,
+    transform: [
+      { translateY: hideProgress.value * 90 },
+      { scale: 1 - hideProgress.value * 0.18 },
+    ],
+  }));
+
+  const selectionAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: selectionX.value }, { scale: dragScale.value }],
+  }));
+
+  const hiddenBarAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: hideProgress.value,
+  }));
 
   return (
     <View style={[styles.wrapper, { bottom: Math.max(Math.ceil(bottom / 2), 4) }]}>
-      <Animated.View
-        onLayout={handleBarLayout}
-        style={[
-          styles.bar,
-          {
-            backgroundColor: colors.surfaceGlass,
-            borderColor: colors.borderGlass,
-            opacity: hideProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-            transform: [
-              { translateY: hideProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 90] }) },
-              { scale: hideProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.82] }) },
-            ],
-          },
-        ]}
-      >
-        {barWidth > 0 && (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.selection,
-              {
-                width: itemWidth,
-                borderColor: colors.accent,
-                backgroundColor: colors.accentGlass,
-                transform: [{ translateX: selectionX }],
-              },
-            ]}
-          />
-        )}
+      <GestureDetector gesture={dragGesture}>
+        <Reanimated.View
+          onLayout={handleBarLayout}
+          style={[
+            styles.bar,
+            {
+              backgroundColor: colors.surfaceGlass,
+              borderColor: colors.borderGlass,
+            },
+            barAnimatedStyle,
+          ]}
+        >
+          {barWidth > 0 && (
+            <Reanimated.View
+              pointerEvents="none"
+              style={[
+                styles.selection,
+                {
+                  width: itemWidth,
+                  borderColor: colors.accent,
+                  backgroundColor: colors.accentGlass,
+                },
+                selectionAnimatedStyle,
+              ]}
+            />
+          )}
 
-        {state.routes.map((route, index) => {
-          const focused = state.index === index;
-          const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
-            index: focused ? 'analytics' : 'analytics-outline',
-            market: focused ? 'trending-up' : 'trending-up-outline',
-            portfolio: focused ? 'briefcase' : 'briefcase-outline',
-            about: focused ? 'book' : 'book-outline',
-            settings: focused ? 'settings' : 'settings-outline',
-          };
+          {state.routes.map((route, index) => {
+            const focused = state.index === index;
+            const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
+              index: focused ? 'analytics' : 'analytics-outline',
+              market: focused ? 'trending-up' : 'trending-up-outline',
+              portfolio: focused ? 'briefcase' : 'briefcase-outline',
+              about: focused ? 'book' : 'book-outline',
+              settings: focused ? 'settings' : 'settings-outline',
+            };
 
-          return (
-            <Pressable
-              key={route.key}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: focused }}
-              onPress={() => navigateToTab(route.key)}
-              style={styles.item}
-            >
-              <Ionicons
-                name={icons[route.name] || 'ellipse-outline'}
-                size={22}
-                color={focused ? colors.accent : colors.textMuted}
-              />
-            </Pressable>
-          );
-        })}
-      </Animated.View>
+            return (
+              <Pressable
+                key={route.key}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: focused }}
+                onPress={() => navigateToTab(route.key)}
+                style={styles.item}
+              >
+                <Ionicons
+                  name={icons[route.name] || 'ellipse-outline'}
+                  size={22}
+                  color={focused ? colors.accent : colors.textMuted}
+                />
+              </Pressable>
+            );
+          })}
+        </Reanimated.View>
+      </GestureDetector>
 
-      <Animated.View
+      <Reanimated.View
         style={[
           styles.hiddenBar,
           {
             backgroundColor: colors.accent,
-            opacity: hideProgress,
           },
+          hiddenBarAnimatedStyle,
         ]}
       />
     </View>
@@ -328,6 +403,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: 22,
     zIndex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
   },
   hiddenBar: {
     width: 86,

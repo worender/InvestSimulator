@@ -30,6 +30,7 @@ import {
   StockFinancialData,
 } from '../api/marketService';
 import { currencySymbol } from '../currency';
+import { useLockScreenWhileActive } from '../interactionLock';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
 import { Section } from './Section';
@@ -152,6 +153,10 @@ const dataItemStyles = StyleSheet.create({
 // Komponent wyświetlający widok wykresu w formie modala
 export function ModalChartView({ instrument, financialData: propFinancialData, onClose }: ModalChartViewProps) {
   const theme = useTheme();
+
+  // Blokuje gesty ekranu pod spodem (np. swipe między zakładkami), dopóki modal jest otwarty.
+  useLockScreenWhileActive(true);
+
   const [financialData, setFinancialData] = useState<StockFinancialData | null>(
     propFinancialData ?? instrument.financialData ?? null,
   );

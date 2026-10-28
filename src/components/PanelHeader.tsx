@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import type { ReactNode } from 'react';
+import { BlurView } from 'expo-blur';
+import type { ComponentRef, ReactNode, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -32,19 +33,28 @@ type PanelHeaderProps = {
   right?: ReactNode;
   /** Pole wyszukiwania rozwijane w miejscu tytułu. */
   search?: HeaderSearch;
+  /**
+   * Ref do `BlurTargetView` z treścią ekranu. Wymagany, aby rozmycie działało
+   * również na Androidzie (RenderNode API).
+   */
+  blurTarget?: RefObject<ComponentRef<typeof View> | null>;
 };
 
 const SEARCH_ANIMATION_MS = 180;
 const SIDE_WIDTH = 84;
+
+/** Wysokość paska nagłówka bez safe-area (paddingTop + zawartość + paddingBottom). */
+export const PANEL_HEADER_HEIGHT = 50;
 
 /**
  * Nagłówek panelu z tytułem wyśrodkowanym względem ekranu.
  * Renderowany poza ScrollView, więc zawsze pozostaje przyklejony do góry.
  * Wyszukiwanie rozwija się w miejscu tytułu, a ikony skrótów znikają.
  */
-export function PanelHeader({ title, left, right, search }: PanelHeaderProps) {
-  const { colors } = useTheme();
+export function PanelHeader({ title, left, right, search, blurTarget }: PanelHeaderProps) {
+  const { colors, mode } = useTheme();
   const { top } = useSafeAreaInsets();
+  const isDark = mode === 'dark';
   const [width, setWidth] = useState(0);
   const [progress] = useState(() => new Animated.Value(0));
   const inputRef = useRef<TextInputInstance>(null);
@@ -128,11 +138,32 @@ export function PanelHeader({ title, left, right, search }: PanelHeaderProps) {
         styles.container,
         {
           paddingTop: top + 6,
-          backgroundColor: colors.background,
           borderBottomColor: colors.borderGlass,
         },
       ]}
     >
+      {/* Tło typu liquid glass: rozmycie pod headerem + delikatny tint */}
+      <BlurView
+        pointerEvents="none"
+        intensity={isDark ? 55 : 70}
+        tint={isDark ? 'dark' : 'light'}
+        blurMethod="dimezisBlurViewSdk31Plus"
+        blurTarget={blurTarget}
+        style={StyleSheet.absoluteFill}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: isDark ? 'rgba(13, 17, 23, 0.32)' : 'rgba(255, 255, 255, 0.42)' },
+        ]}
+      />
+      {/* Delikatna linia oddzielająca header od treści (nad rozmyciem) */}
+      <View
+        pointerEvents="none"
+        style={[styles.bottomLine, { backgroundColor: colors.borderGlass }]}
+      />
+
       <View style={styles.row}>
         <Animated.View style={[styles.side, { opacity: iconsOpacity }]}>{left}</Animated.View>
 
@@ -201,10 +232,21 @@ export function PanelHeader({ title, left, right, search }: PanelHeaderProps) {
 // Stylesheet dla komponentu PanelHeader
 const styles = StyleSheet.create({
   container: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 20,
     paddingBottom: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     zIndex: 20,
+    elevation: 20,
+  },
+  bottomLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: StyleSheet.hairlineWidth,
   },
   row: {
     flexDirection: 'row',
