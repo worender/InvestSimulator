@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Reanimated, {
   Easing,
   Extrapolation,
@@ -14,6 +14,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { LineChart } from 'react-native-wagmi-charts';
 import { Currency, useTheme } from '../theme';
+import { useContainerWidth } from '../useContainerWidth';
 import { GlassSurface } from './GlassSurface';
 
 const currencyOrder: Currency[] = ['PLN', 'EUR', 'USD'];
@@ -26,6 +27,8 @@ const cards: Record<Currency, Portfolio> = {
 };
 
 const SHUFFLE_MS = 380;
+// Myszką podwójne kliknięcie bywa wolniejsze niż stuknięcie palcem (Windows domyślnie uznaje do 500 ms)
+const DOUBLE_TAP_MS = Platform.OS === 'web' ? 500 : 320;
 
 // Funkcje animacji kart portfela w talii: wierzch, środek, spód
 function moveToFront(phase: SharedValue<number>) {
@@ -117,7 +120,7 @@ function PortfolioCard({ data, currency, index, isFront, width, multiCurrency, p
             </View>
             <Text style={[styles.swipeHint, { color: colors.textMuted }]}>
               {multiCurrency
-                ? `Dotknij karty dwa razy, aby zmienić portfel · ${currency}`
+                ? `${Platform.OS === 'web' ? 'Kliknij kartę dwukrotnie' : 'Dotknij karty dwa razy'}, aby zmienić portfel · ${currency}`
                 : `Domyślna waluta portfela · ${currency}`}
             </Text>
             <View style={styles.breakdown}>
@@ -143,7 +146,7 @@ function PortfolioCard({ data, currency, index, isFront, width, multiCurrency, p
                   ))}
                 </View>
                 <LineChart.Provider data={data.values}>
-                  <LineChart height={110} width={Math.max(width - 124, 1)}>
+                  <LineChart height={110} width={Math.max(width - 84, 1)}>
                     <LineChart.Path color={data.accent} width={2.5} />
                   </LineChart>
                 </LineChart.Provider>
@@ -158,7 +161,8 @@ function PortfolioCard({ data, currency, index, isFront, width, multiCurrency, p
 
 export function PortfolioOverviewCard({ onStockChange }: { onStockChange?: (stock: string, title: string, currency: Currency) => void }) {
   const { defaultCurrency, multiCurrency } = useTheme();
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const [width, onDeckLayout] = useContainerWidth(windowWidth - 40);
   // Kolejność talii: [wierzch, środek, spód]. Zmieniana dopiero po zakończeniu animacji
   const [deckOrder, setDeckOrder] = useState<Currency[]>(() => {
     const selected = currencyOrder.filter((item) => item !== defaultCurrency);
@@ -210,7 +214,7 @@ export function PortfolioOverviewCard({ onStockChange }: { onStockChange?: (stoc
   // Funkcja obsługująca naciśnięcie karty portfela: podwójne dotknięcie zmienia walutę
   const handleCardPress = () => {
     const now = Date.now();
-    if (now - lastTap.current < 320) {
+    if (now - lastTap.current < DOUBLE_TAP_MS) {
       lastTap.current = 0;
       changeCurrency();
     } else {
@@ -219,7 +223,7 @@ export function PortfolioOverviewCard({ onStockChange }: { onStockChange?: (stoc
   };
 
   return (
-    <View style={styles.deck}>
+    <View style={styles.deck} onLayout={onDeckLayout}>
       {(multiCurrency ? currencyOrder : [deckOrder[0]]).map((item) => (
         <PortfolioCard
           key={item}
@@ -243,7 +247,8 @@ const styles = StyleSheet.create({
   deck: { position: 'relative', marginBottom: 12 },
   frontSlot: { position: 'relative' },
   backSlot: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  card: { borderWidth: 1, borderRadius: 18, padding: 18, minHeight: 260, overflow: 'hidden' },
+  // userSelect: podwójne kliknięcie na webie nie zaznacza tekstu karty
+  card: { borderWidth: 1, borderRadius: 18, padding: 18, minHeight: 260, overflow: 'hidden', userSelect: 'none' },
   cardGlass: { borderRadius: 18 },
   header: { flexDirection: 'row', justifyContent: 'space-between' }, label: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 }, total: { fontSize: 28, fontWeight: '700', marginTop: 7 },
   stockRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 16 }, stockText: { fontSize: 12, fontWeight: '700' }, swipeHint: { fontSize: 10, marginTop: 6 },

@@ -21,9 +21,11 @@ import { ModalChartView } from '../../components/ModalChartView';
 import { PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { Skeleton } from '../../components/Skeleton';
+import { StockCandleChart } from '../../components/StockCandleChart';
 import { currencySymbol, resolveCurrency } from '../../currency';
 import { notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
+import { useLayoutMode } from '../../useLayoutMode';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
 interface FeaturedStock {
@@ -37,6 +39,8 @@ interface FeaturedStock {
   change?: number;
   changePercent?: number;
 }
+
+type MarketInstrument = { symbol: string; name: string; exchange: string; exchangeName?: string; currency?: string };
 
 // Domyślna lista spółek wyświetlanych w sekcji "Wybrane spółki GPW i światowe" na ekranie MarketScreen
 const DEFAULT_STOCKS: FeaturedStock[] = [
@@ -76,6 +80,9 @@ export default function MarketScreen() {
   const [completedQuery, setCompletedQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PL' | 'GLOBAL'>('ALL');
   const [stocksList, setStocksList] = useState<FeaturedStock[]>(DEFAULT_STOCKS);
+  const { isDesktop } = useLayoutMode();
+  // Instrument pokazywany w prawym panelu na desktopie
+  const [selectedStock, setSelectedStock] = useState<MarketInstrument & { currency: string }>(DEFAULT_STOCKS[0]);
 
   // Modal view state
   const [modalVisible, setModalVisible] = useState(false);
@@ -147,7 +154,7 @@ export default function MarketScreen() {
 
   // Funckja otwierająca modal z wykresem dla wybranego instrumentu, pobierająca dane finansowe w tle
   const openStockModal = useCallback(
-    async (item: { symbol: string; name: string; exchange: string; exchangeName?: string; currency?: string }) => {
+    async (item: MarketInstrument) => {
       const currency = item.currency || resolveCurrency(item);
 
       const instrumentData = {
@@ -188,6 +195,15 @@ export default function MarketScreen() {
     },
     [],
   );
+
+  // Na desktopie kliknięcie wybiera instrument do prawego panelu, na mobile otwiera modal
+  const pressInstrument = (item: MarketInstrument) => {
+    if (!isDesktop) {
+      openStockModal(item);
+      return;
+    }
+    setSelectedStock({ ...item, currency: item.currency || resolveCurrency(item) });
+  };
 
   // Funckja zamykająca modal z wykresem i resetująca stan modalu
   const closeModal = useCallback(() => {
@@ -258,7 +274,10 @@ export default function MarketScreen() {
           placeholder: 'Nazwa lub ticker, np. Apple',
         }}
       />
+      {/* Na desktopie lista i wykres to dwa panele obok siebie, każdy przewijany osobno (jak w xStation) */}
+      <View style={isDesktop ? styles.split : styles.root}>
       <ScrollView
+        style={isDesktop ? [styles.listPanel, { borderRightColor: colors.border }] : undefined}
         contentContainerStyle={[styles.content, { paddingTop: 24, paddingBottom: 38 + bottom }]}
         showsVerticalScrollIndicator={Platform.OS === 'web'}
         keyboardShouldPersistTaps="handled"
@@ -347,7 +366,7 @@ export default function MarketScreen() {
                       },
                     ]}
                     onPress={() =>
-                      openStockModal({
+                      pressInstrument({
                         symbol: item.symbol,
                         name: item.name,
                         exchange: item.exchange,
@@ -383,12 +402,14 @@ export default function MarketScreen() {
                     key={stock.symbol}
                     style={[
                       styles.stockRow,
+                      isDesktop && styles.stockRowDesktop,
                       index < filteredStocks.length - 1 && {
                         borderBottomWidth: StyleSheet.hairlineWidth,
                         borderBottomColor: colors.borderGlass,
                       },
+                      isDesktop && stock.symbol === selectedStock.symbol && { backgroundColor: colors.accentGlass },
                     ]}
-                    onPress={() => openStockModal(stock)}
+                    onPress={() => pressInstrument(stock)}
                     activeOpacity={0.6}
                   >
                     <View style={styles.stockMeta}>
@@ -437,6 +458,26 @@ export default function MarketScreen() {
           )}
         </Section>
       </ScrollView>
+
+      {isDesktop && (
+        <ScrollView style={styles.detailPanel} contentContainerStyle={styles.detailContent} showsVerticalScrollIndicator>
+          <StockCandleChart
+            stock={selectedStock.symbol}
+            title={selectedStock.name.toUpperCase()}
+            currency={selectedStock.currency}
+            exchange={selectedStock.exchange}
+          />
+          <Pressable
+            onPress={() => openStockModal(selectedStock)}
+            style={[styles.detailsButton, { borderColor: colors.border }]}
+            accessibilityRole="button"
+          >
+            <Ionicons name="stats-chart-outline" size={16} color={colors.accent} />
+            <Text style={[styles.detailsButtonText, { color: colors.text }]}>Szczegóły finansowe</Text>
+          </Pressable>
+        </ScrollView>
+      )}
+      </View>
 
       {modalVisible && modalInstrument && (
         <ModalChartView
@@ -490,6 +531,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 14,
+  },
+  stockRowDesktop: {
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  split: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  listPanel: {
+    width: 420,
+    flexGrow: 0,
+    borderRightWidth: 1,
+  },
+  detailPanel: {
+    flex: 1,
+  },
+  detailContent: {
+    width: '100%',
+    maxWidth: 1000,
+    alignSelf: 'center',
+    paddingHorizontal: 32,
+    paddingTop: 24,
+    paddingBottom: 38,
+  },
+  detailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    marginTop: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  detailsButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   stockMeta: {
     flex: 1,

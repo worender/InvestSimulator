@@ -14,6 +14,7 @@ import { TrendCards } from '../../components/TrendCards';
 import { resolveCurrency } from '../../currency';
 import { notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
+import { useLayoutMode } from '../../useLayoutMode';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
 // Przykładowe spółki w portfelu, które są wyświetlane na ekranie głównym aplikacji
@@ -28,6 +29,7 @@ export default function Index() {
   const { bottom } = useSafeAreaInsets();
   const router = useRouter();
   const scrollNav = useScrollAwareNavigation();
+  const { isDesktop } = useLayoutMode();
   const [portfolioStock, setPortfolioStock] = useState(() => portfolioStocks[defaultCurrency]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -159,7 +161,7 @@ export default function Index() {
       <View style={styles.body}>
         <ScrollView
           style={{ backgroundColor: colors.background }}
-          contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom }]}
+          contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop, { paddingBottom: 38 + bottom }]}
           keyboardShouldPersistTaps="always"
           {...scrollNav}
         >
@@ -170,13 +172,20 @@ export default function Index() {
             <PortfolioOverviewCard key={`${defaultCurrency}-${multiCurrency}`} onStockChange={handleStockChange} />
           </Section>
 
-          <Section>
-            <StockCandleChart stock={chartStock.stock} title={chartStock.title} currency={chartStock.symbol} exchange={chartStock.exchange} />
-          </Section>
+          {/* Na desktopie wykres i trendy stoją obok siebie, na mobile jedno pod drugim */}
+          <View style={isDesktop && styles.columns}>
+            <View style={isDesktop && styles.mainColumn}>
+              <Section>
+                <StockCandleChart stock={chartStock.stock} title={chartStock.title} currency={chartStock.symbol} exchange={chartStock.exchange} />
+              </Section>
+            </View>
 
-          <Section>
-            <TrendCards />
-          </Section>
+            <View style={isDesktop && styles.sideColumn}>
+              <Section>
+                <TrendCards />
+              </Section>
+            </View>
+          </View>
         </ScrollView>
 
         {searchOpen && searchReady && (
@@ -242,6 +251,10 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
+  contentDesktop: { width: '100%', maxWidth: 1280, alignSelf: 'center', paddingHorizontal: 32 },
+  columns: { flexDirection: 'row', alignItems: 'flex-start', gap: 32 },
+  mainColumn: { flex: 3, minWidth: 0 },
+  sideColumn: { flex: 2, minWidth: 0 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },
   title: { fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
   resultsOverlay: {

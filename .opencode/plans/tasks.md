@@ -13,8 +13,8 @@ Zasady:
 - [x] 2. Hook `useLayoutMode()` (mobile / tablet / desktop na podstawie `useWindowDimensions` + `Platform.OS === 'web'`) — jedno źródło prawdy dla breakpointów.
 - [x] 3. Sidebar desktopowy (≥ 1024px) zamiast dolnego paska: logo, saldo konta, nawigacja z ikonami, aktywna pozycja jak w xStation; wyłączenie swipe'a zakładek i chowania paska przy scrollu na webie.
 - [x] 4. Interakcje webowe we wspólnych komponentach: hover, `cursor: pointer`, focus ring, cienki scrollbar w ciemnym/jasnym motywie.
-- [ ] 5. Ekran Start (desktop): karta portfela na górze, pod nią siatka 2 kolumn (wykres | trendy) z ograniczoną maks. szerokością treści.
-- [ ] 6. Ekran Rynek (desktop): układ panelowy — lista instrumentów (tabela: symbol, zmiana %, cena) | wykres wybranego instrumentu zamiast modala; każdy panel scrolluje się osobno.
+- [x] 5. Ekran Start (desktop): karta portfela na górze, pod nią siatka 2 kolumn (wykres | trendy) z ograniczoną maks. szerokością treści.
+- [x] 6. Ekran Rynek (desktop): układ panelowy — lista instrumentów (tabela: symbol, zmiana %, cena) | wykres wybranego instrumentu zamiast modala; każdy panel scrolluje się osobno.
 - [ ] 7. Szczegóły instrumentu (desktop): dane z `ModalChartView` pokazane w panelu/siatce obok wykresu zamiast pełnoekranowego modala; modal zostaje na mobile.
 - [ ] 8. Ekran Portfolio (desktop): tabela pozycji z kolumnami zamiast listy kart; pusty stan jak w xStation.
 - [ ] 9. Ekrany Nauka i Ustawienia (desktop): wyśrodkowana kolumna z maks. szerokością, ustawienia w 2 kolumnach sekcji.

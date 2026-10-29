@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
+import { ToggleSwitch } from '../../components/ToggleSwitch';
 import { Currency, ThemeAccent, useTheme } from '../../theme';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
@@ -72,22 +73,7 @@ export default function SettingsScreen() {
               <Text style={[styles.title, { color: colors.text }]}>Tryb {isDark ? 'ciemny' : 'jasny'}</Text>
               <Text style={[styles.subtitle, { color: colors.textMuted }]}>Motyw dopasowany do pory dnia</Text>
             </View>
-            <Pressable
-              accessibilityRole="switch"
-              accessibilityState={{ checked: isDark }}
-              onPress={toggleMode}
-              style={[styles.switch, { backgroundColor: isDark ? colors.accent : colors.surfaceMuted }]}
-            >
-              <View
-                style={[
-                  styles.thumb,
-                  {
-                    backgroundColor: isDark ? '#ffffff' : colors.textMuted,
-                    transform: [{ translateX: isDark ? 18 : 2 }],
-                  },
-                ]}
-              />
-            </Pressable>
+            <ToggleSwitch value={isDark} onValueChange={toggleMode} accessibilityLabel="Tryb ciemny" />
           </View>
         </Section>
 
@@ -150,22 +136,7 @@ export default function SettingsScreen() {
               <Text style={[styles.title, { color: colors.text }]}>Wiele walut</Text>
               <Text style={[styles.subtitle, { color: colors.textMuted }]}>Włącz zmianę kart między PLN, EUR i USD</Text>
             </View>
-            <Pressable
-              accessibilityRole="switch"
-              accessibilityState={{ checked: multiCurrency }}
-              onPress={() => setMultiCurrency(!multiCurrency)}
-              style={[styles.switch, { backgroundColor: multiCurrency ? colors.accent : colors.surfaceMuted }]}
-            >
-              <View
-                style={[
-                  styles.thumb,
-                  {
-                    backgroundColor: multiCurrency ? '#ffffff' : colors.textMuted,
-                    transform: [{ translateX: multiCurrency ? 18 : 2 }],
-                  },
-                ]}
-              />
-            </Pressable>
+            <ToggleSwitch value={multiCurrency} onValueChange={setMultiCurrency} accessibilityLabel="Wiele walut" />
           </View>
         </Section>
 
@@ -196,8 +167,6 @@ const styles = StyleSheet.create({
   copy: { flex: 1 },
   title: { fontSize: 15, fontWeight: '700' },
   subtitle: { fontSize: 12, marginTop: 4 },
-  switch: { width: 40, height: 24, borderRadius: 12, justifyContent: 'center' },
-  thumb: { width: 20, height: 20, borderRadius: 10 },
   accentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 18, paddingVertical: 4 },
   accentOption: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
   accentDot: { width: 12, height: 12, borderRadius: 6 },

@@ -72,7 +72,7 @@ export function initializeDatabase(): Promise<void> {
       dark_mode BOOLEAN NOT NULL DEFAULT 1,
       color_mode TEXT NOT NULL DEFAULT 'blue',
       currency_default TEXT NOT NULL DEFAULT 'PLN',
-      "multi_currency" BOOLEAN NOT NULL DEFAULT 0
+      "multi_currency" BOOLEAN NOT NULL DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS transactions (

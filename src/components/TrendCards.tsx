@@ -5,6 +5,7 @@ import { LineChart } from 'react-native-wagmi-charts';
 import { CandleData, DynamicTrendAsset, canRetryFetch, getDynamicTrends, getStockCandles, lastFetchErrorMap } from '../api/marketService';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
+import { useContainerWidth } from '../useContainerWidth';
 import { Skeleton } from './Skeleton';
 
 type Category = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap };
@@ -18,7 +19,8 @@ const categories: Category[] = [
 // Komponent wyświetlający karty trendów dla różnych kategorii aktywów giełdowych
 export function TrendCards() {
   const { colors } = useTheme();
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const [width, onLayout] = useContainerWidth(windowWidth - 40);
   const [category, setCategory] = useState('gainers');
   const [assets, setAssets] = useState<DynamicTrendAsset[]>([]);
   const [data, setData] = useState<Record<string, CandleData[]>>({});
@@ -82,7 +84,7 @@ export function TrendCards() {
     return () => { active = false; };
   }, [category]);
 
-  return <View>
+  return <View onLayout={onLayout}>
     <View style={styles.sectionHeader}>
       <View style={styles.sectionContent}>
         <Text style={[styles.title, { color: colors.text }]}>Warte uwagi</Text>
@@ -121,7 +123,7 @@ export function TrendCards() {
             asset={asset}
             candles={data[asset.symbol] ?? []}
             colors={colors}
-            width={Math.max(width - 40, 1)}
+            width={Math.max(width, 1)}
             showSeparator={index < Math.min(assets.length, 3) - 1}
           />
         ))}

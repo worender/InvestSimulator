@@ -1,10 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Line, Rect } from 'react-native-svg';
 import { CandlestickChart } from 'react-native-wagmi-charts';
 import { CandleData, getStockCandles } from '../api/marketService';
 import { currencySymbol } from '../currency';
 import { useTheme } from '../theme';
+import { useContainerWidth } from '../useContainerWidth';
 import { Skeleton } from './Skeleton';
 
 
@@ -23,6 +25,12 @@ const DEFAULT_RANGE_INDEX = 1;
 const DEFAULT_INTERVAL: CandleInterval = '1h';
 const intraday = (value: CandleInterval) => ['1m', '5m', '15m', '1h'].includes(value);
 
+// wagmi przekazuje do elementów SVG swoje pomocnicze propsy (useAnimations, candle), które na webie trafiają do DOM
+// i wywołują błąd Reacta. Animacji świec i tak nie używamy, więc rysujemy zwykłe Line/Rect bez tych propsów.
+type CandlesProps = React.ComponentProps<typeof CandlestickChart.Candles>;
+const renderCandleLine: NonNullable<CandlesProps['renderLine']> = ({ useAnimations, candle, ...props }) => <Line {...props} />;
+const renderCandleRect: NonNullable<CandlesProps['renderRect']> = ({ useAnimations, candle, ...props }) => <Rect {...props} />;
+
 type StockCandleChartProps = {
   stock?: string;
   title?: string;
@@ -40,6 +48,9 @@ export function StockCandleChart({
   variant = 'card',
 }: StockCandleChartProps) {
   const { colors } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  // Domyślnie wagmi bierze szerokość okna, przez co ostatnie świece były ucinane przez kontener
+  const [chartWidth, onChartLayout] = useContainerWidth(windowWidth - 40);
   const [candles, setCandles] = useState<CandleData[]>([]);
   const [rangeIndex, setRangeIndex] = useState(DEFAULT_RANGE_INDEX);
   const [interval, setInterval] = useState<CandleInterval>(DEFAULT_INTERVAL);
@@ -110,7 +121,7 @@ export function StockCandleChart({
             disabled={intradayDisabled && intraday(item.value)} onPress={() => setInterval(item.value)} colors={colors} />
         ))}
       </ScrollView>
-      <View style={styles.chart}>
+      <View style={styles.chart} onLayout={onChartLayout}>
         {loading ? <View style={styles.skeletonChart}>
           <View style={styles.skeletonHeader}><Skeleton width="42%" height={16} /><Skeleton width={72} height={16} /></View>
           <Skeleton width="100%" height={1} radius={0} style={styles.skeletonLine} />
@@ -121,7 +132,7 @@ export function StockCandleChart({
         </View>
           : candles.length === 0 ? <View style={styles.placeholder}><Ionicons name="calendar-outline" size={40} color={colors.textMuted} /><Text style={[styles.muted, { color: colors.textMuted }]}>Brak notowań dla tego zakresu.</Text></View>
             : <CandlestickChart.Provider data={candles}>
-              <CandlestickChart height={280}><CandlestickChart.Candles useAnimations={false} /><CandlestickChart.Crosshair minDurationMs={320}><CandlestickChart.Tooltip /></CandlestickChart.Crosshair></CandlestickChart>
+              <CandlestickChart height={280} width={chartWidth}><CandlestickChart.Candles useAnimations={false} renderLine={renderCandleLine} renderRect={renderCandleRect} /><CandlestickChart.Crosshair minDurationMs={320}><CandlestickChart.Tooltip /></CandlestickChart.Crosshair></CandlestickChart>
               <View style={styles.crosshair}><CandlestickChart.DatetimeText locale="pl-PL" style={{ color: colors.textMuted, fontSize: 11 }} /></View>
             </CandlestickChart.Provider>}
             
