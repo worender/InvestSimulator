@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -534,7 +535,7 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
             <ScrollView
               style={styles.content}
               contentContainerStyle={styles.contentContainer}
-              showsVerticalScrollIndicator={false}
+              showsVerticalScrollIndicator={Platform.OS === 'web'}
             >
               <View style={styles.chartContainer}>
                 <StockCandleChart

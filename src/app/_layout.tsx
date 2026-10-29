@@ -1,9 +1,11 @@
+import '../webIsolation';
 import { Stack } from "expo-router";
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationVisibilityProvider } from '../navigationVisibility';
 import { NotificationProvider } from '../notifications';
 import { ThemeProvider, useTheme } from '../theme';
+import { WebGlobalStyles } from '../WebGlobalStyles';
 
 
 
@@ -18,6 +20,7 @@ function AppStack() {
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+      <WebGlobalStyles />
       <Stack screenOptions={{ gestureEnabled: true, fullScreenGestureEnabled: true }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>

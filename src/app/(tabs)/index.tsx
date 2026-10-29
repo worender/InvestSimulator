@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getStockData, InstrumentSearchResult, searchInstruments, StockFinancialData } from '../../api/marketService';
 import { ModalChartView } from '../../components/ModalChartView';
@@ -199,7 +199,7 @@ export default function Index() {
                 </Text>
               </View>
             ) : (
-              <ScrollView keyboardShouldPersistTaps="always" showsVerticalScrollIndicator={false}>
+              <ScrollView keyboardShouldPersistTaps="always" showsVerticalScrollIndicator={Platform.OS === 'web'}>
                 {searchResults.map((result, index) => (
                   <Pressable
                     key={`${result.symbol}-${result.exchange}`}

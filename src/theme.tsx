@@ -11,6 +11,8 @@ export type ThemeMode = 'dark' | 'light';
 export type ThemeAccent = 'Niebieski' | 'Fioletowy' | 'Zielony' | 'Pomarańczowy';
 export type Currency = 'PLN' | 'EUR' | 'USD';
 
+const THEME_ACCENTS: ThemeAccent[] = ['Niebieski', 'Fioletowy', 'Zielony', 'Pomarańczowy'];
+
 const darkColors = {
   background: '#0d1117',
   surface: '#161b22',
@@ -142,7 +144,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         }
 
         setMode(profile.dark_mode === 1 ? 'dark' : 'light');
-        setAccent(profile.color_mode as ThemeAccent);
+        // Domyślna wartość w bazie to 'blue', która nie jest nazwą akcentu — zostawiamy wtedy 'Niebieski'.
+        if (THEME_ACCENTS.includes(profile.color_mode as ThemeAccent)) {
+          setAccent(profile.color_mode as ThemeAccent);
+        }
         setDefaultCurrency(profile.currency_default as Currency);
         setMultiCurrency(profile.multi_currency === 1);
       } catch (error) {

@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -259,7 +260,7 @@ export default function MarketScreen() {
       />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: 24, paddingBottom: 38 + bottom }]}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
         keyboardShouldPersistTaps="handled"
         {...scrollNav}
       >

@@ -6,13 +6,14 @@ if (!config.resolver.assetExts.includes('wasm')) {
   config.resolver.assetExts.push('wasm');
 }
 
-// config.server.enhanceMiddleware = (middleware) => {
-//   return (req, res, next) => {
-//     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-//     res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+// expo-sqlite na webie potrzebuje SharedArrayBuffer, a ten wymaga izolacji cross-origin.
+config.server.enhanceMiddleware = (middleware) => {
+  return (req, res, next) => {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
 
-//     return middleware(req, res, next);
-//   };
-// };
+    return middleware(req, res, next);
+  };
+};
 
 module.exports = config;
