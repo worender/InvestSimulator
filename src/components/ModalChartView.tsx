@@ -24,17 +24,9 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import {
-  buildFallbackFinancialData,
-  enrichFinancialData,
-  getStockData,
-  StockFinancialData,
-} from '../api/marketService';
-import { currencySymbol } from '../currency';
-import { notify } from '../notificationBus';
+import type { StockFinancialData } from '../api/marketService';
 import { useTheme } from '../theme';
-import { Section } from './Section';
-import { Skeleton } from './Skeleton';
+import { InstrumentDetails, useInstrumentFinancialData } from './InstrumentDetails';
 import { StockCandleChart } from './StockCandleChart';
 
 interface ModalChartViewProps {
@@ -50,114 +42,10 @@ interface ModalChartViewProps {
   onClose: () => void;
 }
 
-// Funkcja formatująca wartość pieniężną zgodnie z ustawieniami regionalnymi i symbolem waluty
-export const formatCurrency = (value?: number, currencyCode?: string): string => {
-  if (value === undefined || currencyCode === undefined) return '-';
-  const symbol = currencySymbol(currencyCode);
-  return `${value.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
-};
-
-// Funkcja formatująca wartość procentową z dwoma miejscami po przecinku
-export const formatPercent = (value?: number): string => {
-  if (value === undefined) return '-';
-  return `${value.toFixed(2)}%`;
-};
-
-// Funkcja formatująca wartość liczbową z dwoma miejscami po przecinku
-export const formatDate = (dateString?: string): string => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleDateString('pl-PL', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-};
-
-// Funkcja formatująca wartość liczbową z dwoma miejscami po przecinku
-export const formatNumber = (value?: number): string => {
-  if (value === undefined || value === null) return '-';
-  return value.toLocaleString('pl-PL');
-};
-
-// Funkcja formatująca wartość stosunku z dwoma miejscami po przecinku
-export const formatRatio = (value?: number): string => {
-  if (value === undefined || value === null || Number.isNaN(value)) return '-';
-  return value.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
-interface DataItemProps {
-  label: string;
-  value: string;
-  subValue?: string;
-  divider?: boolean;
-}
-
-// Komponent wyświetlający pojedynczy wiersz danych finansowych z etykietą, wartością i opcjonalną wartością podrzędną oraz linią podziału
-function DataItem({ label, value, subValue, divider = true }: DataItemProps) {
-  const theme = useTheme();
-  return (
-    <View
-      style={[
-        dataItemStyles.dataRow,
-        divider && {
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: theme.colors.borderGlass,
-        },
-      ]}
-    >
-      <Text style={[dataItemStyles.dataLabel, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm }]}>
-        {label}
-      </Text>
-      <View style={dataItemStyles.dataValueContainer}>
-        <Text style={[dataItemStyles.dataValue, { color: theme.colors.text, fontSize: theme.fontSize.sm }]}>
-          {value}
-        </Text>
-        {subValue && (
-          <Text
-            style={[
-              dataItemStyles.dataSubValue,
-              { color: theme.colors.textMuted, fontSize: theme.fontSize.xs, marginLeft: theme.spacing.xs },
-            ]}
-          >
-            {subValue}
-          </Text>
-        )}
-      </View>
-    </View>
-  );
-}
-
-// Stylesheet dla komponentu DataItem (pojedynczy wiersz danych finansowych)
-const dataItemStyles = StyleSheet.create({
-  dataRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-  },
-  dataLabel: {
-    flex: 1,
-  },
-  dataValueContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  dataValue: {
-    fontWeight: '500',
-  },
-  dataSubValue: {},
-});
-
 // Komponent wyświetlający widok wykresu w formie modala
 export function ModalChartView({ instrument, financialData: propFinancialData, onClose }: ModalChartViewProps) {
   const theme = useTheme();
-  const [financialData, setFinancialData] = useState<StockFinancialData | null>(
-    propFinancialData ?? instrument.financialData ?? null,
-  );
-  const [loading, setLoading] = useState<boolean>(!propFinancialData && !instrument.financialData);
-  const [selectedReturnPeriod, setSelectedReturnPeriod] = useState<'1Y' | '3Y' | '5Y'>('1Y');
+  const { financialData, loading } = useInstrumentFinancialData(instrument, propFinancialData);
 
   const [isFavorite, setIsFavorite] = useState(false);
   const [favScale] = useState(() => new Animated.Value(1));
@@ -274,64 +162,6 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
     setIsFavorite((prev) => !prev);
   };
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadData = async () => {
-      let current: StockFinancialData | null | undefined = propFinancialData ?? instrument.financialData;
-      if (!current) {
-        setLoading(true);
-        current = await getStockData(instrument.stock, instrument.exchange);
-        if (isMounted && current) {
-          setFinancialData(current);
-        }
-      }
-      if (current) {
-        const enriched = await enrichFinancialData(current, instrument.stock, instrument.exchange);
-        if (isMounted) {
-          setFinancialData(enriched);
-        }
-      } else {
-        const fallback = await buildFallbackFinancialData(
-          instrument.stock,
-          instrument.exchange,
-          instrument.currency,
-        );
-        if (isMounted && fallback) {
-          setFinancialData(fallback);
-        } else if (isMounted) {
-          notify({
-            variant: 'error',
-            title: 'Brak danych finansowych',
-            message: `Nie udało się pobrać danych dla ${instrument.stock}. Wykres pozostaje dostępny.`,
-          });
-        }
-      }
-
-      if (isMounted) {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [instrument.stock, instrument.exchange, instrument.currency, propFinancialData, instrument.financialData]);
-
-  const periodReturn = useMemo(() => {
-    if (!financialData) return undefined;
-    switch (selectedReturnPeriod) {
-      case '1Y':
-        return financialData.performance1Y;
-      case '3Y':
-        return financialData.performance3Y;
-      case '5Y':
-        return financialData.performance5Y;
-    }
-  }, [financialData, selectedReturnPeriod]);
-
   // Stylesheet dla komponentu ModalChartView (widok wykresu w formie modala)
   const styles = useMemo(() => ({
     gestureRoot: {
@@ -413,45 +243,6 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
     },
     chartContainer: {
       paddingTop: theme.spacing.sm,
-    },
-    periodButtons: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      gap: 16,
-    },
-    periodButtonText: {
-      fontSize: 12,
-      fontWeight: '700' as const,
-      paddingBottom: 6,
-      borderBottomWidth: 2,
-    },
-    periodBanner: {
-      flexDirection: 'row' as const,
-      justifyContent: 'space-between' as const,
-      alignItems: 'center' as const,
-      paddingTop: theme.spacing.md,
-      marginTop: theme.spacing.sm,
-      borderTopWidth: StyleSheet.hairlineWidth,
-    },
-    periodBannerLabel: {
-      fontSize: theme.fontSize.xs,
-      color: theme.colors.textMuted,
-    },
-    periodBannerValue: {
-      fontSize: theme.fontSize.sm,
-      fontWeight: '700' as const,
-    },
-    skeletonRow: {
-      flexDirection: 'row' as const,
-      justifyContent: 'space-between' as const,
-      alignItems: 'center' as const,
-      paddingVertical: 14,
-    },
-    footerNote: {
-      marginTop: theme.spacing.lg,
-      fontSize: theme.fontSize.xs,
-      color: theme.colors.textMuted,
-      textAlign: 'center' as const,
     },
   }), [theme]);
 
@@ -547,133 +338,7 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
                 />
               </View>
 
-              <Section label="Zwrot">
-                <View style={styles.periodButtons}>
-                  {(['1Y', '3Y', '5Y'] as const).map((period) => {
-                    const active = selectedReturnPeriod === period;
-                    return (
-                      <Pressable
-                        key={period}
-                        onPress={() => setSelectedReturnPeriod(period)}
-                        accessibilityRole="button"
-                      >
-                        <Text
-                          style={[
-                            styles.periodButtonText,
-                            {
-                              color: active ? theme.colors.accent : theme.colors.textMuted,
-                              borderBottomColor: active ? theme.colors.accent : 'transparent',
-                            },
-                          ]}
-                        >
-                          {period}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                {periodReturn !== undefined && (
-                  <View style={[styles.periodBanner, { borderTopColor: theme.colors.borderGlass }]}>
-                    <Text style={styles.periodBannerLabel}>Szacowany zwrot ({selectedReturnPeriod})</Text>
-                    <Text
-                      style={[
-                        styles.periodBannerValue,
-                        { color: periodReturn >= 0 ? theme.colors.positive : theme.colors.negative },
-                      ]}
-                    >
-                      {periodReturn >= 0 ? '+' : ''}{formatPercent(periodReturn)}
-                    </Text>
-                  </View>
-                )}
-              </Section>
-
-              {loading && !financialData && (
-                <Section label="Dane finansowe">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <View key={i} style={styles.skeletonRow}>
-                      <Skeleton width="45%" height={16} />
-                      <Skeleton width="30%" height={16} />
-                    </View>
-                  ))}
-                </Section>
-              )}
-
-              {financialData && (
-                <>
-                  <Section label="Dane rynkowe">
-                    <DataItem label="Cena" value={formatCurrency(financialData.price, financialData.currency)} />
-                    <DataItem
-                      label="Zmiana"
-                      value={
-                        financialData.change >= 0
-                          ? `+${formatCurrency(financialData.change, financialData.currency)}`
-                          : formatCurrency(financialData.change, financialData.currency)
-                      }
-                    />
-                    <DataItem
-                      label="Zmiana %"
-                      value={
-                        financialData.changePercent >= 0
-                          ? `+${formatPercent(financialData.changePercent)}`
-                          : formatPercent(financialData.changePercent)
-                      }
-                    />
-                    <DataItem label="Wolumen" value={formatNumber(financialData.volume)} />
-                    <DataItem label="Wolumen średni 10d" value={formatNumber(financialData.averageVolume)} divider={false} />
-                  </Section>
-
-                  <Section label="Wskaźniki wyceny">
-                    <DataItem label="P/E (trailing)" value={financialData.trailingPE ? formatRatio(financialData.trailingPE) : '-'} />
-                    <DataItem label="P/E (forward)" value={financialData.forwardPE ? formatRatio(financialData.forwardPE) : '-'} />
-                    <DataItem label="P/B" value={financialData.priceToBook ? formatRatio(financialData.priceToBook) : '-'} />
-                    <DataItem label="P/S" value={financialData.priceToSales ? formatRatio(financialData.priceToSales) : '-'} />
-                    <DataItem label="EV/EBITDA" value={financialData.enterpriseValueToEbitda ? formatRatio(financialData.enterpriseValueToEbitda) : '-'} />
-                    <DataItem label="P/FCF" value={financialData.priceToFreeCashFlow ? formatRatio(financialData.priceToFreeCashFlow) : '-'} />
-                    <DataItem label="Marża zysku" value={financialData.profitMargins ? formatPercent(financialData.profitMargins) : '-'} divider={false} />
-                  </Section>
-
-                  <Section label="Dywidendy">
-                    <DataItem label="Stopa dywidendy" value={formatPercent(financialData.dividendYield)} />
-                    <DataItem label="Kwota dywidendy" value={formatCurrency(financialData.dividendRate, financialData.currency)} />
-                    <DataItem label="Data ex-dividenda" value={formatDate(financialData.exDividendDate)} />
-                    <DataItem label="Payout ratio" value={formatPercent(financialData.payoutRatio)} />
-                    <DataItem label="Średnia 5-letnia dywidenda" value={formatPercent(financialData.fiveYearAvgDividendYield)} divider={false} />
-                  </Section>
-
-                  <Section label="Wycena i akcje">
-                    <DataItem label="Kapitalizacja rynkowa" value={formatCurrency(financialData.marketCap, financialData.currency)} />
-                    <DataItem label="Liczba akcji" value={formatNumber(financialData.sharesOutstanding)} />
-                    <DataItem label="Wartość księgowa" value={formatCurrency(financialData.bookValue, financialData.currency)} />
-                    <DataItem label="Akcje w obiegu" value={formatNumber(financialData.floatShares)} />
-                    <DataItem label="Beta" value={financialData.beta ? formatRatio(financialData.beta) : '-'} divider={false} />
-                  </Section>
-
-                  <Section label="Wyniki historyczne">
-                    <DataItem label="1 rok" value={financialData.performance1Y !== undefined ? formatPercent(financialData.performance1Y) : '-'} />
-                    <DataItem label="3 lata" value={financialData.performance3Y !== undefined ? formatPercent(financialData.performance3Y) : '-'} />
-                    <DataItem label="5 lat" value={financialData.performance5Y !== undefined ? formatPercent(financialData.performance5Y) : '-'} />
-                    <DataItem label="Rok bieżący (YTD)" value={financialData.performanceYTD !== undefined ? formatPercent(financialData.performanceYTD) : '-'} />
-                    <DataItem label="Średni zwrot 1 rok" value={financialData.oneYearAvgReturn ? formatPercent(financialData.oneYearAvgReturn) : '-'} />
-                    <DataItem label="Średni zwrot 3 lata" value={financialData.threeYearAvgReturn ? formatPercent(financialData.threeYearAvgReturn) : '-'} />
-                    <DataItem label="Średni zwrot 5 lat" value={financialData.fiveYearAvgReturn ? formatPercent(financialData.fiveYearAvgReturn) : '-'} divider={false} />
-                  </Section>
-
-                  <Section label="Dane dodatkowe">
-                    <DataItem label="Wartość przedsiębiorstwa" value={formatCurrency(financialData.enterpriseValue, financialData.currency)} />
-                    <DataItem label="EV/Przychody" value={financialData.enterpriseValueToRevenue ? formatRatio(financialData.enterpriseValueToRevenue) : '-'} />
-                    <DataItem label="Akcje krótkoterminowe" value={formatNumber(financialData.sharesShort)} />
-                    <DataItem label="Stosunek krótkich akcji" value={financialData.shortRatio ? formatRatio(financialData.shortRatio) : '-'} />
-                    <DataItem label="% krótkich akcji" value={financialData.shortPercentOfFloat ? formatPercent(financialData.shortPercentOfFloat) : '-'} divider={!financialData.lastSplitFactor} />
-                    {financialData.lastSplitFactor && (
-                      <DataItem label="Ostatni split" value={`${financialData.lastSplitFactor}x`} subValue={formatDate(financialData.lastSplitDate)} divider={false} />
-                    )}
-                  </Section>
-                </>
-              )}
-
-              <Text style={styles.footerNote}>
-                Dane edukacyjne · mogą być opóźnione
-              </Text>
+              <InstrumentDetails financialData={financialData} loading={loading} />
             </ScrollView>
           </Reanimated.View>
         </View>

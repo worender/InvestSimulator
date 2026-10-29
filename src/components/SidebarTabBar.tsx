@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getWallet, type Wallet } from '../database/database';
 import { useTheme } from '../theme';
-import { formatCurrency } from './ModalChartView';
+import { formatCurrency } from './InstrumentDetails';
 
 type SidebarTabBarProps = Pick<BottomTabBarProps, 'state' | 'descriptors' | 'navigateToTab'> & {
   // Wąska wersja (tablet): same ikony, bez etykiet i salda

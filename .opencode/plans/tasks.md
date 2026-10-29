@@ -15,8 +15,8 @@ Zasady:
 - [x] 4. Interakcje webowe we wspólnych komponentach: hover, `cursor: pointer`, focus ring, cienki scrollbar w ciemnym/jasnym motywie.
 - [x] 5. Ekran Start (desktop): karta portfela na górze, pod nią siatka 2 kolumn (wykres | trendy) z ograniczoną maks. szerokością treści.
 - [x] 6. Ekran Rynek (desktop): układ panelowy — lista instrumentów (tabela: symbol, zmiana %, cena) | wykres wybranego instrumentu zamiast modala; każdy panel scrolluje się osobno.
-- [ ] 7. Szczegóły instrumentu (desktop): dane z `ModalChartView` pokazane w panelu/siatce obok wykresu zamiast pełnoekranowego modala; modal zostaje na mobile.
-- [ ] 8. Ekran Portfolio (desktop): tabela pozycji z kolumnami zamiast listy kart; pusty stan jak w xStation.
-- [ ] 9. Ekrany Nauka i Ustawienia (desktop): wyśrodkowana kolumna z maks. szerokością, ustawienia w 2 kolumnach sekcji.
+- [x] 7. Szczegóły instrumentu (desktop): dane z `ModalChartView` pokazane w panelu/siatce obok wykresu zamiast pełnoekranowego modala; modal zostaje na mobile.
+- [x] 8. Ekran Portfolio (desktop): ograniczona szerokość treści, pusty stan w panelu jak w xStation. (Tabela pozycji odłożona — ekran nie ma jeszcze danych pozycji także na mobile.)
+- [x] 9. Ekrany Nauka i Ustawienia (desktop): wyśrodkowana kolumna z maks. szerokością, ustawienia w 2 kolumnach sekcji.
 - [ ] 10. Skróty klawiszowe: `/` — wyszukiwanie instrumentów, `Esc` — zamknięcie modala/panelu, strzałki w liście instrumentów.
 - [ ] 11. Przegląd końcowy: zrzuty wszystkich ekranów we wszystkich breakpointach i motywach, poprawki niespójności z mobile.

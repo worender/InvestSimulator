@@ -5,12 +5,14 @@ import { GlassSurface } from '../../components/GlassSurface';
 import { PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { useTheme } from '../../theme';
+import { useLayoutMode } from '../../useLayoutMode';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
 export default function PortfolioScreen() {
   const { colors } = useTheme();
   const { bottom } = useSafeAreaInsets();
   const scrollNav = useScrollAwareNavigation();
+  const { isDesktop } = useLayoutMode();
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -29,7 +31,7 @@ export default function PortfolioScreen() {
       />
       <ScrollView
         style={{ backgroundColor: colors.background }}
-        contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom }]}
+        contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop, { paddingBottom: 38 + bottom }]}
         {...scrollNav}
       >
         <Text style={[styles.intro, { color: colors.textMuted }]}>Twoje decyzje, Twoje tempo nauki.</Text>
@@ -44,7 +46,8 @@ export default function PortfolioScreen() {
         </GlassSurface>
 
         <Section label="Twoje aktywa">
-          <View style={styles.empty}>
+          {/* Na desktopie pusty stan siedzi w obramowanym panelu, jak lista pozycji w xStation */}
+          <View style={[styles.empty, isDesktop && [styles.emptyPanel, { borderColor: colors.border, backgroundColor: colors.surface }]]}>
             <Ionicons name="briefcase-outline" size={28} color={colors.textMuted} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>Portfolio jest puste</Text>
             <Text style={[styles.emptyCopy, { color: colors.textMuted }]}>
@@ -61,6 +64,8 @@ export default function PortfolioScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
+  contentDesktop: { width: '100%', maxWidth: 1280, alignSelf: 'center', paddingHorizontal: 32 },
+  emptyPanel: { borderWidth: 1, borderRadius: 12, paddingVertical: 72 },
   intro: { fontSize: 15, lineHeight: 22, marginBottom: 24 },
   summary: { borderWidth: 1, borderRadius: 18, padding: 18 },
   label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { useTheme } from '../../theme';
+import { useLayoutMode } from '../../useLayoutMode';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
 // Przykładowe lekcje edukacyjne o inwestowaniu, które są wyświetlane w sekcji "Lekcje" na ekranie AboutScreen
@@ -17,6 +18,7 @@ export default function AboutScreen() {
   const { colors } = useTheme();
   const { bottom } = useSafeAreaInsets();
   const scrollNav = useScrollAwareNavigation();
+  const { isDesktop } = useLayoutMode();
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -35,7 +37,7 @@ export default function AboutScreen() {
       />
       <ScrollView
         style={{ backgroundColor: colors.background }}
-        contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom }]}
+        contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop, { paddingBottom: 38 + bottom }]}
         {...scrollNav}
       >
         <Text style={[styles.eyebrow, { color: colors.accent }]}>CENTRUM WIEDZY</Text>
@@ -74,6 +76,8 @@ export default function AboutScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
+  // Na desktopie tekst w kolumnie o wygodnej do czytania szerokości
+  contentDesktop: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 32, paddingTop: 40 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },
   title: { fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
   lead: { fontSize: 15, lineHeight: 23, marginTop: 12 },

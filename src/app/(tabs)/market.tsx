@@ -17,6 +17,7 @@ import {
   searchInstruments,
   StockFinancialData,
 } from '../../api/marketService';
+import { InstrumentDetails, useInstrumentFinancialData } from '../../components/InstrumentDetails';
 import { ModalChartView } from '../../components/ModalChartView';
 import { PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
@@ -459,24 +460,7 @@ export default function MarketScreen() {
         </Section>
       </ScrollView>
 
-      {isDesktop && (
-        <ScrollView style={styles.detailPanel} contentContainerStyle={styles.detailContent} showsVerticalScrollIndicator>
-          <StockCandleChart
-            stock={selectedStock.symbol}
-            title={selectedStock.name.toUpperCase()}
-            currency={selectedStock.currency}
-            exchange={selectedStock.exchange}
-          />
-          <Pressable
-            onPress={() => openStockModal(selectedStock)}
-            style={[styles.detailsButton, { borderColor: colors.border }]}
-            accessibilityRole="button"
-          >
-            <Ionicons name="stats-chart-outline" size={16} color={colors.accent} />
-            <Text style={[styles.detailsButtonText, { color: colors.text }]}>Szczegóły finansowe</Text>
-          </Pressable>
-        </ScrollView>
-      )}
+      {isDesktop && <InstrumentPanel instrument={selectedStock} />}
       </View>
 
       {modalVisible && modalInstrument && (
@@ -487,6 +471,27 @@ export default function MarketScreen() {
         />
       )}
     </View>
+  );
+}
+
+// Prawy panel na desktopie: wykres i szczegóły finansowe wybranego instrumentu (na mobile to samo jest w modalu)
+function InstrumentPanel({ instrument }: { instrument: MarketInstrument & { currency: string } }) {
+  const { financialData, loading } = useInstrumentFinancialData({
+    stock: instrument.symbol,
+    exchange: instrument.exchange,
+    currency: instrument.currency,
+  });
+
+  return (
+    <ScrollView style={styles.detailPanel} contentContainerStyle={styles.detailContent} showsVerticalScrollIndicator>
+      <StockCandleChart
+        stock={instrument.symbol}
+        title={instrument.name.toUpperCase()}
+        currency={financialData?.currency ?? instrument.currency}
+        exchange={instrument.exchange}
+      />
+      <InstrumentDetails financialData={financialData} loading={loading} grid />
+    </ScrollView>
   );
 }
 
@@ -555,21 +560,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingTop: 24,
     paddingBottom: 38,
-  },
-  detailsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 8,
-    marginTop: 24,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderRadius: 8,
-  },
-  detailsButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
   },
   stockMeta: {
     flex: 1,

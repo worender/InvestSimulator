@@ -6,6 +6,7 @@ import { PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
 import { Currency, ThemeAccent, useTheme } from '../../theme';
+import { useLayoutMode } from '../../useLayoutMode';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
 // Opcje kolorów akcentu dostępne w ustawieniach aplikacji
@@ -34,6 +35,7 @@ export default function SettingsScreen() {
   const scrollNav = useScrollAwareNavigation();
   const scrollRef = useRef<ScrollViewInstance>(null);
   const isDark = mode === 'dark';
+  const { isDesktop } = useLayoutMode();
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -61,11 +63,14 @@ export default function SettingsScreen() {
       <ScrollView
         ref={scrollRef}
         style={{ backgroundColor: colors.background }}
-        contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom }]}
+        contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop, { paddingBottom: 38 + bottom }]}
         {...scrollNav}
       >
         <Text style={[styles.intro, { color: colors.textMuted }]}>Dostosuj aplikację do swoich preferencji.</Text>
 
+        {/* Na desktopie sekcje w dwóch kolumnach: wygląd | portfele i informacje */}
+        <View style={isDesktop && styles.columns}>
+        <View style={isDesktop && styles.column}>
         <Section label="Wygląd">
           <View style={[styles.settingRow, { borderBottomColor: colors.borderGlass }]}>
             <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={colors.text} />
@@ -103,7 +108,9 @@ export default function SettingsScreen() {
             })}
           </View>
         </Section>
+        </View>
 
+        <View style={isDesktop && styles.column}>
         <Section label="Portfele i waluta">
           <View style={[styles.settingBlock, { borderBottomColor: colors.borderGlass }]}>
             <Text style={[styles.title, { color: colors.text }]}>Domyślna waluta</Text>
@@ -146,6 +153,8 @@ export default function SettingsScreen() {
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>Wersja edukacyjna 1.0</Text>
           </View>
         </Section>
+        </View>
+        </View>
       </ScrollView>
     </View>
   );
@@ -155,6 +164,9 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
+  contentDesktop: { width: '100%', maxWidth: 1100, alignSelf: 'center', paddingHorizontal: 32, paddingTop: 40 },
+  columns: { flexDirection: 'row', alignItems: 'flex-start', gap: 48 },
+  column: { flex: 1, minWidth: 0 },
   intro: { fontSize: 15, lineHeight: 22 },
   settingRow: {
     flexDirection: 'row',
