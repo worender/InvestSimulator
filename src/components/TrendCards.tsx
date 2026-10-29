@@ -1,11 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { LineChart } from 'react-native-wagmi-charts';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CandleData, DynamicTrendAsset, canRetryFetch, getDynamicTrends, getStockCandles, lastFetchErrorMap } from '../api/marketService';
+import { currencySymbol, resolveCurrency } from '../currency';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
+import { CHART_RANGES } from './ChartFullscreenModal';
+import { ModalChartView } from './ModalChartView';
 import { Skeleton } from './Skeleton';
+import { TrendChart, trendChangePercent } from './TrendChart';
 
 type Category = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap };
 const categories: Category[] = [
@@ -15,14 +18,19 @@ const categories: Category[] = [
   { key: 'undervalued', label: 'Wartościowe', icon: 'diamond-outline' },
 ];
 
+const TREND_RANGE_INDEX = Math.max(
+  0,
+  CHART_RANGES.findIndex((range) => range.days === 30),
+);
+
 // Komponent wyświetlający karty trendów dla różnych kategorii aktywów giełdowych
 export function TrendCards() {
   const { colors } = useTheme();
-  const { width } = useWindowDimensions();
   const [category, setCategory] = useState('gainers');
   const [assets, setAssets] = useState<DynamicTrendAsset[]>([]);
   const [data, setData] = useState<Record<string, CandleData[]>>({});
   const [loadedCategory, setLoadedCategory] = useState('');
+  const [selectedAsset, setSelectedAsset] = useState<DynamicTrendAsset | null>(null);
   const loading = loadedCategory !== category;
 
   useEffect(() => {
@@ -102,12 +110,11 @@ export function TrendCards() {
                 <Skeleton width="55%" height={14} />
                 <Skeleton width="38%" height={10} style={{ marginTop: 6 }} />
               </View>
-              <Skeleton width={42} height={14} />
+              <Skeleton width={54} height={22} radius={11} />
             </View>
             <View style={styles.chartSkeleton}>
               <Skeleton width="100%" height={1} radius={0} style={styles.chartLineTop} />
               <Skeleton width="100%" height={1} radius={0} style={styles.chartLineMiddle} />
-              <Skeleton width="100%" height={1} radius={0} style={styles.chartLineBottom} />
               <Skeleton width="70%" height={4} radius={3} style={styles.chartStroke} />
             </View>
           </View>
@@ -121,50 +128,84 @@ export function TrendCards() {
             asset={asset}
             candles={data[asset.symbol] ?? []}
             colors={colors}
-            width={Math.max(width - 40, 1)}
             showSeparator={index < Math.min(assets.length, 3) - 1}
+            onPress={() => setSelectedAsset(asset)}
           />
         ))}
       </View>
+    )}
+
+    {selectedAsset && (
+      <ModalChartView
+        instrument={toModalInstrument(selectedAsset)}
+        initialRangeIndex={TREND_RANGE_INDEX}
+        initialInterval="1d"
+        onClose={() => setSelectedAsset(null)}
+      />
     )}
   </View>;
 }
 
 // Komponent wyświetlający pojedynczą kartę trendu dla danego aktywa giełdowego
-function TrendCard({ asset, candles, colors, width, showSeparator }: { asset: DynamicTrendAsset; candles: CandleData[]; colors: ReturnType<typeof useTheme>['colors']; width: number; showSeparator: boolean }) {
-  const first = candles[0];
+function TrendCard({ asset, candles, colors, showSeparator, onPress }: { asset: DynamicTrendAsset; candles: CandleData[]; colors: ReturnType<typeof useTheme>['colors']; showSeparator: boolean; onPress: () => void }) {
   const latest = candles[candles.length - 1];
   const values = candles.map((item) => ({ timestamp: item.timestamp, value: item.close }));
-  const change = first && latest ? ((latest.close - first.close) / first.close) * 100 : asset.changePercent;
-  const lowest = candles.length ? Math.min(...candles.map((item) => item.low)) : 0;
-  const highest = candles.length ? Math.max(...candles.map((item) => item.high)) : 0;
-  const firstDate = first ? formatDate(first.timestamp) : '';
-  const lastDate = latest ? formatDate(latest.timestamp) : '';
-  return <View style={[styles.item, showSeparator && { borderBottomColor: colors.border }]}>
-    <View style={styles.row}><View style={styles.icon}><Ionicons name="trending-up-outline" size={18} color={colors.accent} /></View><View style={styles.copy}><Text numberOfLines={1} ellipsizeMode="tail" style={[styles.name, { color: colors.text }]}>{truncate(asset.name, 24)}</Text><Text numberOfLines={1} style={[styles.meta, { color: colors.textMuted }]}>{asset.exchangeName} · USD</Text></View><Text style={{ color: change >= 0 ? colors.positive : colors.negative, fontWeight: '700' }}>{change >= 0 ? '+' : ''}{change.toFixed(2)}%</Text></View>
-    {values.length > 1 && <View style={styles.chartBlock}>
-      <View style={styles.chartCaption}><Text style={[styles.chartDescription, { color: colors.textMuted }]}>Cena zamknięcia (USD)</Text><Text style={[styles.chartDescription, { color: colors.textMuted }]}>Ostatnie 30 dni</Text></View>
-      <View style={styles.chartArea}>
-        <View style={styles.axisLabels}><Text style={[styles.axisLabel, { color: colors.textMuted }]}>{formatPrice(highest)}</Text><Text style={[styles.axisLabel, { color: colors.textMuted }]}>{formatPrice(lowest)}</Text></View>
-        <View style={styles.chartContent}>
-          <View pointerEvents="none" style={styles.grid}>
-            {Array.from({ length: 9 }, (_, line) => <View key={`h-${line}`} style={[styles.gridHorizontal, { top: `${(line / 8) * 100}%`, backgroundColor: colors.border }]} />)}
-            {Array.from({ length: 11 }, (_, line) => <View key={`v-${line}`} style={[styles.gridVertical, { left: `${(line / 10) * 100}%`, backgroundColor: colors.border }]} />)}
-          </View>
-          <LineChart.Provider data={values}><LineChart width={Math.max(width - 44, 1)} height={70} yGutter={10}><LineChart.Path color={change >= 0 ? colors.positive : colors.negative} width={2} /></LineChart></LineChart.Provider>
-          <View style={styles.timeLabels}><Text style={[styles.axisLabel, { color: colors.textMuted }]}>{firstDate}</Text><Text style={[styles.axisLabel, { color: colors.textMuted }]}>{lastDate}</Text></View>
-        </View>
+  const hasChart = values.length > 1;
+  const currency = resolveCurrency(asset);
+  // Zmiana z tego samego okresu, który pokazuje wykres — nie dzienna zmiana z API.
+  const change = trendChangePercent(values, asset.changePercent);
+  const tone = change >= 0 ? colors.positive : colors.negative;
+  const changeLabel = `${change >= 0 ? '+' : ''}${change.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+
+  return <Pressable
+    onPress={onPress}
+    accessibilityRole="button"
+    accessibilityLabel={`Otwórz wykres ${asset.name}`}
+    style={({ pressed }) => [
+      styles.item,
+      showSeparator && { borderBottomColor: colors.border },
+      pressed && styles.itemPressed,
+    ]}
+  >
+    <View style={styles.row}>
+      <View style={[styles.icon, { backgroundColor: change >= 0 ? colors.positiveGlass : colors.negativeGlass }]}>
+        <Ionicons name={change >= 0 ? 'trending-up-outline' : 'trending-down-outline'} size={18} color={tone} />
       </View>
-    </View>}
-  </View>;
+      <View style={styles.copy}>
+        <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.name, { color: colors.text }]}>{truncate(asset.name, 24)}</Text>
+        <Text numberOfLines={1} style={[styles.meta, { color: colors.textMuted }]}>
+          {asset.exchangeName}{latest ? ` · ${formatPrice(latest.close)} ${currency}` : ` · ${currency}`}
+        </Text>
+      </View>
+      <View style={[styles.changeBadge, { backgroundColor: change >= 0 ? colors.positiveGlass : colors.negativeGlass }]}>
+        <Ionicons name={change >= 0 ? 'arrow-up' : 'arrow-down'} size={11} color={tone} />
+        <Text style={[styles.changeText, { color: tone }]}>{changeLabel}</Text>
+      </View>
+    </View>
+    {hasChart ? (
+      <TrendChart data={values} height={88} style={styles.chart} />
+    ) : (
+      <View style={styles.chartEmpty}>
+        <Ionicons name="analytics-outline" size={18} color={colors.textMuted} />
+        <Text style={[styles.chartEmptyText, { color: colors.textMuted }]}>Brak danych do wykresu</Text>
+      </View>
+    )}
+  </Pressable>;
+}
+
+function toModalInstrument(asset: DynamicTrendAsset) {
+  const currency = resolveCurrency(asset);
+  return {
+    stock: asset.symbol,
+    title: asset.name.toUpperCase(),
+    currency,
+    symbol: currencySymbol(currency),
+    exchange: asset.exchange,
+  };
 }
 
 function formatPrice(value: number) {
-  return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(value >= 100 ? 0 : 2);
-}
-
-function formatDate(timestamp: number) {
-  return new Date(timestamp).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
+  return value.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function truncate(value: string, limit: number) {
@@ -179,15 +220,17 @@ const styles = StyleSheet.create({
   categories: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 8, marginBottom: 2 },
   category: { fontSize: 12, fontWeight: '700', paddingBottom: 6, borderBottomWidth: 2 },
   item: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'transparent' },
-  row: { flexDirection: 'row', alignItems: 'center' }, icon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  itemPressed: { opacity: 0.72 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  icon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   copy: { flex: 1, marginLeft: 10 }, name: { fontWeight: '700', fontSize: 14 }, meta: { fontSize: 11, marginTop: 3 },
-  chartBlock: { marginTop: 12 }, chartCaption: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  chartDescription: { fontSize: 9, fontWeight: '600' }, chartArea: { flexDirection: 'row' }, axisLabels: { width: 44, height: 70, justifyContent: 'space-between', paddingVertical: 2 },
-  chartContent: { flex: 1, height: 86 }, grid: { position: 'absolute', top: 0, left: 0, right: 0, height: 70, zIndex: 0 },
-  gridHorizontal: { position: 'absolute', left: 0, right: 0, height: 1, opacity: 0.65 },
-  gridVertical: { position: 'absolute', top: 0, bottom: 0, width: 1, opacity: 0.65 },
-  timeLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }, axisLabel: { fontSize: 9 },
-  chartSkeleton: { height: 70, marginTop: 12, position: 'relative' }, chartLineTop: { position: 'absolute', top: 8, left: 0, right: 0 },
-  chartLineMiddle: { position: 'absolute', top: 34, left: 0, right: 0 }, chartLineBottom: { position: 'absolute', top: 60, left: 0, right: 0 },
-  chartStroke: { position: 'absolute', top: 35, left: 10 },
+  changeBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 5, paddingHorizontal: 8, borderRadius: 11 },
+  changeText: { fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  chart: { marginTop: 12 },
+  chartEmpty: { height: 88, marginTop: 12, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  chartEmptyText: { fontSize: 11, fontWeight: '500' },
+  chartSkeleton: { height: 88, marginTop: 12, position: 'relative' },
+  chartLineTop: { position: 'absolute', top: 16, left: 0, right: 0 },
+  chartLineMiddle: { position: 'absolute', top: 52, left: 0, right: 0 },
+  chartStroke: { position: 'absolute', top: 44, left: 10 },
 });

@@ -33,6 +33,7 @@ import { currencySymbol } from '../currency';
 import { useLockScreenWhileActive } from '../interactionLock';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
+import type { ChartInterval } from './ChartFullscreenModal';
 import { Section } from './Section';
 import { Skeleton } from './Skeleton';
 import { StockCandleChart } from './StockCandleChart';
@@ -48,6 +49,10 @@ interface ModalChartViewProps {
   };
   financialData?: StockFinancialData;
   onClose: () => void;
+  /** Początkowy zakres wykresu (indeks z CHART_RANGES). */
+  initialRangeIndex?: number;
+  /** Początkowy interwał wykresu. */
+  initialInterval?: ChartInterval;
 }
 
 // Funkcja formatująca wartość pieniężną zgodnie z ustawieniami regionalnymi i symbolem waluty
@@ -151,7 +156,7 @@ const dataItemStyles = StyleSheet.create({
 });
 
 // Komponent wyświetlający widok wykresu w formie modala
-export function ModalChartView({ instrument, financialData: propFinancialData, onClose }: ModalChartViewProps) {
+export function ModalChartView({ instrument, financialData: propFinancialData, onClose, initialRangeIndex, initialInterval }: ModalChartViewProps) {
   const theme = useTheme();
 
   // Blokuje gesty ekranu pod spodem (np. swipe między zakładkami), dopóki modal jest otwarty.
@@ -543,11 +548,14 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
             >
               <View style={styles.chartContainer}>
                 <StockCandleChart
+                  key={`${instrument.stock}-${initialRangeIndex ?? 'default'}-${initialInterval ?? 'default'}`}
                   stock={instrument.stock}
                   title={instrument.title}
                   currency={financialData?.currency ?? instrument.currency}
                   exchange={instrument.exchange}
                   variant="embedded"
+                  initialRangeIndex={initialRangeIndex}
+                  initialInterval={initialInterval}
                 />
               </View>
 

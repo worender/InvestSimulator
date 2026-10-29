@@ -130,7 +130,7 @@ export default function TabLayout() {
             headerTitle: 'Panel inwestora',
             headerShown: false,
             tabBarIcon: ({ focused }) => (
-              <Ionicons name={focused ? 'analytics' : 'analytics-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
+              <Ionicons name={focused ? 'home' : 'home-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
             ),
           }}
         />
@@ -151,7 +151,7 @@ export default function TabLayout() {
             title: 'Portfolio',
             headerTitle: 'Moje portfolio',
             tabBarIcon: ({ focused }) => (
-              <Ionicons name={focused ? 'briefcase' : 'briefcase-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
+              <Ionicons name={focused ? 'wallet' : 'wallet-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
             ),
           }}
         />
@@ -161,7 +161,7 @@ export default function TabLayout() {
             title: 'Nauka',
             headerTitle: 'O inwestowaniu',
             tabBarIcon: ({ focused }) => (
-              <Ionicons name={focused ? 'book' : 'book-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
+              <Ionicons name={focused ? 'newspaper' : 'newspaper-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
             ),
           }}
         />
@@ -317,10 +317,10 @@ function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
           {state.routes.map((route, index) => {
             const focused = state.index === index;
             const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
-              index: focused ? 'analytics' : 'analytics-outline',
+              index: focused ? 'home' : 'home-outline',
               market: focused ? 'trending-up' : 'trending-up-outline',
-              portfolio: focused ? 'briefcase' : 'briefcase-outline',
-              about: focused ? 'book' : 'book-outline',
+              portfolio: focused ? 'wallet' : 'wallet-outline',
+              about: focused ? 'newspaper' : 'newspaper-outline',
               settings: focused ? 'settings' : 'settings-outline',
             };
 

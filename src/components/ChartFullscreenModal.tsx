@@ -7,8 +7,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
   useWindowDimensions,
+  View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
@@ -23,8 +23,8 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { CandlestickChart } from 'react-native-wagmi-charts';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CandlestickChart } from 'react-native-wagmi-charts';
 import { CandleData, getStockCandles } from '../api/marketService';
 import { currencySymbol } from '../currency';
 import { useLockScreenWhileActive } from '../interactionLock';
@@ -37,7 +37,7 @@ export type ChartRange = { label: string; days: number };
 // Wspólne definicje zakresów i interwałów dla każdego wykresu świecowego w aplikacji.
 export const CHART_RANGES: ChartRange[] = [
   { label: '1D', days: 1 },
-  { label: '5D', days: 5 },
+  { label: '7D', days: 7 },
   { label: '1M', days: 30 },
   { label: '3M', days: 90 },
   { label: '1R', days: 365 },

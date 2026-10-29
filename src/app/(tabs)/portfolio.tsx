@@ -214,7 +214,7 @@ export default function PortfolioScreen() {
               <Ionicons
                 name="pencil-outline"
                 size={18}
-                color={mode === 'dark' ? '#ffffff' : colors.text}
+                color={mode === 'dark' ? colors.textMuted : colors.text}
               />
             </Pressable>
 
@@ -227,7 +227,7 @@ export default function PortfolioScreen() {
               style={({ pressed }) => [
                 styles.addButton,
                 {
-                  backgroundColor: menuOpen ? colors.accentGlass : 'transparent',
+                  backgroundColor: 'transparent',
                   opacity: pressed ? 0.7 : 1,
                 },
               ]}

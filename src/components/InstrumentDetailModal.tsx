@@ -37,6 +37,7 @@ import { useLockScreenWhileActive } from '../interactionLock';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
 import { MarketClosedNoticeModal } from './MarketClosedNoticeModal';
+import { StockCandleChart } from './StockCandleChart';
 import { TradeInstrumentView } from './TradeInstrumentView';
 
 export type ModalTab = 'details' | 'trade';
@@ -298,8 +299,11 @@ export function InstrumentDetailModal({
     [category],
   );
 
-  // Aktualny instrument lub null jeśli brak
-  const currentAsset = asset ?? categoryItems[selectedAssetIndex] ?? null;
+  // Aktualny instrument z kategorii lub bezpośrednio przekazany do modala.
+  // Gdy kategoria jest wybrana, liczy się pozycja z listy (selektor instrumentu).
+  const currentAsset = category
+    ? categoryItems[selectedAssetIndex] ?? categoryItems[0] ?? asset
+    : asset;
 
   const isProfit = (currentAsset?.profitCurrency ?? 0) >= 0;
   const arrowColor = isProfit ? '#10b981' : '#ef4444';
@@ -374,7 +378,7 @@ export function InstrumentDetailModal({
     },
   } : currentAsset;
 
-  const currentAssetForDisplay = displayAsset ?? (category ? category.items[0] : null);
+  const currentAssetForDisplay = displayAsset ?? currentAsset;
 
   // Obsługa modalInstrument (dodawanie instrumentu bezpośrednio przez zieloną kartę)
   const modalTitle = currentAssetForDisplay
@@ -434,7 +438,7 @@ export function InstrumentDetailModal({
                           { color: colors.textMuted, borderColor: colors.border },
                         ]}
                       >
-                        {currentAssetForDisplay.exchange}
+                        {currentAsset.exchange}
                       </Text>
                     )}
                   </View>
@@ -540,7 +544,7 @@ export function InstrumentDetailModal({
                               numberOfLines={1}
                             >
                               {currentAsset
-                                ? `${currentAssetForDisplay.symbol} · ${currentAssetForDisplay.name}`
+                                ? `${currentAsset.symbol} · ${currentAsset.name}`
                                 : 'Wybierz instrument'}
                             </Text>
                           </View>
@@ -642,6 +646,20 @@ export function InstrumentDetailModal({
                       </View>
                     )}
 
+                    {/* Wykres wybranego instrumentu z kategorii */}
+                    {currentAssetForDisplay && (
+                      <View style={styles.chartSection}>
+                        <StockCandleChart
+                          key={`${currentAssetForDisplay.symbol}-${currentAssetForDisplay.exchange}`}
+                          stock={currentAssetForDisplay.symbol}
+                          title={currentAssetForDisplay.name}
+                          currency={currentAssetForDisplay.currency}
+                          exchange={currentAssetForDisplay.exchange}
+                          variant="embedded"
+                        />
+                      </View>
+                    )}
+
                     {currentAsset ? (
                       <>
                         {/* 1. Główne dane liczbowe (czyste linie/wiersze, BEZ divów/boxów) */}
@@ -651,7 +669,7 @@ export function InstrumentDetailModal({
                               Wartość pozycji
                             </Text>
                             <Text style={[styles.metricValueLarge, { color: colors.text }]}>
-                              {formatNumber(currentAssetForDisplay.totalValue)} {currentAssetForDisplay.currency}
+                              {formatNumber(currentAsset.totalValue)} {currentAsset.currency}
                             </Text>
                           </View>
 
@@ -806,10 +824,10 @@ export function InstrumentDetailModal({
                         {/* 4. INFORMACJE O AKTYWIE — duży tytuł, opis i wskaźniki */}
                         <View style={styles.assetInfoSection}>
                           <Text style={[styles.assetInfoTitle, { color: colors.text }]}>
-                            {currentAssetForDisplay.name}
+                            {currentAsset.name}
                           </Text>
                           <Text style={[styles.assetInfoMeta, { color: colors.textMuted }]}>
-                            {currentAssetForDisplay.symbol} · {currentAssetForDisplay.exchange} ·{' '}
+                            {currentAsset.symbol} · {currentAsset.exchange} ·{' '}
                             {currentAsset.category.toUpperCase()}
                           </Text>
 
@@ -834,7 +852,7 @@ export function InstrumentDetailModal({
                                 POZIOM RYZYKA
                               </Text>
                               <Text style={[styles.riskValue, { color: riskColor }]}>
-                                {currentAssetForDisplay.riskLevel}
+                                {currentAsset.riskLevel}
                               </Text>
                             </View>
 
@@ -1033,6 +1051,9 @@ const styles = StyleSheet.create({
     position: 'relative',
     zIndex: 20,
     elevation: 20,
+  },
+  chartSection: {
+    marginBottom: 20,
   },
   instrumentPickerButton: {
     flexDirection: 'row',
