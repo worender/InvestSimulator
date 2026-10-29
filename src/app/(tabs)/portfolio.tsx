@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurTargetView, BlurView } from 'expo-blur';
-import { useRef, useState, useCallback, type ComponentRef } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Reanimated, {
   Easing,
@@ -9,28 +9,33 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InstrumentSearchResult, getStockData } from '../../api/marketService';
 import { AssetCategoryCard } from '../../components/AssetCategoryCard';
 import { InstrumentDetailModal, ModalTab } from '../../components/InstrumentDetailModal';
+import { InstrumentSearchSheet } from '../../components/InstrumentSearchSheet';
 import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { SinglePortfolioCard } from '../../components/SinglePortfolioCard';
-import { Skeleton } from '../../components/Skeleton';
 import { resolveCurrency } from '../../currency';
+import {
+  MOCK_PORTFOLIOS,
+  MockPortfolio,
+  PortfolioAssetItem,
+  PortfolioCategory,
+} from '../../database/mockPortfolioData';
 import { notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
-import { searchInstruments, InstrumentSearchResult, getStockData } from '../../api/marketService';
-import { MOCK_PORTFOLIOS, MockPortfolio } from '../../database/mockPortfolioData';
 
 export default function PortfolioScreen() {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
   // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
 
   // Stan portfeli użytkownika
-  const [portfolios] = useState<MockPortfolio[]>(MOCK_PORTFOLIOS);
+  const [portfolios, setPortfolios] = useState<MockPortfolio[]>(MOCK_PORTFOLIOS);
   const [activePortfolioIndex, setActivePortfolioIndex] = useState(0);
 
   // Stan modalu szczegółów i zakupu instrumentu / kategorii
@@ -47,22 +52,22 @@ export default function PortfolioScreen() {
     financialData?: any;
   } | null>(null);
 
-  // Stan rozwijanej listy (overlay)
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<InstrumentSearchResult[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  // Menu przycisku "+" w headerze (osobny overlay, nie wpływa na układ treści)
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // Stan nowej zielonej karty - dodawanie instrumentów
-  const [greenCardOpen, setGreenCardOpen] = useState(false);
-  const [greenCardSearchQuery, setGreenCardSearchQuery] = useState('');
-  const [greenCardSearchResults, setGreenCardSearchResults] = useState<InstrumentSearchResult[]>([]);
-  const [greenCardSearchLoading, setGreenCardSearchLoading] = useState(false);
+  // Overlay wyszukiwania instrumentu (wspólny dla karty i menu headera)
+  const [searchSheetOpen, setSearchSheetOpen] = useState(false);
 
   // Animacja obracających się strzałek w headerze
   const rotation = useSharedValue(0);
   const rotationStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
+  }));
+
+  // Animacja przycisku "+": obrót o 45° zmienia go w "x" po otwarciu menu
+  const menuIconRotation = useSharedValue(0);
+  const menuIconStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${menuIconRotation.value}deg` }],
   }));
 
   const currentPortfolio = portfolios[activePortfolioIndex] || portfolios[0];
@@ -77,7 +82,24 @@ export default function PortfolioScreen() {
     setActivePortfolioIndex((prev) => (prev + 1) % portfolios.length);
   };
 
+  // Otwieranie/zamykanie menu przycisku "+" z animacją ikony
+  const toggleMenu = () => {
+    const next = !menuOpen;
+    setMenuOpen(next);
+    menuIconRotation.value = withTiming(next ? 45 : 0, {
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+    });
+  };
+
+  const closeMenu = () => {
+    setMenuOpen(false);
+    menuIconRotation.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) });
+  };
+
+  // Dodanie nowego portfela na bazie aktualnie wybranego (limit 5)
   const handleAddPortfolio = () => {
+    closeMenu();
     if (isAddDisabled) {
       notify({
         variant: 'info',
@@ -86,11 +108,23 @@ export default function PortfolioScreen() {
       });
       return;
     }
+    const newPortfolio: MockPortfolio = {
+      ...currentPortfolio,
+      id: `port-${Date.now()}`,
+      name: `Portfel ${portfolios.length + 1}`,
+    };
+    setPortfolios((prev) => [...prev, newPortfolio]);
+    setActivePortfolioIndex(portfolios.length);
     notify({
-      variant: 'info',
-      title: 'Tworzenie portfela',
-      message: 'Dodawanie nowych portfeli będzie dostępne wkrótce.',
+      variant: 'success',
+      title: 'Utworzono nowy portfel',
+      message: `${newPortfolio.name} jest gotowy do inwestowania.`,
     });
+  };
+
+  const handleOpenSearchSheet = () => {
+    closeMenu();
+    setSearchSheetOpen(true);
   };
 
   const handleSelectCategory = (category: PortfolioCategory) => {
@@ -100,56 +134,13 @@ export default function PortfolioScreen() {
     setModalVisible(true);
   };
 
-  // Obsługa rozwijanej listy w headerze - wyszukiwanie instrumentów
-  const handleHeaderSearch = useCallback(async (query: string) => {
-    if (query.length < 2) {
-      setSearchResults([]);
-      setDropdownOpen(false);
-      return;
-    }
-    setSearchLoading(true);
-    const results = await searchInstruments(query);
-    setSearchResults(results);
-    setSearchLoading(false);
-    setDropdownOpen(true);
-  }, []);
-
-  const handleCloseHeaderDropdown = useCallback(() => {
-    setDropdownOpen(false);
-    setSearchQuery('');
-    setSearchResults([]);
-  }, []);
-
-  // Obsługa zielonej karty - dodawanie instrumentów do portfela
-  const handleGreenCardSearch = useCallback(async (query: string) => {
-    if (query.length < 2) {
-      setGreenCardSearchResults([]);
-      setGreenCardOpen(false);
-      return;
-    }
-    setGreenCardSearchLoading(true);
-    const results = await searchInstruments(query);
-    setGreenCardSearchResults(results);
-    setGreenCardSearchLoading(false);
-    setGreenCardOpen(true);
-  }, []);
-
-  const handleCloseGreenCardDropdown = useCallback(() => {
-    setGreenCardOpen(false);
-    setGreenCardSearchQuery('');
-    setGreenCardSearchResults([]);
-  }, []);
-
-  // Dodanie instrumentu do portfela
+  // Dodanie instrumentu do portfela: modal otwiera się od razu, a dane finansowe dociągają się w tle
   const handleAddInstrument = async (instrument: InstrumentSearchResult) => {
+    setSearchSheetOpen(false);
+    setSelectedCategory(null);
+    setSelectedAsset(null);
     const resolvedCurrency = resolveCurrency(instrument);
-    const selectedInstrument: {
-      stock: string;
-      title: string;
-      currency: string;
-      symbol: string;
-      exchange: string;
-    } = {
+    const selectedInstrument = {
       stock: instrument.symbol,
       title: instrument.name.toUpperCase(),
       currency: resolvedCurrency,
@@ -157,21 +148,25 @@ export default function PortfolioScreen() {
       exchange: instrument.exchange || instrument.exchangeName,
     };
 
-    // Pobierz dane finansowe z Yahoo Finance
+    setModalInitialTab('details');
+    setModalInstrument(selectedInstrument);
+    setModalVisible(true);
+
     try {
       const financialData = await getStockData(instrument.symbol, instrument.exchange);
-      setModalInstrument({
-        ...selectedInstrument,
-        currency: financialData?.currency || resolvedCurrency,
-        financialData: financialData ?? undefined,
-      });
-      setModalVisible(true);
-      setGreenCardOpen(false);
+      if (!financialData) return;
+      // Aktualizuj tylko wtedy, gdy modal nadal pokazuje ten sam instrument.
+      setModalInstrument((current) =>
+        current && current.symbol === instrument.symbol
+          ? {
+              ...current,
+              currency: financialData.currency || current.currency,
+              financialData,
+            }
+          : current,
+      );
     } catch (error) {
       console.error('Błąd pobierania danych finansowych:', error);
-      setModalInstrument(selectedInstrument);
-      setModalVisible(true);
-      setGreenCardOpen(false);
     }
   };
 
@@ -202,118 +197,96 @@ export default function PortfolioScreen() {
           ) : undefined
         }
         right={
-          <>
-            <View style={styles.headerButtons}>
-              {/* Przycisk edycji/portfolio */}
-              <Pressable
-                onPress={() => {
-                  notify({
-                    variant: 'info',
-                    title: 'Edycja/Usuwanie',
-                    message: 'Obecnie wybrane portfolio nie może być usunięte ani edytowane.',
-                  });
-                }}
-                accessibilityLabel="Edytuj portfel"
-                hitSlop={8}
-                style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-              >
-                <Ionicons name="pencil-outline" size={22} color={colors.textMuted} />
-              </Pressable>
-              
-              {/* Przycisk dodawania portfolio */}
-              <Pressable
-                onPress={() => setDropdownOpen(true)}
-                accessibilityLabel="Dodaj nowy portfel"
-                hitSlop={8}
-                style={({ pressed }) => [{ opacity: isAddDisabled ? 0.35 : pressed ? 0.7 : 1 }]}
-              >
-                <Ionicons
-                  name="add"
-                  size={24}
-                  color={isAddDisabled ? colors.textMuted : colors.accent}
-                />
-              </Pressable>
-            </View>
+          <View style={styles.headerButtons}>
+            {/* Przycisk edycji/portfolio - mniejszy, jasny (biały w trybie ciemnym) */}
+            <Pressable
+              onPress={() => {
+                notify({
+                  variant: 'info',
+                  title: 'Edycja/Usuwanie',
+                  message: 'Obecnie wybrane portfolio nie może być usunięte ani edytowane.',
+                });
+              }}
+              accessibilityLabel="Edytuj portfel"
+              hitSlop={10}
+              style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Ionicons
+                name="pencil-outline"
+                size={18}
+                color={mode === 'dark' ? '#ffffff' : colors.text}
+              />
+            </Pressable>
 
-            {/* Rozwijana lista w headerze */}
-            {dropdownOpen && (
-              <View style={styles.dropdownOverlay}>
-                <View style={styles.dropdownContent}>
-                  <Pressable
-                    onPress={() => {
-                      notify({
-                        variant: 'info',
-                        title: 'Dodaj instrument',
-                        message: 'Dodawanie instrumentów będzie dostępne wkrótce.',
-                      });
-                      handleCloseHeaderDropdown();
-                    }}
-                    style={styles.dropdownItem}
-                  >
-                    <Ionicons name="add-circle-outline" size={20} color={colors.text} />
-                    <Text style={[styles.dropdownText, { color: colors.text }]}>Dodaj instrument</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      notify({
-                        variant: 'info',
-                        title: 'Dodaj nowe portfolio',
-                        message: 'Maksymalna liczba portfeli (5) została osiągnięta.',
-                      });
-                      handleCloseHeaderDropdown();
-                    }}
-                    style={styles.dropdownItem}
-                  >
-                    <Ionicons name="wallet-outline" size={20} color={colors.text} />
-                    <Text style={[styles.dropdownText, { color: colors.text }]}>Dodaj nowe portfolio</Text>
-                    {isAddDisabled && (
-                      <Text style={[styles.dropdownTextDisabled, { color: colors.textMuted }]}>(limit osiągnięty)</Text>
-                    )}
-                  </Pressable>
-                </View>
-              </View>
-            )}
-          </>
+            {/* Przycisk "+": otwiera menu portfeli/instrumentów, ikona zmienia się w "x" */}
+            <Pressable
+              onPress={toggleMenu}
+              accessibilityLabel={menuOpen ? 'Zamknij menu dodawania' : 'Dodaj portfel lub instrument'}
+              accessibilityState={{ expanded: menuOpen }}
+              hitSlop={10}
+              style={({ pressed }) => [
+                styles.addButton,
+                {
+                  backgroundColor: menuOpen ? colors.accentGlass : 'transparent',
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Reanimated.View style={menuIconStyle}>
+                <Ionicons name="add" size={24} color={colors.accent} />
+              </Reanimated.View>
+            </Pressable>
+          </View>
         }
       />
 
-      {/* Overlay rozwijanej listy dla zielonej karty */}
-      {greenCardOpen && (
-        <View style={styles.dropdownOverlay}>
-          <View style={styles.dropdownContent}>
-            {searchLoading ? (
-              <View style={styles.loadingItem}>
-                <Skeleton height={16} />
-              </View>
-            ) : greenCardSearchResults.length === 0 ? (
-              <View style={styles.searchState}>
-                <Ionicons name="search-outline" size={32} color={colors.textMuted} />
-                <Text style={[styles.searchStateTitle, { color: colors.text }]}>Brak wyników</Text>
-                <Text style={[styles.searchStateCopy, { color: colors.textMuted }]}>
-                  Spróbuj innego tickera lub nazwy spółki.
-                </Text>
-              </View>
-            ) : (
-              greenCardSearchResults.map((result) => (
-                <Pressable
-                  key={`${result.symbol}-${result.exchange}`}
-                  onPress={() => handleAddInstrument(result)}
-                  style={[
-                    styles.searchResult,
-                    { borderBottomColor: colors.borderGlass },
-                  ]}
-                >
-                  <View style={styles.resultCopy}>
-                    <Text style={[styles.resultName, { color: colors.text }]} numberOfLines={1}>{result.name}</Text>
-                    <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
-                      {result.symbol} · {result.exchangeName}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                </Pressable>
-              ))
-            )}
-          </View>
+      {/* Menu przycisku "+" jako osobny overlay nad treścią - nie przesuwa kart pod spodem */}
+      {menuOpen && (
+        <View style={styles.menuLayer} pointerEvents="box-none">
+          <Pressable
+            style={[StyleSheet.absoluteFill, styles.menuBackdrop]}
+            onPress={closeMenu}
+            accessibilityLabel="Zamknij menu"
+          />
+          <Reanimated.View
+            style={[
+              styles.menuCard,
+              {
+                top: top + PANEL_HEADER_HEIGHT + 6,
+                backgroundColor: mode === 'dark' ? 'rgba(22, 27, 34, 0.97)' : 'rgba(255, 255, 255, 0.98)',
+                borderColor: colors.borderGlass,
+              },
+            ]}
+          >
+            <Pressable
+              onPress={handleOpenSearchSheet}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.menuItem,
+                { borderBottomColor: colors.borderGlass, opacity: pressed ? 0.65 : 1 },
+              ]}
+            >
+              <Ionicons name="add-circle-outline" size={20} color={colors.accent} />
+              <Text style={[styles.menuText, { color: colors.text }]}>Dodaj instrument</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleAddPortfolio}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isAddDisabled }}
+              style={({ pressed }) => [
+                styles.menuItem,
+                styles.menuItemLast,
+                { opacity: isAddDisabled ? 0.45 : pressed ? 0.65 : 1 },
+              ]}
+            >
+              <Ionicons name="wallet-outline" size={20} color={colors.accent} />
+              <Text style={[styles.menuText, { color: colors.text }]}>Dodaj nowe portfolio</Text>
+              {isAddDisabled && (
+                <Text style={[styles.menuLimit, { color: colors.textMuted }]}>limit</Text>
+              )}
+            </Pressable>
+          </Reanimated.View>
         </View>
       )}
 
@@ -324,45 +297,8 @@ export default function PortfolioScreen() {
           showsVerticalScrollIndicator={false}
           {...scrollNav}
         >
-          <Text style={[styles.intro, { color: colors.textMuted }]}>
-            Twoje decyzje, Twoje tempo nauki.
-          </Text>
-
           {/* Pojedyncza karta portfela 1:1 z dashboard */}
           <SinglePortfolioCard portfolio={currentPortfolio} />
-
-          {/* Nowa zielona karta z przyciskiem + i listą instrumentów do dodania */}
-          <Pressable
-            onPress={() => handleGreenCardSearch('')}
-            accessibilityLabel="Dodaj instrument do portfela"
-            style={styles.greenCard}
-          >
-            {/* Zielone tło z transparentnością i boxowym wyglądem */}
-            <View style={styles.greenBg}>
-              <BlurView
-                intensity={50}
-                tint="light"
-                style={StyleSheet.absoluteFill}
-              />
-            </View>
-
-            <View style={styles.greenCardContent}>
-              {/* Przycisk + w prawym górnym rogu */}
-              <Pressable
-                onPress={() => handleGreenCardSearch('')}
-                accessibilityLabel="Dodaj instrument"
-                style={styles.plusButton}
-              >
-                <Ionicons name="add" size={32} color="#ffffff" />
-              </Pressable>
-
-              {/* Tekst na środku karty */}
-              <View style={styles.greenCardText}>
-                <Text style={styles.greenCardTitle}>Dodaj instrument</Text>
-                <Text style={styles.greenCardSubtitle}>Szukaj i dodaj spółki</Text>
-              </View>
-            </View>
-          </Pressable>
 
           {/* Sekcja z kolorowymi kafelkami w siatce 2x2 (punkty 1, 3) */}
           <Section label="Kategorie aktywów">
@@ -375,10 +311,61 @@ export default function PortfolioScreen() {
                   onPress={() => handleSelectCategory(category)}
                 />
               ))}
+
+              {/* Karta dodawania instrumentu - należy do siatki i zajmuje dokładnie tyle samo miejsca co jedna karta */}
+              <Pressable
+                onPress={handleOpenSearchSheet}
+                accessibilityLabel="Dodaj instrument do portfela"
+                style={({ pressed }) => [
+                  styles.addCard,
+                  {
+                    borderColor: '#22c55e55',
+                    transform: [{ scale: pressed ? 0.98 : 1 }],
+                    opacity: pressed ? 0.92 : 1,
+                  },
+                ]}
+              >
+                <BlurView
+                  intensity={mode === 'dark' ? 40 : 55}
+                  tint={mode === 'dark' ? 'dark' : 'light'}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View
+                  pointerEvents="none"
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      backgroundColor: 'rgba(34, 197, 94, 0.16)',
+                      opacity: mode === 'dark' ? 0.78 : 0.65,
+                    },
+                  ]}
+                />
+
+                <View style={styles.addCardContent}>
+                  <View
+                    style={[
+                      styles.addCardButton,
+                      { backgroundColor: '#22c55e25', borderColor: '#22c55e55' },
+                    ]}
+                  >
+                    <Ionicons name="add" size={24} color="#22c55e" />
+                  </View>
+                  <Text style={[styles.addCardLabel, { color: colors.text }]}>Dodaj</Text>
+                </View>
+              </Pressable>
             </View>
           </Section>
         </ScrollView>
       </BlurTargetView>
+
+      {/* Overlay wyszukiwania instrumentu (zielona karta + menu headera) */}
+      {searchSheetOpen && (
+        <InstrumentSearchSheet
+          visible
+          onClose={() => setSearchSheetOpen(false)}
+          onSelect={handleAddInstrument}
+        />
+      )}
 
       {/* Okno modalne szczegółów instrumentu i zakupu (punkty 6, 7, 8, 9, 10, 11, 12) */}
       <InstrumentDetailModal
@@ -400,140 +387,92 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
   intro: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
-  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 4 },
-  greenCard: {
-    position: 'relative',
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#22c55e',
-    marginBottom: 12,
-    overflow: 'hidden',
-    shadowColor: '#22c55e',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
+  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 4 },
+  addButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  greenBg: {
+  // Overlay menu "+": zajmuje cały ekran, ale leży nad treścią i nie zmienia układu
+  menuLayer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
+    // Poniżej nagłówka (zIndex 20), aby przycisk "+" pozostał klikalny i mógł zamknąć menu
+    zIndex: 15,
+    elevation: 15,
   },
-  greenCardContent: {
-    position: 'relative',
-    zIndex: 1,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 140,
+  menuBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
   },
-  plusButton: {
+  menuCard: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  greenCardText: {
-    alignItems: 'center',
-    marginTop: -40,
-  },
-  greenCardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  greenCardSubtitle: {
-    fontSize: 12,
-    color: '#e0e0e0',
-    textAlign: 'center',
-  },
-  dropdownOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 100,
-    paddingHorizontal: 20,
-    paddingTop: 60,
-  },
-  dropdownContent: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    paddingVertical: 8,
+    right: 20,
+    width: 232,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 4,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    elevation: 14,
   },
-  dropdownItem: {
+  menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  dropdownText: {
+  menuItemLast: {
+    borderBottomWidth: 0,
+  },
+  menuText: {
     fontSize: 14,
     fontWeight: '600',
-    marginLeft: 8,
     flex: 1,
   },
-  dropdownTextDisabled: {
+  menuLimit: {
     fontSize: 11,
-    marginLeft: 8,
   },
-  loadingItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+  // Karta dodawania instrumentu: te same wymiary co pojedyncza karta kategorii
+  addCard: {
+    width: '48%',
+    borderRadius: 20,
+    borderWidth: 1.2,
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  searchState: {
+  addCardContent: {
+    padding: 14,
     alignItems: 'center',
-    paddingTop: 24,
-    paddingHorizontal: 24,
+    justifyContent: 'center',
     gap: 8,
+    minHeight: 110,
   },
-  searchStateTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  searchStateCopy: {
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 19,
-  },
-  searchResult: {
-    flexDirection: 'row',
+  addCardButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
+    justifyContent: 'center',
   },
-  resultCopy: {
-    flex: 1,
-    marginRight: 8,
-  },
-  resultName: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  resultMeta: {
-    fontSize: 11,
-    marginTop: 3,
-  },
-  cardContent: {
-    zIndex: 1,
+  addCardLabel: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   categoriesGrid: {
     flexDirection: 'row',

@@ -16,7 +16,7 @@ interface SinglePortfolioCardProps {
 }
 
 export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const { width } = useWindowDimensions();
 
   const formatNumber = (val: number) =>
@@ -64,7 +64,7 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
         {/* Efekt Liquid Glass z blurem - bardziej przeźroczyste tło z blurem jak w AssetCategoryCard */}
         <BlurView
           intensity={45}
-          tint={colors.mode === 'dark' ? 'dark' : 'light'}
+          tint={mode === 'dark' ? 'dark' : 'light'}
           style={StyleSheet.absoluteFill}
         />
         <View
@@ -73,7 +73,7 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
             StyleSheet.absoluteFill,
             {
               backgroundColor: cardAccent + '15', // Bardziej przeźroczyste tło
-              opacity: colors.mode === 'dark' ? 0.78 : 0.65,
+              opacity: mode === 'dark' ? 0.78 : 0.65,
             },
           ]}
         />
@@ -82,34 +82,28 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                WARTOŚĆ PORTFELA · 3 MIESIĄCE
+              <Text style={[styles.stockText, { color: colors.text }]} numberOfLines={1}>
+                {portfolio.name} · {portfolio.currency}
               </Text>
               <Text style={[styles.total, { color: colors.text }]}>{totalFormatted}</Text>
+              <View style={styles.returnProfit}>
+                <Ionicons name={arrowIcon} size={13} color={arrowColor} />
+                <Text style={[styles.returnText, { color: colors.text }]}>
+                  {profitFormatted} ({profitPctFormatted})
+                </Text>
+              </View>
             </View>
-            <Ionicons name="wallet-outline" size={24} color={cardAccent} />
+            <Ionicons name="wallet-outline" size={24} color={cardAccent}/>
           </View>
 
-          {/* Stock / Portfolio Name row */}
-          <View style={styles.stockRow}>
-            <Ionicons name="trending-up-outline" size={16} color={cardAccent} />
-            <Text style={[styles.stockText, { color: colors.text }]} numberOfLines={1}>
-              {portfolio.name}
-            </Text>
-          </View>
-
-          {/* Subtitle */}
-          <Text style={[styles.swipeHint, { color: colors.textMuted }]}>
-            Portfel inwestycyjny · {portfolio.currency}
-          </Text>
 
           {/* Breakdown: Aktywne / Nieaktywne */}
-          <View style={styles.breakdown}>
-            <Text style={[styles.breakdownText, { color: colors.textMuted }]}>
-              Aktywne <Text style={{ color: colors.text }}>{activeFormatted}</Text>
+          <View style={[styles.breakdown, { marginBottom: 16 }]}>
+            <Text style={[styles.breakdownText, { color: colors.accent }]}>
+              Aktywne: <Text style={{ color: colors.text }}>{activeFormatted}</Text>
             </Text>
             <Text style={[styles.breakdownText, { color: colors.textMuted }]}>
-              Nieaktywne <Text style={{ color: colors.text }}>{inactiveFormatted}</Text>
+              Nieaktywne: <Text style={{ color: colors.text }}>{inactiveFormatted}</Text>
             </Text>
           </View>
 
@@ -144,17 +138,6 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
               </LineChart.Provider>
             </View>
           </View>
-
-          {/* Stopka z wynikiem: kolorowa strzałka, ale czysty tekst zgodnie z wytycznymi */}
-          <View style={styles.returnFooter}>
-            <Ionicons name={arrowIcon} size={15} color={arrowColor} />
-            <Text style={[styles.returnText, { color: colors.text }]}>
-              {profitFormatted} ({profitPctFormatted})
-            </Text>
-            <Text style={[styles.returnPeriod, { color: colors.textMuted }]}>
-              · wynik za ostatnie 3 miesiące
-            </Text>
-          </View>
         </View>
       </View>
     </View>
@@ -164,8 +147,8 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'relative',
-    marginBottom: 20,
-    marginTop: 10,
+    marginTop: 16,
+    marginBottom: 4,
   },
   card: {
     borderWidth: 1,
@@ -249,15 +232,15 @@ const styles = StyleSheet.create({
     right: 0,
     height: StyleSheet.hairlineWidth,
   },
-  returnFooter: {
+  returnProfit: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginTop: 12,
+    gap: 4,
+    marginTop: 4,
   },
   returnText: {
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 11,
   },
   returnPeriod: {
     fontSize: 12,

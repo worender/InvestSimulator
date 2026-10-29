@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 4,
   },
   iconBadge: {
     width: 28,
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   profitRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
     flexWrap: 'nowrap',
   },
   profitAmount: {
