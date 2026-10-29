@@ -58,6 +58,14 @@ interface InstrumentDetailModalProps {
     quantity: number,
     total: number,
   ) => void;
+  modalInstrument?: {
+    stock: string;
+    title: string;
+    currency: string;
+    symbol: string;
+    exchange: string;
+    financialData?: any;
+  } | null;
 }
 
 export function InstrumentDetailModal({
@@ -68,6 +76,7 @@ export function InstrumentDetailModal({
   onClose,
   initialTab = 'details',
   onMarketClosedAlert,
+  modalInstrument,
 }: InstrumentDetailModalProps) {
   const { colors, mode } = useTheme();
   const { bottom } = useSafeAreaInsets();
@@ -344,20 +353,44 @@ export function InstrumentDetailModal({
       ]
     : [];
 
-  const modalTitle = currentAsset
-    ? currentAsset.symbol
+  // Obsługa modalInstrument (dodawanie instrumentu bezpośrednio przez zieloną kartę)
+  const displayAsset = modalInstrument ? {
+    symbol: modalInstrument.symbol,
+    name: modalInstrument.title,
+    exchange: modalInstrument.exchange,
+    riskLevel: 'Niski', // Domyślnie niskie ryzyko dla nowych instrumentów
+    profitCurrency: 0,
+    totalValue: 0,
+    cashBalance: 0,
+    currencySymbol: modalInstrument.currency,
+    currency: modalInstrument.currency,
+    returns: {
+      oneMonth: undefined,
+      threeMonths: undefined,
+      sixMonths: undefined,
+      oneYear: undefined,
+      threeYears: undefined,
+      fiveYears: undefined,
+    },
+  } : currentAsset;
+
+  const currentAssetForDisplay = displayAsset ?? (category ? category.items[0] : null);
+
+  // Obsługa modalInstrument (dodawanie instrumentu bezpośrednio przez zieloną kartę)
+  const modalTitle = currentAssetForDisplay
+    ? currentAssetForDisplay.symbol
     : category
       ? category.title
       : 'Szczegóły';
-  const modalSubtitle = currentAsset
-    ? currentAsset.name
+  const modalSubtitle = currentAssetForDisplay
+    ? currentAssetForDisplay.name
     : category
       ? category.title
       : portfolio.name;
 
   // Pozycja instrumentu na skali ryzyka (0-3).
-  const riskIndex = currentAsset
-    ? Math.max(0, RISK_LEVELS.indexOf(currentAsset.riskLevel as (typeof RISK_LEVELS)[number]))
+  const riskIndex = currentAssetForDisplay
+    ? Math.max(0, RISK_LEVELS.indexOf(currentAssetForDisplay.riskLevel as (typeof RISK_LEVELS)[number]))
     : 0;
   const riskColor = RISK_COLORS[riskIndex] ?? RISK_COLORS[0];
   const riskPercent = (riskIndex / (RISK_LEVELS.length - 1)) * 100;
@@ -401,7 +434,7 @@ export function InstrumentDetailModal({
                           { color: colors.textMuted, borderColor: colors.border },
                         ]}
                       >
-                        {currentAsset.exchange}
+                        {currentAssetForDisplay.exchange}
                       </Text>
                     )}
                   </View>
@@ -507,7 +540,7 @@ export function InstrumentDetailModal({
                               numberOfLines={1}
                             >
                               {currentAsset
-                                ? `${currentAsset.symbol} · ${currentAsset.name}`
+                                ? `${currentAssetForDisplay.symbol} · ${currentAssetForDisplay.name}`
                                 : 'Wybierz instrument'}
                             </Text>
                           </View>
@@ -618,7 +651,7 @@ export function InstrumentDetailModal({
                               Wartość pozycji
                             </Text>
                             <Text style={[styles.metricValueLarge, { color: colors.text }]}>
-                              {formatNumber(currentAsset.totalValue)} {currentAsset.currency}
+                              {formatNumber(currentAssetForDisplay.totalValue)} {currentAssetForDisplay.currency}
                             </Text>
                           </View>
 
@@ -773,10 +806,10 @@ export function InstrumentDetailModal({
                         {/* 4. INFORMACJE O AKTYWIE — duży tytuł, opis i wskaźniki */}
                         <View style={styles.assetInfoSection}>
                           <Text style={[styles.assetInfoTitle, { color: colors.text }]}>
-                            {currentAsset.name}
+                            {currentAssetForDisplay.name}
                           </Text>
                           <Text style={[styles.assetInfoMeta, { color: colors.textMuted }]}>
-                            {currentAsset.symbol} · {currentAsset.exchange} ·{' '}
+                            {currentAssetForDisplay.symbol} · {currentAssetForDisplay.exchange} ·{' '}
                             {currentAsset.category.toUpperCase()}
                           </Text>
 
@@ -801,7 +834,7 @@ export function InstrumentDetailModal({
                                 POZIOM RYZYKA
                               </Text>
                               <Text style={[styles.riskValue, { color: riskColor }]}>
-                                {currentAsset.riskLevel}
+                                {currentAssetForDisplay.riskLevel}
                               </Text>
                             </View>
 

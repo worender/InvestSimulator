@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { BlurView } from 'expo-blur';
 import { useMemo } from 'react';
 import {
   StyleSheet,
@@ -9,7 +10,6 @@ import {
 import { LineChart } from 'react-native-wagmi-charts';
 import { MockPortfolio } from '../database/mockPortfolioData';
 import { useTheme } from '../theme';
-import { GlassSurface } from './GlassSurface';
 
 interface SinglePortfolioCardProps {
   portfolio: MockPortfolio;
@@ -61,13 +61,24 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
     <View style={styles.wrapper}>
       {/* Karta 1:1 z dashboard (index.tsx / PortfolioOverviewCard) */}
       <View style={[styles.card, { borderColor: cardAccent }]}>
-        <GlassSurface
+        {/* Efekt Liquid Glass z blurem - bardziej przeźroczyste tło z blurem jak w AssetCategoryCard */}
+        <BlurView
+          intensity={45}
+          tint={colors.mode === 'dark' ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
           pointerEvents="none"
-          tintColor={cardAccent}
-          style={[StyleSheet.absoluteFill, styles.cardGlass]}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: cardAccent + '15', // Bardziej przeźroczyste tło
+              opacity: colors.mode === 'dark' ? 0.78 : 0.65,
+            },
+          ]}
         />
 
-        <View>
+        <View style={styles.cardContent}>
           {/* Header */}
           <View style={styles.header}>
             <View>
@@ -163,8 +174,8 @@ const styles = StyleSheet.create({
     minHeight: 260,
     overflow: 'hidden',
   },
-  cardGlass: {
-    borderRadius: 18,
+  cardContent: {
+    zIndex: 1,
   },
   header: {
     flexDirection: 'row',
