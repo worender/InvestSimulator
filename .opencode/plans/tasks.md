@@ -18,5 +18,5 @@ Zasady:
 - [x] 7. Szczegóły instrumentu (desktop): dane z `ModalChartView` pokazane w panelu/siatce obok wykresu zamiast pełnoekranowego modala; modal zostaje na mobile.
 - [x] 8. Ekran Portfolio (desktop): ograniczona szerokość treści, pusty stan w panelu jak w xStation. (Tabela pozycji odłożona — ekran nie ma jeszcze danych pozycji także na mobile.)
 - [x] 9. Ekrany Nauka i Ustawienia (desktop): wyśrodkowana kolumna z maks. szerokością, ustawienia w 2 kolumnach sekcji.
-- [ ] 10. Skróty klawiszowe: `/` — wyszukiwanie instrumentów, `Esc` — zamknięcie modala/panelu, strzałki w liście instrumentów.
-- [ ] 11. Przegląd końcowy: zrzuty wszystkich ekranów we wszystkich breakpointach i motywach, poprawki niespójności z mobile.
+- [x] 10. Skróty klawiszowe: `/` — wyszukiwanie instrumentów, `Esc` — zamknięcie modala/panelu, strzałki w liście instrumentów.
+- [x] 11. Przegląd końcowy: zrzuty wszystkich ekranów we wszystkich breakpointach i motywach, poprawki niespójności z mobile.

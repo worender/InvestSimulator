@@ -164,7 +164,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
-  contentDesktop: { width: '100%', maxWidth: 1100, alignSelf: 'center', paddingHorizontal: 32, paddingTop: 40 },
+  contentDesktop: { width: '100%', maxWidth: 1100, alignSelf: 'center', paddingHorizontal: 32 },
   columns: { flexDirection: 'row', alignItems: 'flex-start', gap: 48 },
   column: { flex: 1, minWidth: 0 },
   intro: { fontSize: 15, lineHeight: 22 },

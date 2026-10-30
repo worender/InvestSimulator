@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Platform,
@@ -7,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +28,7 @@ import { StockCandleChart } from '../../components/StockCandleChart';
 import { currencySymbol, resolveCurrency } from '../../currency';
 import { notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
+import { useKeyboardShortcut } from '../../useKeyboardShortcut';
 import { useLayoutMode } from '../../useLayoutMode';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
@@ -82,6 +85,9 @@ export default function MarketScreen() {
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PL' | 'GLOBAL'>('ALL');
   const [stocksList, setStocksList] = useState<FeaturedStock[]>(DEFAULT_STOCKS);
   const { isDesktop } = useLayoutMode();
+  const { width: windowWidth } = useWindowDimensions();
+  // Na węższym desktopie lista oddaje miejsce wykresowi
+  const listPanelWidth = windowWidth >= 1280 ? 420 : 340;
   // Instrument pokazywany w prawym panelu na desktopie
   const [selectedStock, setSelectedStock] = useState<MarketInstrument & { currency: string }>(DEFAULT_STOCKS[0]);
 
@@ -245,6 +251,28 @@ export default function MarketScreen() {
     setCompletedQuery('');
   }, []);
 
+  // Skróty na webie działają tylko na widocznej zakładce (pozostałe zostają zamontowane w tle)
+  const isFocused = useIsFocused();
+  const openSearchShortcut = useCallback((event: KeyboardEvent) => {
+    event.preventDefault();
+    setSearchOpen(true);
+  }, []);
+  useKeyboardShortcut('/', openSearchShortcut, isFocused && !modalVisible);
+  useKeyboardShortcut('Escape', closeSearch, isFocused && searchOpen && !modalVisible);
+
+  // Strzałki góra/dół przełączają instrument w prawym panelu (desktop), lista przewija się do zaznaczenia
+  const selectByOffset = (offset: number) => (event: KeyboardEvent) => {
+    event.preventDefault();
+    if (filteredStocks.length === 0) return;
+    const current = filteredStocks.findIndex((stock) => stock.symbol === selectedStock.symbol);
+    const next = filteredStocks[Math.min(Math.max(current + offset, 0), filteredStocks.length - 1)];
+    setSelectedStock(next);
+    document.getElementById(`market-row-${next.symbol}`)?.scrollIntoView({ block: 'nearest' });
+  };
+  const arrowsEnabled = isFocused && isDesktop && !isSearching && !modalVisible;
+  useKeyboardShortcut('ArrowDown', selectByOffset(1), arrowsEnabled);
+  useKeyboardShortcut('ArrowUp', selectByOffset(-1), arrowsEnabled);
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
@@ -278,7 +306,7 @@ export default function MarketScreen() {
       {/* Na desktopie lista i wykres to dwa panele obok siebie, każdy przewijany osobno (jak w xStation) */}
       <View style={isDesktop ? styles.split : styles.root}>
       <ScrollView
-        style={isDesktop ? [styles.listPanel, { borderRightColor: colors.border }] : undefined}
+        style={isDesktop ? [styles.listPanel, { width: listPanelWidth, borderRightColor: colors.border }] : undefined}
         contentContainerStyle={[styles.content, { paddingTop: 24, paddingBottom: 38 + bottom }]}
         showsVerticalScrollIndicator={Platform.OS === 'web'}
         keyboardShouldPersistTaps="handled"
@@ -401,6 +429,7 @@ export default function MarketScreen() {
                 return (
                   <TouchableOpacity
                     key={stock.symbol}
+                    nativeID={`market-row-${stock.symbol}`}
                     style={[
                       styles.stockRow,
                       isDesktop && styles.stockRowDesktop,
@@ -546,7 +575,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   listPanel: {
-    width: 420,
     flexGrow: 0,
     borderRightWidth: 1,
   },

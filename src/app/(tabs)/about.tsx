@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
   // Na desktopie tekst w kolumnie o wygodnej do czytania szerokości
-  contentDesktop: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 32, paddingTop: 40 },
+  contentDesktop: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 32 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },
   title: { fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
   lead: { fontSize: 15, lineHeight: 23, marginTop: 12 },

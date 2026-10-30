@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import { TrendCards } from '../../components/TrendCards';
 import { resolveCurrency } from '../../currency';
 import { notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
+import { useKeyboardShortcut } from '../../useKeyboardShortcut';
 import { useLayoutMode } from '../../useLayoutMode';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
@@ -127,6 +128,15 @@ export default function Index() {
     setModalVisible(false);
     setModalInstrument(null);
   }, []);
+
+  // Skróty na webie działają tylko na widocznej zakładce (pozostałe zostają zamontowane w tle)
+  const isFocused = useIsFocused();
+  const openSearchShortcut = useCallback((event: KeyboardEvent) => {
+    event.preventDefault();
+    setSearchOpen(true);
+  }, []);
+  useKeyboardShortcut('/', openSearchShortcut, isFocused && !modalVisible);
+  useKeyboardShortcut('Escape', closeSearch, isFocused && searchOpen && !modalVisible);
 
   const query = searchQuery.trim();
   // Overlay pojawia się dla dwóch zanków wyszukiwania oraz gdy trwa ładowanie wyników
