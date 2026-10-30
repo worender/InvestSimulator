@@ -1,16 +1,16 @@
-require('dotenv').config();
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const express = require('express');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
-const YahooFinance = require('yahoo-finance2').default;
+require("dotenv").config();
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const express = require("express");
+const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const YahooFinance = require("yahoo-finance2").default;
 const yahooFinance = new YahooFinance();
 
 const app = express();
 app.use(cors());
-app.use(express.json()); 
+app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const PORT = Number(process.env.PORT || 3000);
@@ -20,17 +20,17 @@ const getLocalIpv4Address = () => {
 
   for (const addresses of Object.values(interfaces)) {
     const address = addresses?.find(
-      (candidate) => candidate.family === 'IPv4' && !candidate.internal,
+      (candidate) => candidate.family === "IPv4" && !candidate.internal,
     );
 
     if (address) return address.address;
   }
 
-  return 'localhost';
+  return "localhost";
 };
 
 const localAddress = getLocalIpv4Address();
-const serverAddressFile = path.join(__dirname, 'server-address.json');
+const serverAddressFile = path.join(__dirname, "server-address.json");
 
 try {
   fs.writeFileSync(
@@ -38,7 +38,10 @@ try {
     `${JSON.stringify({ host: localAddress, port: PORT, url: `http://${localAddress}:${PORT}` }, null, 2)}\n`,
   );
 } catch (error) {
-  console.warn('Nie udało się zapisać pliku server-address.json:', error.message);
+  console.warn(
+    "Nie udało się zapisać pliku server-address.json:",
+    error.message,
+  );
 }
 
 // MEMORY CACHE
@@ -46,146 +49,332 @@ const stockCache = new Map();
 const financialsCache = new Map();
 const performanceCache = new Map();
 const quoteDetailsCache = new Map();
+const newsCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minut
+const NEWS_CACHE_TTL = 10 * 60 * 1000; // 10 minut
+
+const NEWS_FEEDS = {
+  poland: ["EPOL", "PKO.WA", "PKN.WA", "PZU.WA", "CDR.WA", "KGH.WA"],
+  world: ["^GSPC", "^DJI", "^IXIC", "ACWI", "URTH"],
+};
+
+// Newsy z kanałów polskich spółek bywają przemieszane z globalnymi
+const POLAND_KEYWORDS =
+  /(poland|polish|warsaw|gpw|wig20|wig|polska|polski|polskie|polsce|pko|orlen|pkn|pzu|kgh|kghm|cd projekt|pekao|tauron|pge|dino|allegro|mbank|lpp|cyfrowy polsat|orange polska|bank polski|baltic power|wse:|\.wa\b)/i;
+
+const isRelevantPolandNews = (item) =>
+  POLAND_KEYWORDS.test(`${item.title} ${item.summary}`);
+
+const decodeXmlEntities = (value = "") =>
+  String(value)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) =>
+      String.fromCodePoint(parseInt(code, 16)),
+    )
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+
+const stripHtml = (value = "") =>
+  decodeXmlEntities(value)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const publisherFromLink = (link) => {
+  try {
+    const hostname = new URL(link).hostname.replace(/^www\./, "");
+    return hostname === "finance.yahoo.com" ? "Yahoo Finance" : hostname;
+  } catch {
+    return "Yahoo Finance";
+  }
+};
+
+const parseNewsRss = (xml) => {
+  const blocks = String(xml).match(/<item[\s>][\s\S]*?<\/item>/gi) || [];
+  const items = [];
+
+  for (const block of blocks) {
+    const pick = (tag) => {
+      const match = block.match(
+        new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i"),
+      );
+      return match ? stripHtml(match[1]) : "";
+    };
+
+    const title = pick("title");
+    const link = pick("link");
+    if (!title || !link) continue;
+
+    const publishedAt = new Date(pick("pubDate"));
+    const publisher = pick("source") || publisherFromLink(link);
+
+    items.push({
+      id: pick("guid") || link,
+      title,
+      summary: pick("description"),
+      publisher,
+      link,
+      publishedAt: Number.isNaN(publishedAt.getTime())
+        ? new Date().toISOString()
+        : publishedAt.toISOString(),
+    });
+  }
+
+  return items;
+};
+
+// Pobranie i scalenie newsów z wielu kanałów jednego tematu
+const fetchNewsForTopic = async (topic) => {
+  const symbols = NEWS_FEEDS[topic];
+  const responses = await Promise.allSettled(
+    symbols.map(async (symbol) => {
+      const url = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(symbol)}&region=US&lang=en-US`;
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; InvestSimulator/1.0)",
+        },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) throw new Error(`RSS ${symbol}: ${response.status}`);
+      return parseNewsRss(await response.text());
+    }),
+  );
+
+  const seen = new Set();
+  const merged = [];
+
+  for (const result of responses) {
+    if (result.status !== "fulfilled") continue;
+    for (const item of result.value) {
+      const key = item.link.split("?")[0].toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+    }
+  }
+
+  return merged.sort(
+    (a, b) => new Date(b.publishedAt) - new Date(a.publishedAt),
+  );
+};
+
+// Dla tematu "Polska" najpierw zwracamy artykuły faktycznie dotyczące polskiego rynku
+const orderNewsForTopic = (items, topic) => {
+  if (topic !== "poland") return items;
+  const relevant = items.filter(isRelevantPolandNews);
+  if (relevant.length >= 6) return relevant;
+  const rest = items.filter((item) => !isRelevantPolandNews(item));
+  return [...relevant, ...rest];
+};
 
 const normalizeYahooSymbol = (value, exchange) => {
   const symbol = String(value).trim().toUpperCase();
   if (!symbol) return symbol;
 
-  const normalizedExchange = String(exchange || '').trim().toUpperCase();
-  if (normalizedExchange === 'GPW' || normalizedExchange === 'WARSAW') {
-    return symbol.endsWith('.WA') ? symbol : `${symbol}.WA`;
+  const normalizedExchange = String(exchange || "")
+    .trim()
+    .toUpperCase();
+  if (normalizedExchange === "GPW" || normalizedExchange === "WARSAW") {
+    return symbol.endsWith(".WA") ? symbol : `${symbol}.WA`;
   }
-  if (normalizedExchange === 'LSE' || normalizedExchange === 'LONDON') {
-    return symbol.includes('.') ? symbol : `${symbol}.L`;
+  if (normalizedExchange === "LSE" || normalizedExchange === "LONDON") {
+    return symbol.includes(".") ? symbol : `${symbol}.L`;
   }
-  if (normalizedExchange === 'EURONEXT_PARIS' || normalizedExchange === 'PARIS') {
-    return symbol.includes('.') ? symbol : `${symbol}.PA`;
+  if (
+    normalizedExchange === "EURONEXT_PARIS" ||
+    normalizedExchange === "PARIS"
+  ) {
+    return symbol.includes(".") ? symbol : `${symbol}.PA`;
   }
-  if (normalizedExchange === 'NASDAQ' || normalizedExchange === 'NYSE') {
-    return symbol.replace(/\.WA$/, '');
+  if (normalizedExchange === "NASDAQ" || normalizedExchange === "NYSE") {
+    return symbol.replace(/\.WA$/, "");
   }
   if (normalizedExchange) {
     return symbol;
   }
-  if (symbol.includes('.') || symbol.includes('-') || symbol.includes('=') || symbol.startsWith('^')) {
+  if (
+    symbol.includes(".") ||
+    symbol.includes("-") ||
+    symbol.includes("=") ||
+    symbol.startsWith("^")
+  ) {
     return symbol;
   }
 
   return `${symbol}.WA`;
 };
 
-app.post('/api/guest', (req, res) => {
+app.post("/api/guest", (req, res) => {
   const { deviceId } = req.body;
-  if (!deviceId) return res.status(400).json({ error: 'Brak ID urządzenia' });
+  if (!deviceId) return res.status(400).json({ error: "Brak ID urządzenia" });
 
-  const token = jwt.sign({ deviceId }, JWT_SECRET, { expiresIn: '7d' });
-  console.log('Generowanie nowego tokenu JWT:', token);
+  const token = jwt.sign({ deviceId }, JWT_SECRET, { expiresIn: "7d" });
+  console.log("Generowanie nowego tokenu JWT:", token);
   res.json({ token });
 });
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
 
-  if (!token) return res.status(401).json({ error: 'Brak dostępu' });
+  if (!token) return res.status(401).json({ error: "Brak dostępu" });
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Token wygasł' });
+    if (err) return res.status(403).json({ error: "Token wygasł" });
     req.user = user;
-    next(); 
+    next();
   });
 };
 
-app.get('/api/instruments/search', authenticateToken, async (req, res) => {
-  const query = String(req.query.q || '').trim();
+app.get("/api/instruments/search", authenticateToken, async (req, res) => {
+  const query = String(req.query.q || "").trim();
   const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 25);
   if (query.length < 2) return res.json([]);
 
   try {
-    const result = await yahooFinance.search(query, { quotesCount: limit, newsCount: 0 });
+    const result = await yahooFinance.search(query, {
+      quotesCount: limit,
+      newsCount: 0,
+    });
     const instruments = (result.quotes || [])
       .filter((quote) => quote.isYahooFinance !== false && quote.symbol)
       .slice(0, limit)
       .map((quote) => ({
         symbol: quote.symbol,
         name: quote.longname || quote.shortname || quote.symbol,
-        exchange: quote.exchange || '',
-        exchangeName: quote.exchDisp || quote.exchange || 'Yahoo Finance',
-        quoteType: quote.quoteType || 'EQUITY',
+        exchange: quote.exchange || "",
+        exchangeName: quote.exchDisp || quote.exchange || "Yahoo Finance",
+        quoteType: quote.quoteType || "EQUITY",
       }));
 
     res.json(instruments);
   } catch (error) {
-    console.error('Błąd wyszukiwania instrumentów:', error.message);
-    res.status(502).json({ error: 'Nie udało się wyszukać instrumentów' });
+    console.error("Błąd wyszukiwania instrumentów:", error.message);
+    res.status(502).json({ error: "Nie udało się wyszukać instrumentów" });
   }
 });
 
-app.get('/api/instruments/quote', authenticateToken, async (req, res) => {
-  const requestedSymbol = String(req.query.symbol || '').trim();
+app.get("/api/instruments/quote", authenticateToken, async (req, res) => {
+  const requestedSymbol = String(req.query.symbol || "").trim();
   const exchange = req.query.exchange;
-  if (!requestedSymbol) return res.status(400).json({ error: 'Brak symbolu instrumentu' });
+  if (!requestedSymbol)
+    return res.status(400).json({ error: "Brak symbolu instrumentu" });
 
   const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
   try {
     const quote = await yahooFinance.quote(symbol, {}, { validate: false });
-    if (!quote) return res.status(404).json({ error: 'Brak notowania instrumentu' });
+    if (!quote)
+      return res.status(404).json({ error: "Brak notowania instrumentu" });
 
-    const marketState = quote.marketState || 'CLOSED';
-    const activeStates = new Set(['REGULAR', 'PRE', 'POST', 'PREPRE', 'POSTPOST']);
+    const marketState = quote.marketState || "CLOSED";
+    const activeStates = new Set([
+      "REGULAR",
+      "PRE",
+      "POST",
+      "PREPRE",
+      "POSTPOST",
+    ]);
     res.json({
       symbol,
-      exchange: quote.fullExchangeName || quote.exchange || 'Yahoo Finance',
+      exchange: quote.fullExchangeName || quote.exchange || "Yahoo Finance",
       marketState,
       isOpen: activeStates.has(marketState),
     });
   } catch (error) {
-    console.error(`Błąd pobierania statusu giełdy dla ${symbol}:`, error.message);
-    res.status(502).json({ error: 'Nie udało się pobrać statusu giełdy' });
+    console.error(
+      `Błąd pobierania statusu giełdy dla ${symbol}:`,
+      error.message,
+    );
+    res.status(502).json({ error: "Nie udało się pobrać statusu giełdy" });
   }
 });
 
-app.get('/api/trends', authenticateToken, async (req, res) => {
+app.get("/api/trends", authenticateToken, async (req, res) => {
   const screens = {
-    gainers: 'day_gainers',
-    active: 'most_actives',
-    technology: 'growth_technology_stocks',
-    undervalued: 'undervalued_large_caps',
+    gainers: "day_gainers",
+    active: "most_actives",
+    technology: "growth_technology_stocks",
+    undervalued: "undervalued_large_caps",
   };
-  const category = String(req.query.category || 'gainers');
+  const category = String(req.query.category || "gainers");
   const screen = screens[category] || screens.gainers;
 
   try {
     const result = await yahooFinance.screener(screen, { count: 5 });
-    res.json((result.quotes || []).slice(0, 5).map((quote) => ({
-      symbol: quote.symbol,
-      name: quote.shortName || quote.longName || quote.symbol,
-      exchange: quote.exchange || '',
-      exchangeName: quote.fullExchangeName || quote.exchange || 'Yahoo Finance',
-      changePercent: quote.regularMarketChangePercent ?? 0,
-    })));
+    res.json(
+      (result.quotes || []).slice(0, 5).map((quote) => ({
+        symbol: quote.symbol,
+        name: quote.shortName || quote.longName || quote.symbol,
+        exchange: quote.exchange || "",
+        exchangeName:
+          quote.fullExchangeName || quote.exchange || "Yahoo Finance",
+        changePercent: quote.regularMarketChangePercent ?? 0,
+      })),
+    );
   } catch (error) {
     console.error(`Błąd pobierania trendów ${category}:`, error.message);
-    res.status(502).json({ error: 'Nie udało się pobrać dynamicznych trendów' });
+    res
+      .status(502)
+      .json({ error: "Nie udało się pobrać dynamicznych trendów" });
+  }
+});
+
+// GET /api/news?topic=poland|world&limit=15
+app.get("/api/news", authenticateToken, async (req, res) => {
+  const topic = String(req.query.topic || "world").toLowerCase();
+  const limit = Math.min(Math.max(Number(req.query.limit) || 15, 1), 30);
+
+  if (!NEWS_FEEDS[topic]) {
+    return res.status(400).json({ error: "Nieznany temat newsów" });
+  }
+
+  const cacheKey = `news_${topic}_${limit}`;
+  const now = Date.now();
+  if (newsCache.has(cacheKey)) {
+    const cached = newsCache.get(cacheKey);
+    if (now - cached.timestamp < NEWS_CACHE_TTL) {
+      return res.json(cached.data);
+    }
+  }
+
+  try {
+    const items = orderNewsForTopic(
+      await fetchNewsForTopic(topic),
+      topic,
+    ).slice(0, limit);
+    const data = { topic, fetchedAt: new Date(now).toISOString(), items };
+    newsCache.set(cacheKey, { timestamp: now, data });
+    res.json(data);
+  } catch (error) {
+    console.error(`Błąd pobierania newsów (${topic}):`, error.message);
+    res
+      .status(502)
+      .json({ error: "Nie udało się pobrać newsów z Yahoo Finance" });
   }
 });
 
 // GET /api/candles?symbol=PKO
 // GET /api/candles?symbol=CDR&interval=1h&days=7
 // GET /api/candles?symbol=KGH&interval=15m&days=2
-app.get('/api/candles', authenticateToken, async (req, res) => {
-  const requestedSymbol = String(req.query.symbol || '');
+app.get("/api/candles", authenticateToken, async (req, res) => {
+  const requestedSymbol = String(req.query.symbol || "");
   const exchange = req.query.exchange;
   let symbol = requestedSymbol;
-  let interval = req.query.interval ? req.query.interval : '1d';
+  let interval = req.query.interval ? req.query.interval : "1d";
   let days = req.query.days ? req.query.days : 30;
-  if (!symbol) return res.status(400).json({ error: 'Brak symbolu akcji' });
+  if (!symbol) return res.status(400).json({ error: "Brak symbolu akcji" });
 
   symbol = normalizeYahooSymbol(symbol, exchange);
-  console.log(`Normalizacja symbolu: ${requestedSymbol} [${exchange || 'domyślna giełda'}] -> ${symbol}`);
+  console.log(
+    `Normalizacja symbolu: ${requestedSymbol} [${exchange || "domyślna giełda"}] -> ${symbol}`,
+  );
 
-  
   const cacheKey = `${symbol}_${interval}_${days}`;
   const now = Date.now();
 
@@ -200,7 +389,7 @@ app.get('/api/candles', authenticateToken, async (req, res) => {
 
   try {
     console.log(`Pobieram świece z giełdy: ${cacheKey}`);
-    
+
     // Obliczenie daty początkowej (np. 30 dni wstecz)
     const period1 = new Date(now - Number(days) * 24 * 60 * 60 * 1000);
 
@@ -210,13 +399,15 @@ app.get('/api/candles', authenticateToken, async (req, res) => {
     });
 
     if (!result || !result.quotes || result.quotes.length === 0) {
-      return res.status(404).json({ error: 'Brak danych dla podanego symbolu' });
+      return res
+        .status(404)
+        .json({ error: "Brak danych dla podanego symbolu" });
     }
 
     /// Candle formatting data
     const formattedCandles = result.quotes
-      .filter(q => q.open !== null && q.close !== null)
-      .map(q => ({
+      .filter((q) => q.open !== null && q.close !== null)
+      .map((q) => ({
         timestamp: new Date(q.date).getTime(), // Konwersja daty na timestamp w milisekundach
         open: Math.round(q.open * 100) / 100,
         high: Math.round(q.high * 100) / 100,
@@ -227,13 +418,15 @@ app.get('/api/candles', authenticateToken, async (req, res) => {
     // 3. Zapis do cache'u
     stockCache.set(cacheKey, {
       timestamp: now,
-      data: formattedCandles
+      data: formattedCandles,
     });
 
     res.json(formattedCandles);
   } catch (error) {
     console.error(`Błąd pobierania świec dla ${symbol}:`, error.message);
-    res.status(500).json({ error: 'Błąd podczas pobierania danych historycznych' });
+    res
+      .status(500)
+      .json({ error: "Błąd podczas pobierania danych historycznych" });
   }
 });
 
@@ -249,19 +442,30 @@ const calculatePerformance = async (symbol) => {
 
   try {
     const nowObj = new Date();
-    const fiveYearsAgo = new Date(nowObj.getFullYear() - 5, nowObj.getMonth(), nowObj.getDate());
-    const chart = await yahooFinance.chart(symbol, { period1: fiveYearsAgo, interval: '1mo' }, { validate: false });
+    const fiveYearsAgo = new Date(
+      nowObj.getFullYear() - 5,
+      nowObj.getMonth(),
+      nowObj.getDate(),
+    );
+    const chart = await yahooFinance.chart(
+      symbol,
+      { period1: fiveYearsAgo, interval: "1mo" },
+      { validate: false },
+    );
     const quotes = (chart?.quotes || []).filter((q) => q && q.close != null);
     if (!quotes.length) return null;
 
     const currentPrice = quotes[quotes.length - 1].close;
     const nowYear = nowObj.getFullYear();
-    const ytdQuote = quotes.find((q) => new Date(q.date).getFullYear() === nowYear) || quotes[quotes.length - 1];
+    const ytdQuote =
+      quotes.find((q) => new Date(q.date).getFullYear() === nowYear) ||
+      quotes[quotes.length - 1];
     const q1Y = quotes.length >= 13 ? quotes[quotes.length - 13] : quotes[0];
     const q3Y = quotes.length >= 37 ? quotes[quotes.length - 37] : quotes[0];
     const q5Y = quotes[0];
 
-    const calcRet = (base) => (base && base.close ? ((currentPrice - base.close) / base.close) * 100 : 0);
+    const calcRet = (base) =>
+      base && base.close ? ((currentPrice - base.close) / base.close) * 100 : 0;
     const p1Y = calcRet(q1Y);
     const p3Y = calcRet(q3Y);
     const p5Y = calcRet(q5Y);
@@ -273,22 +477,36 @@ const calculatePerformance = async (symbol) => {
       performance5Y: Math.round(p5Y * 100) / 100,
       performanceYTD: Math.round(pYTD * 100) / 100,
       oneYearAvgReturn: Math.round(p1Y * 100) / 100,
-      threeYearAvgReturn: p3Y > -100 ? Math.round((Math.pow(Math.max(0.001, 1 + p3Y / 100), 1 / 3) - 1) * 10000) / 100 : 0,
-      fiveYearAvgReturn: p5Y > -100 ? Math.round((Math.pow(Math.max(0.001, 1 + p5Y / 100), 1 / 5) - 1) * 10000) / 100 : 0,
+      threeYearAvgReturn:
+        p3Y > -100
+          ? Math.round(
+              (Math.pow(Math.max(0.001, 1 + p3Y / 100), 1 / 3) - 1) * 10000,
+            ) / 100
+          : 0,
+      fiveYearAvgReturn:
+        p5Y > -100
+          ? Math.round(
+              (Math.pow(Math.max(0.001, 1 + p5Y / 100), 1 / 5) - 1) * 10000,
+            ) / 100
+          : 0,
     };
 
     performanceCache.set(cacheKey, { timestamp: now, data: perfData });
     return perfData;
   } catch (error) {
-    console.warn(`Nie udało się obliczyć wyników historycznych dla ${symbol}:`, error.message);
+    console.warn(
+      `Nie udało się obliczyć wyników historycznych dla ${symbol}:`,
+      error.message,
+    );
     return null;
   }
 };
 
-app.get('/api/instruments/financials', authenticateToken, async (req, res) => {
-  const requestedSymbol = String(req.query.symbol || '').trim();
+app.get("/api/instruments/financials", authenticateToken, async (req, res) => {
+  const requestedSymbol = String(req.query.symbol || "").trim();
   const exchange = req.query.exchange;
-  if (!requestedSymbol) return res.status(400).json({ error: 'Brak symbolu akcji' });
+  if (!requestedSymbol)
+    return res.status(400).json({ error: "Brak symbolu akcji" });
 
   const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
   const cacheKey = `financials_${symbol}`;
@@ -303,14 +521,23 @@ app.get('/api/instruments/financials', authenticateToken, async (req, res) => {
 
   try {
     const [quoteSummary, quote, perf] = await Promise.all([
-      yahooFinance.quoteSummary(
-        symbol,
-        { modules: ['summaryDetail', 'defaultKeyStatistics', 'financialData', 'price'] },
-        { validate: false },
-      ).catch((err) => {
-        console.warn(`Błąd quoteSummary dla ${symbol}:`, err.message);
-        return null;
-      }),
+      yahooFinance
+        .quoteSummary(
+          symbol,
+          {
+            modules: [
+              "summaryDetail",
+              "defaultKeyStatistics",
+              "financialData",
+              "price",
+            ],
+          },
+          { validate: false },
+        )
+        .catch((err) => {
+          console.warn(`Błąd quoteSummary dla ${symbol}:`, err.message);
+          return null;
+        }),
       yahooFinance.quote(symbol, {}, { validate: false }).catch((err) => {
         console.warn(`Błąd quote dla ${symbol}:`, err.message);
         return null;
@@ -319,7 +546,9 @@ app.get('/api/instruments/financials', authenticateToken, async (req, res) => {
     ]);
 
     if (!quoteSummary && !quote) {
-      return res.status(404).json({ error: 'Brak danych finansowych dla podanego symbolu' });
+      return res
+        .status(404)
+        .json({ error: "Brak danych finansowych dla podanego symbolu" });
     }
 
     const price = quoteSummary?.price || {};
@@ -328,63 +557,101 @@ app.get('/api/instruments/financials', authenticateToken, async (req, res) => {
     const finData = quoteSummary?.financialData || {};
 
     const normalizePercent = (val) => {
-      if (val === undefined || val === null || Number.isNaN(val)) return undefined;
+      if (val === undefined || val === null || Number.isNaN(val))
+        return undefined;
       return Math.abs(val) <= 1 ? val * 100 : val;
     };
 
-    const regularMarketPrice = quote?.regularMarketPrice ?? price?.regularMarketPrice ?? finData?.currentPrice ?? 0;
-    const regularMarketChange = quote?.regularMarketChange ?? price?.regularMarketChange ?? 0;
-    const regularMarketChangePercent = quote?.regularMarketChangePercent != null
-      ? quote.regularMarketChangePercent
-      : (price?.regularMarketChangePercent != null ? price.regularMarketChangePercent * 100 : 0);
+    const regularMarketPrice =
+      quote?.regularMarketPrice ??
+      price?.regularMarketPrice ??
+      finData?.currentPrice ??
+      0;
+    const regularMarketChange =
+      quote?.regularMarketChange ?? price?.regularMarketChange ?? 0;
+    const regularMarketChangePercent =
+      quote?.regularMarketChangePercent != null
+        ? quote.regularMarketChangePercent
+        : price?.regularMarketChangePercent != null
+          ? price.regularMarketChangePercent * 100
+          : 0;
 
-    const dividendYieldRaw = summaryDetail?.dividendYield ?? quote?.dividendYield;
-    const dividendYield = dividendYieldRaw != null ? normalizePercent(dividendYieldRaw) : undefined;
+    const dividendYieldRaw =
+      summaryDetail?.dividendYield ?? quote?.dividendYield;
+    const dividendYield =
+      dividendYieldRaw != null ? normalizePercent(dividendYieldRaw) : undefined;
 
     const payoutRatioRaw = summaryDetail?.payoutRatio;
-    const payoutRatio = payoutRatioRaw != null ? normalizePercent(payoutRatioRaw) : undefined;
+    const payoutRatio =
+      payoutRatioRaw != null ? normalizePercent(payoutRatioRaw) : undefined;
 
     const fiveYearAvgDividendYieldRaw = summaryDetail?.fiveYearAvgDividendYield;
-    const fiveYearAvgDividendYield = fiveYearAvgDividendYieldRaw != null ? normalizePercent(fiveYearAvgDividendYieldRaw) : undefined;
+    const fiveYearAvgDividendYield =
+      fiveYearAvgDividendYieldRaw != null
+        ? normalizePercent(fiveYearAvgDividendYieldRaw)
+        : undefined;
 
     const profitMarginsRaw = finData?.profitMargins;
-    const profitMargins = profitMarginsRaw != null ? normalizePercent(profitMarginsRaw) : undefined;
+    const profitMargins =
+      profitMarginsRaw != null ? normalizePercent(profitMarginsRaw) : undefined;
 
     const shortPercentOfFloatRaw = defaultKeyStatistics?.shortPercentOfFloat;
-    const shortPercentOfFloat = shortPercentOfFloatRaw != null ? normalizePercent(shortPercentOfFloatRaw) : undefined;
+    const shortPercentOfFloat =
+      shortPercentOfFloatRaw != null
+        ? normalizePercent(shortPercentOfFloatRaw)
+        : undefined;
 
-    const marketCapVal = summaryDetail?.marketCap ?? price?.marketCap ?? quote?.marketCap;
+    const marketCapVal =
+      summaryDetail?.marketCap ?? price?.marketCap ?? quote?.marketCap;
     const freeCashflowVal = finData?.freeCashflow;
-    const priceToFreeCashFlow = freeCashflowVal && marketCapVal ? marketCapVal / freeCashflowVal : undefined;
+    const priceToFreeCashFlow =
+      freeCashflowVal && marketCapVal
+        ? marketCapVal / freeCashflowVal
+        : undefined;
 
     const lastSplitDateVal = defaultKeyStatistics?.lastSplitDate;
     const lastSplitDate = lastSplitDateVal
-      ? (typeof lastSplitDateVal === 'number'
-          ? new Date(lastSplitDateVal * 1000).toISOString()
-          : new Date(lastSplitDateVal).toISOString())
+      ? typeof lastSplitDateVal === "number"
+        ? new Date(lastSplitDateVal * 1000).toISOString()
+        : new Date(lastSplitDateVal).toISOString()
       : undefined;
 
     const exDividendDateVal = summaryDetail?.exDividendDate;
     const exDividendDate = exDividendDateVal
-      ? (typeof exDividendDateVal === 'number'
-          ? new Date(exDividendDateVal * 1000).toISOString()
-          : new Date(exDividendDateVal).toISOString())
+      ? typeof exDividendDateVal === "number"
+        ? new Date(exDividendDateVal * 1000).toISOString()
+        : new Date(exDividendDateVal).toISOString()
       : undefined;
 
-    const perf1Y = perf?.performance1Y ?? (quote?.fiftyTwoWeekChangePercent != null
-      ? quote.fiftyTwoWeekChangePercent
-      : (defaultKeyStatistics?.['52WeekChange'] != null ? defaultKeyStatistics['52WeekChange'] * 100 : undefined));
+    const perf1Y =
+      perf?.performance1Y ??
+      (quote?.fiftyTwoWeekChangePercent != null
+        ? quote.fiftyTwoWeekChangePercent
+        : defaultKeyStatistics?.["52WeekChange"] != null
+          ? defaultKeyStatistics["52WeekChange"] * 100
+          : undefined);
 
     const result = {
       symbol: requestedSymbol,
-      currency: price?.currency || quote?.currency || 'USD',
+      currency: price?.currency || quote?.currency || "USD",
       price: regularMarketPrice,
       change: regularMarketChange,
       changePercent: regularMarketChangePercent,
-      volume: quote?.regularMarketVolume ?? price?.regularMarketVolume ?? summaryDetail?.regularMarketVolume ?? 0,
-      averageVolume: summaryDetail?.averageDailyVolume10Day ?? summaryDetail?.averageVolume10days ?? quote?.averageDailyVolume10Day ?? 0,
+      volume:
+        quote?.regularMarketVolume ??
+        price?.regularMarketVolume ??
+        summaryDetail?.regularMarketVolume ??
+        0,
+      averageVolume:
+        summaryDetail?.averageDailyVolume10Day ??
+        summaryDetail?.averageVolume10days ??
+        quote?.averageDailyVolume10Day ??
+        0,
       marketCap: marketCapVal ?? 0,
-      sharesOutstanding: defaultKeyStatistics?.sharesOutstanding ?? quote?.sharesOutstanding ?? 0,
+      sharesOutstanding:
+        defaultKeyStatistics?.sharesOutstanding ??
+        quote?.sharesOutstanding ??
+        0,
       bookValue: defaultKeyStatistics?.bookValue ?? quote?.bookValue ?? 0,
       dividendRate: summaryDetail?.dividendRate ?? quote?.dividendRate ?? 0,
       dividendYield: dividendYield ?? 0,
@@ -393,7 +660,11 @@ app.get('/api/instruments/financials', authenticateToken, async (req, res) => {
       fiveYearAvgDividendYield: fiveYearAvgDividendYield ?? 0,
       beta: summaryDetail?.beta ?? defaultKeyStatistics?.beta ?? 0,
       trailingPE: summaryDetail?.trailingPE ?? quote?.trailingPE ?? 0,
-      forwardPE: summaryDetail?.forwardPE ?? quote?.forwardPE ?? defaultKeyStatistics?.forwardPE ?? 0,
+      forwardPE:
+        summaryDetail?.forwardPE ??
+        quote?.forwardPE ??
+        defaultKeyStatistics?.forwardPE ??
+        0,
       priceToBook: defaultKeyStatistics?.priceToBook ?? quote?.priceToBook ?? 0,
       priceToSales: summaryDetail?.priceToSalesTrailing12Months ?? 0,
       enterpriseValue: defaultKeyStatistics?.enterpriseValue ?? 0,
@@ -405,7 +676,7 @@ app.get('/api/instruments/financials', authenticateToken, async (req, res) => {
       sharesShort: defaultKeyStatistics?.sharesShort ?? 0,
       shortRatio: defaultKeyStatistics?.shortRatio ?? 0,
       shortPercentOfFloat: shortPercentOfFloat ?? 0,
-      lastSplitFactor: defaultKeyStatistics?.lastSplitFactor || '',
+      lastSplitFactor: defaultKeyStatistics?.lastSplitFactor || "",
       lastSplitDate: lastSplitDate,
       fiveYearAvgReturn: perf?.fiveYearAvgReturn ?? 0,
       threeYearAvgReturn: perf?.threeYearAvgReturn ?? 0,
@@ -419,84 +690,103 @@ app.get('/api/instruments/financials', authenticateToken, async (req, res) => {
     financialsCache.set(cacheKey, { timestamp: now, data: result });
     res.json(result);
   } catch (error) {
-    console.error(`Błąd pobierania danych finansowych dla ${symbol}:`, error.message);
-    res.status(500).json({ error: 'Błąd podczas pobierania danych finansowych' });
+    console.error(
+      `Błąd pobierania danych finansowych dla ${symbol}:`,
+      error.message,
+    );
+    res
+      .status(500)
+      .json({ error: "Błąd podczas pobierania danych finansowych" });
   }
 });
 
-app.get('/api/instruments/performance', authenticateToken, async (req, res) => {
-  const requestedSymbol = String(req.query.symbol || '').trim();
+app.get("/api/instruments/performance", authenticateToken, async (req, res) => {
+  const requestedSymbol = String(req.query.symbol || "").trim();
   const exchange = req.query.exchange;
-  if (!requestedSymbol) return res.status(400).json({ error: 'Brak symbolu akcji' });
+  if (!requestedSymbol)
+    return res.status(400).json({ error: "Brak symbolu akcji" });
 
   const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
   try {
     const perf = await calculatePerformance(symbol);
     if (!perf) {
-      return res.status(404).json({ error: 'Brak danych o wynikach historycznych' });
+      return res
+        .status(404)
+        .json({ error: "Brak danych o wynikach historycznych" });
     }
     res.json(perf);
   } catch (error) {
     console.error(`Błąd pobierania wyników dla ${symbol}:`, error.message);
-    res.status(500).json({ error: 'Błąd pobierania wyników historycznych' });
+    res.status(500).json({ error: "Błąd pobierania wyników historycznych" });
   }
 });
 
-app.get('/api/instruments/quote-details', authenticateToken, async (req, res) => {
-  const requestedSymbol = String(req.query.symbol || '').trim();
-  const exchange = req.query.exchange;
-  if (!requestedSymbol) return res.status(400).json({ error: 'Brak symbolu akcji' });
+app.get(
+  "/api/instruments/quote-details",
+  authenticateToken,
+  async (req, res) => {
+    const requestedSymbol = String(req.query.symbol || "").trim();
+    const exchange = req.query.exchange;
+    if (!requestedSymbol)
+      return res.status(400).json({ error: "Brak symbolu akcji" });
 
-  const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
-  const cacheKey = `quote_details_${symbol}`;
-  const now = Date.now();
+    const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
+    const cacheKey = `quote_details_${symbol}`;
+    const now = Date.now();
 
-  if (quoteDetailsCache.has(cacheKey)) {
-    const cached = quoteDetailsCache.get(cacheKey);
-    if (now - cached.timestamp < CACHE_TTL) {
-      return res.json(cached.data);
-    }
-  }
-
-  try {
-    const quote = await yahooFinance.quote(symbol, {}, { validate: false });
-    if (!quote) {
-      return res.status(404).json({ error: 'Brak szczegółów notowania' });
+    if (quoteDetailsCache.has(cacheKey)) {
+      const cached = quoteDetailsCache.get(cacheKey);
+      if (now - cached.timestamp < CACHE_TTL) {
+        return res.json(cached.data);
+      }
     }
 
-    const data = {
-      symbol: requestedSymbol,
-      currency: quote.currency || 'USD',
-      price: quote.regularMarketPrice ?? 0,
-      change: quote.regularMarketChange ?? 0,
-      changePercent: quote.regularMarketChangePercent ?? 0,
-      volume: quote.regularMarketVolume ?? 0,
-      averageVolume: quote.averageDailyVolume10Day ?? quote.averageDailyVolume3Month ?? 0,
-      marketCap: quote.marketCap ?? 0,
-      trailingPE: quote.trailingPE ?? 0,
-      forwardPE: quote.forwardPE ?? 0,
-      priceToBook: quote.priceToBook ?? 0,
-      sharesOutstanding: quote.sharesOutstanding ?? 0,
-      bookValue: quote.bookValue ?? 0,
-      dividendRate: quote.dividendRate ?? quote.trailingAnnualDividendRate ?? 0,
-      dividendYield: quote.dividendYield ?? quote.trailingAnnualDividendYield ?? 0,
-      fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? 0,
-      fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? 0,
-      fiftyTwoWeekChangePercent: quote.fiftyTwoWeekChangePercent ?? 0,
-    };
+    try {
+      const quote = await yahooFinance.quote(symbol, {}, { validate: false });
+      if (!quote) {
+        return res.status(404).json({ error: "Brak szczegółów notowania" });
+      }
 
-    quoteDetailsCache.set(cacheKey, { timestamp: now, data });
-    res.json(data);
-  } catch (error) {
-    console.error(`Błąd pobierania szczegółów notowania dla ${symbol}:`, error.message);
-    res.status(500).json({ error: 'Błąd pobierania szczegółów notowania' });
-  }
-});
+      const data = {
+        symbol: requestedSymbol,
+        currency: quote.currency || "USD",
+        price: quote.regularMarketPrice ?? 0,
+        change: quote.regularMarketChange ?? 0,
+        changePercent: quote.regularMarketChangePercent ?? 0,
+        volume: quote.regularMarketVolume ?? 0,
+        averageVolume:
+          quote.averageDailyVolume10Day ?? quote.averageDailyVolume3Month ?? 0,
+        marketCap: quote.marketCap ?? 0,
+        trailingPE: quote.trailingPE ?? 0,
+        forwardPE: quote.forwardPE ?? 0,
+        priceToBook: quote.priceToBook ?? 0,
+        sharesOutstanding: quote.sharesOutstanding ?? 0,
+        bookValue: quote.bookValue ?? 0,
+        dividendRate:
+          quote.dividendRate ?? quote.trailingAnnualDividendRate ?? 0,
+        dividendYield:
+          quote.dividendYield ?? quote.trailingAnnualDividendYield ?? 0,
+        fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? 0,
+        fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? 0,
+        fiftyTwoWeekChangePercent: quote.fiftyTwoWeekChangePercent ?? 0,
+      };
 
-app.get('/api/quote', authenticateToken, async (req, res) => {
-  const requestedSymbol = String(req.query.symbol || '').trim();
+      quoteDetailsCache.set(cacheKey, { timestamp: now, data });
+      res.json(data);
+    } catch (error) {
+      console.error(
+        `Błąd pobierania szczegółów notowania dla ${symbol}:`,
+        error.message,
+      );
+      res.status(500).json({ error: "Błąd pobierania szczegółów notowania" });
+    }
+  },
+);
+
+app.get("/api/quote", authenticateToken, async (req, res) => {
+  const requestedSymbol = String(req.query.symbol || "").trim();
   const exchange = req.query.exchange;
-  if (!requestedSymbol) return res.status(400).json({ error: 'Brak symbolu' });
+  if (!requestedSymbol) return res.status(400).json({ error: "Brak symbolu" });
 
   const symbol = normalizeYahooSymbol(requestedSymbol, exchange);
   try {
@@ -509,23 +799,21 @@ app.get('/api/quote', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error(`Błąd pobierania notowania dla ${symbol}:`, error.message);
-    res.status(500).json({ error: 'Błąd notowania' });
+    res.status(500).json({ error: "Błąd notowania" });
   }
 });
 
-app.get('/api/config', (req, res) => {
+app.get("/api/config", (req, res) => {
   try {
-    const config = fs.readFileSync(serverAddressFile, 'utf8');
+    const config = fs.readFileSync(serverAddressFile, "utf8");
     res.json(JSON.parse(config));
   } catch (error) {
-    console.error('Błąd pobierania konfiguracji API:', error.message);
-    res.status(500).json({ error: 'Nie udało się pobrać konfiguracji API' });
+    console.error("Błąd pobierania konfiguracji API:", error.message);
+    res.status(500).json({ error: "Nie udało się pobrać konfiguracji API" });
   }
 });
 
-
-
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Backend działa pod adresem http://${localAddress}:${PORT}`);
   console.log(`Adres zapisano w pliku ${serverAddressFile}`);
 });

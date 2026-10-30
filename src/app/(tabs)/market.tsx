@@ -211,7 +211,7 @@ export default function MarketScreen() {
   });
 
   const searchTerm = searchQuery.trim();
-  const isSearching = searchTerm.length >= 2 && (searchLoading || completedQuery !== '');
+  const isSearching = searchOpen && searchTerm.length >= 2 && (searchLoading || completedQuery !== '');
   const stockSectionTitle =
     selectedFilter === 'ALL'
       ? 'Wybrane spółki GPW i światowe'
@@ -223,11 +223,10 @@ export default function MarketScreen() {
     setSelectedFilter((current) => (current === 'ALL' ? 'PL' : current === 'PL' ? 'GLOBAL' : 'ALL'));
   };
 
+  // Funkcja zamykająca wyszukiwanie; zapytanie i wyniki zostają zapamiętane,
+  // dzięki czemu po ponownym otwarciu można je od razu podmienić
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
-    setSearchQuery('');
-    setSearchResults([]);
-    setCompletedQuery('');
   }, []);
 
   return (

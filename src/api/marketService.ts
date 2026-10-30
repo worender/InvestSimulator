@@ -458,7 +458,7 @@ export interface StockFinancialData {
 }
 
 // Funckja autentyfikująca żądania do API z użyciem tokenu JWT
-const authenticatedFetch = async (endpointPath: string): Promise<Response | null> => {
+export const authenticatedFetch = async (endpointPath: string): Promise<Response | null> => {
   try {
     const baseUrl = await getApiBaseUrl();
     const request = (token: string) =>
