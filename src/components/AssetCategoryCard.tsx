@@ -74,7 +74,6 @@ export function AssetCategoryCard({
       />
 
       <View style={styles.cardContent}>
-        {/* Górny wiersz: Ikona i Nazwa (tytuł) bez pogrubienia i bez przycisków */}
         <View style={styles.headerRow}>
           <View
             style={[
@@ -92,7 +91,6 @@ export function AssetCategoryCard({
           </Text>
         </View>
 
-        {/* Wartość alokacji i zysk/strata pod sobą – czcionka nie-bold */}
         <View style={styles.valuesBlock}>
           <Text style={[styles.totalAmount, { color: colors.text }]} numberOfLines={1}>
             {formattedTotal}
@@ -147,7 +145,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 14,
-    fontWeight: '400', // Cienka/nie-bold czcionka
+    fontWeight: '400',
     flexShrink: 1,
   },
   valuesBlock: {
@@ -155,7 +153,7 @@ const styles = StyleSheet.create({
   },
   totalAmount: {
     fontSize: 17,
-    fontWeight: '500', // Bez bold
+    fontWeight: '500',
     letterSpacing: -0.2,
   },
   profitRow: {
@@ -166,10 +164,10 @@ const styles = StyleSheet.create({
   },
   profitAmount: {
     fontSize: 12,
-    fontWeight: '400', // Bez bold
+    fontWeight: '400',
   },
   profitPct: {
     fontSize: 11,
-    fontWeight: '400', // Bez bold
+    fontWeight: '400',
   },
 });

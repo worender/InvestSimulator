@@ -1,6 +1,6 @@
 import { useId, useMemo, useState } from 'react';
 import { LayoutChangeEvent, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 import { useTheme } from '../theme';
 
 export type TrendPoint = {
@@ -10,9 +10,7 @@ export type TrendPoint = {
 
 export type TrendChartProps = {
   data: TrendPoint[];
-  /** Wysokość samego pola wykresu (bez stopki z okresem). */
   height?: number;
-  /** Pokazuje podpisy „X dni temu / dziś” pod wykresem. */
   showPeriod?: boolean;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
@@ -36,12 +34,7 @@ export function trendChangePercent(data: TrendPoint[], fallback = 0): number {
 }
 
 /**
- * Reużywalny mini-wykres trendu.
- *
- * - Oś Y pokazuje zmianę procentową względem pierwszego punktu (0% = start okresu),
- *   a nie przypadkowe wartości bezwzględne.
- * - Siatka ogranicza się do delikatnej linii bazowej 0% — bez pionowych linii.
- * - Skala zawsze zawiera 0%, więc wzrost/spadek jest proporcjonalny do realnej zmiany.
+ * Reużywalny mini-wykres trendu
  */
 export function TrendChart({
   data,
@@ -66,15 +59,11 @@ export function TrendChart({
     const firstValue = data[0].value;
     const latestTimestamp = data[data.length - 1].timestamp;
     const changePercent = trendChangePercent(data);
-
-    // Seria w procentach względem pierwszej wartości — oś i kształt wykresu są spójne.
     const changes = data.map((point) =>
       firstValue === 0 ? 0 : ((point.value - firstValue) / firstValue) * 100,
     );
     const seriesMin = Math.min(0, ...changes);
     const seriesMax = Math.max(0, ...changes);
-
-    // Minimalny zakres, żeby mały ruch nie wyglądał jak dramatyczna zmiana.
     const span = Math.max(seriesMax - seriesMin, 2);
     const pad = Math.max(span * 0.12, 0.35);
     const min = seriesMin - pad;
@@ -135,7 +124,6 @@ export function TrendChart({
                 </LinearGradient>
               </Defs>
 
-              {/* Jedyna linia siatki: poziom startu okresu (0%). */}
               <Line
                 x1={0}
                 x2={Math.max(width - AXIS_WIDTH, 1)}
@@ -157,7 +145,6 @@ export function TrendChart({
                 strokeLinejoin="round"
               />
 
-              {/* Punkt ostatniej wartości z delikatną poświatą. */}
               <Circle
                 cx={chart.points[chart.points.length - 1].x}
                 cy={chart.points[chart.points.length - 1].y}
@@ -207,7 +194,6 @@ export function TrendChart({
   );
 }
 
-// Etykiety osi pokazują rzeczywiste ekstrema serii i poziom 0%, a nie sztuczne granice skali.
 function buildAxisMarks(
   chart: {
     toY: (value: number) => number;
@@ -221,7 +207,6 @@ function buildAxisMarks(
     { value: 0, strong: true },
     { value: chart.seriesMin, strong: false },
   ].filter((candidate) => {
-    // Pomijamy drobne wybicia po drugiej stronie zera — nie wnoszą informacji.
     if (candidate.value === 0) return true;
     const span = Math.max(chart.seriesMax - chart.seriesMin, 0.01);
     return Math.abs(candidate.value) >= span * 0.08;
@@ -252,7 +237,7 @@ function buildAxisMarks(
   return marks;
 }
 
-// Gładka krzywa bez przestrzeliwania: punkty kontrolne mają wysokość końców odcinka.
+// Gładka krzywa bez przestrzeliwania
 function buildSmoothPath(points: { x: number; y: number }[]) {
   if (points.length === 0) return '';
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;

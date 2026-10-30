@@ -1,18 +1,14 @@
 import { useId, useMemo, useState } from 'react';
 import { LayoutChangeEvent, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 import { useTheme } from '../theme';
 import type { TrendPoint } from './TrendChart';
 
 export type PortfolioResultChartProps = {
-  /** Punkty serii — wartości portfela w czasie. */
   data: TrendPoint[];
-  /** Symbol waluty dopisywany do pionowej legendy, np. „zł”. */
   currencySymbol?: string;
   height?: number;
-  /** Kolor linii; domyślnie zielony/czerwony w zależności od wyniku. */
   color?: string;
-  /** Opis zakresu obok dat, np. „3 miesiące”. */
   periodLabel?: string;
   style?: StyleProp<ViewStyle>;
 };
@@ -22,10 +18,6 @@ const AXIS_LABEL_HEIGHT = 12;
 const TOP_PADDING = 6;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/**
- * Wykres wyników portfela — wizualnie spójny z TrendChart, ale pokazuje
- * wartości bezwzględne (pionowa legenda walutowa) oraz zakres dat pod spodem.
- */
 export function PortfolioResultChart({
   data,
   currencySymbol,
@@ -111,7 +103,7 @@ export function PortfolioResultChart({
                 </LinearGradient>
               </Defs>
 
-              {/* Poziom startowy — pokazuje, czy portfel zyskał, czy stracił. */}
+              {/* Poziom startowy — pokazuje, czy portfel zyskał, czy stracił */}
               <Line
                 x1={0}
                 x2={Math.max(width - AXIS_WIDTH, 1)}
@@ -160,10 +152,6 @@ export function PortfolioResultChart({
   );
 }
 
-/**
- * Buduje gęstą serię z kilku punktów kontrolnych (np. start / środek / koniec)
- * i dodaje delikatne, deterministyczne wahania, żeby wykres nie był tylko łamaną.
- */
 export function buildPortfolioSeries(anchors: number[], days = 90, points = 13): TrendPoint[] {
   if (anchors.length === 0) return [];
   if (anchors.length === 1) {
@@ -180,7 +168,6 @@ export function buildPortfolioSeries(anchors: number[], days = 90, points = 13):
     const segment = Math.min(Math.floor(scaled), anchors.length - 2);
     const local = scaled - segment;
     const base = anchors[segment] + (anchors[segment + 1] - anchors[segment]) * local;
-    // Fala wygasa na końcach, więc pierwsza i ostatnia wartość są dokładne.
     const wave = amplitude * Math.sin(index * 1.9) * Math.sin(ratio * Math.PI);
 
     return {

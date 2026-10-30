@@ -46,9 +46,7 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
 
   return (
     <View style={styles.wrapper}>
-      {/* Karta 1:1 z dashboard (index.tsx / PortfolioOverviewCard) */}
       <View style={styles.card}>
-        {/* Efekt Liquid Glass z blurem - bardziej przeźroczyste tło z blurem jak w AssetCategoryCard */}
         <BlurView
           intensity={45}
           tint={mode === 'dark' ? 'dark' : 'light'}
@@ -59,7 +57,7 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
           style={[
             StyleSheet.absoluteFill,
             {
-              backgroundColor: cardAccent + '15', // Bardziej przeźroczyste tło
+              backgroundColor: cardAccent + '15',
               opacity: mode === 'dark' ? 0.78 : 0.65,
             },
           ]}

@@ -152,7 +152,6 @@ function TrendCard({ asset, candles, colors, showSeparator, onPress }: { asset: 
   const values = candles.map((item) => ({ timestamp: item.timestamp, value: item.close }));
   const hasChart = values.length > 1;
   const currency = resolveCurrency(asset);
-  // Zmiana z tego samego okresu, który pokazuje wykres — nie dzienna zmiana z API.
   const change = trendChangePercent(values, asset.changePercent);
   const tone = change >= 0 ? colors.positive : colors.negative;
   const changeLabel = `${change >= 0 ? '+' : ''}${change.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;

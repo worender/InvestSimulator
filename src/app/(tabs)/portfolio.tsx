@@ -31,7 +31,7 @@ import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 export default function PortfolioScreen() {
   const { colors, mode } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
-  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
+  // Widok treści rozmywanej pod nagłówkiem 
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
 
@@ -53,7 +53,7 @@ export default function PortfolioScreen() {
     financialData?: any;
   } | null>(null);
 
-  // Menu przycisku "+" w headerze (osobny overlay, nie wpływa na układ treści)
+  // Menu przycisku "+" w headerze
   const [menuMounted, setMenuMounted] = useState(false);
 
   // Overlay wyszukiwania instrumentu (wspólny dla karty i menu headera)
@@ -71,7 +71,7 @@ export default function PortfolioScreen() {
     transform: [{ rotate: `${menuIconRotation.value}deg` }],
   }));
 
-  // Animacja wypłynięcia menu: lekki zjazd z góry + fade, tempo zbliżone do powiadomień
+  // Animacja wypłynięcia menu: lekki zjazd z góry + fade
   const menuProgress = useSharedValue(0);
   const menuCardStyle = useAnimatedStyle(() => ({
     opacity: menuProgress.value,
@@ -96,7 +96,7 @@ export default function PortfolioScreen() {
     setActivePortfolioIndex((prev) => (prev + 1) % portfolios.length);
   };
 
-  // Otwieranie menu: montuje overlay i wypływa go z góry (220 ms — nieco szybciej niż powiadomienie)
+  // Otwieranie menu
   const openMenu = () => {
     setMenuMounted(true);
     // eslint-disable-next-line react-hooks/immutability
@@ -110,7 +110,7 @@ export default function PortfolioScreen() {
     });
   };
 
-  // Zamykanie: najpierw animacja wyjścia, dopiero potem odmontowanie overlayu
+  // Zamykanie menu
   const closeMenu = () => {
     // eslint-disable-next-line react-hooks/immutability
     menuProgress.value = withTiming(
@@ -126,7 +126,7 @@ export default function PortfolioScreen() {
     menuIconRotation.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) });
   };
 
-  // Przełączanie menu przycisku "+" z animacją ikony i wypłynięciem panelu
+  // Przełączanie menu przycisku "+"
   const toggleMenu = () => {
     if (menuMounted) {
       closeMenu();
@@ -216,7 +216,6 @@ export default function PortfolioScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* Stały tytuł headeru: Portfolio (punkt 4) */}
       <PanelHeader
         blurTarget={blurTargetRef}
         title="Portfolio"
@@ -236,7 +235,6 @@ export default function PortfolioScreen() {
         }
         right={
           <View style={styles.headerButtons}>
-            {/* Przycisk edycji/portfolio - mniejszy, jasny (biały w trybie ciemnym) */}
             <Pressable
               onPress={() => {
                 notify({
@@ -256,7 +254,6 @@ export default function PortfolioScreen() {
               />
             </Pressable>
 
-            {/* Przycisk "+": otwiera menu portfeli/instrumentów, ikona zmienia się w "x" */}
             <Pressable
               onPress={toggleMenu}
               accessibilityLabel={menuMounted ? 'Zamknij menu dodawania' : 'Dodaj portfel lub instrument'}
@@ -278,7 +275,6 @@ export default function PortfolioScreen() {
         }
       />
 
-      {/* Menu przycisku "+" jako osobny overlay nad treścią - nie przesuwa kart pod spodem */}
       {menuMounted && (
         <View style={styles.menuLayer} pointerEvents="box-none">
           <Reanimated.View style={[StyleSheet.absoluteFill, styles.menuBackdrop, menuBackdropStyle]}>
@@ -338,10 +334,8 @@ export default function PortfolioScreen() {
           showsVerticalScrollIndicator={false}
           {...scrollNav}
         >
-          {/* Pojedyncza karta portfela 1:1 z dashboard */}
           <SinglePortfolioCard portfolio={currentPortfolio} />
 
-          {/* Sekcja z kolorowymi kafelkami w siatce 2x2 (punkty 1, 3) */}
           <Section label="Kategorie aktywów">
             <View style={styles.categoriesGrid}>
               {currentPortfolio.categories.map((category) => (
@@ -353,7 +347,6 @@ export default function PortfolioScreen() {
                 />
               ))}
 
-              {/* Karta dodawania instrumentu - należy do siatki i zajmuje dokładnie tyle samo miejsca co jedna karta */}
               <Pressable
                 onPress={handleOpenSearchSheet}
                 accessibilityLabel="Dodaj instrument do portfela"
@@ -399,7 +392,6 @@ export default function PortfolioScreen() {
         </ScrollView>
       </BlurTargetView>
 
-      {/* Overlay wyszukiwania instrumentu (zielona karta + menu headera) */}
       {searchSheetOpen && (
         <InstrumentSearchSheet
           visible
@@ -408,7 +400,6 @@ export default function PortfolioScreen() {
         />
       )}
 
-      {/* Okno modalne szczegółów instrumentu i zakupu (punkty 6, 7, 8, 9, 10, 11, 12) */}
       <InstrumentDetailModal
         visible={modalVisible}
         asset={selectedAsset}
@@ -436,14 +427,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Overlay menu "+": zajmuje cały ekran, ale leży nad treścią i nie zmienia układu
+  // Overlay menu "+": zajmuje cały ekra
   menuLayer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    // Poniżej nagłówka (zIndex 20), aby przycisk "+" pozostał klikalny i mógł zamknąć menu
     zIndex: 15,
     elevation: 15,
   },
@@ -483,7 +473,6 @@ const styles = StyleSheet.create({
   menuLimit: {
     fontSize: 11,
   },
-  // Karta dodawania instrumentu: te same wymiary co pojedyncza karta kategorii
   addCard: {
     width: '48%',
     borderRadius: 20,

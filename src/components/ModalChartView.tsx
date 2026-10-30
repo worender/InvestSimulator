@@ -49,9 +49,7 @@ interface ModalChartViewProps {
   };
   financialData?: StockFinancialData;
   onClose: () => void;
-  /** Początkowy zakres wykresu (indeks z CHART_RANGES). */
   initialRangeIndex?: number;
-  /** Początkowy interwał wykresu. */
   initialInterval?: ChartInterval;
 }
 
@@ -159,7 +157,7 @@ const dataItemStyles = StyleSheet.create({
 export function ModalChartView({ instrument, financialData: propFinancialData, onClose, initialRangeIndex, initialInterval }: ModalChartViewProps) {
   const theme = useTheme();
 
-  // Blokuje gesty ekranu pod spodem (np. swipe między zakładkami), dopóki modal jest otwarty.
+  // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(true);
 
   const [financialData, setFinancialData] = useState<StockFinancialData | null>(
@@ -171,11 +169,8 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
   const [isFavorite, setIsFavorite] = useState(false);
   const [favScale] = useState(() => new Animated.Value(1));
   
-  // Przeciąganie i animacja modala
   const { height: windowHeight } = useWindowDimensions();
-  // Wartość przesunięcia arkusza w dół
   const translateY = useSharedValue(windowHeight);
-  // Pozycja arkusza w chwili rozpoczęcia gestu
   const dragStart = useSharedValue(0);
   const finishClose = useCallback(() => {
     onClose();
@@ -184,7 +179,6 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
   // Próg przesunięcia, po którym modal zostanie zamknięty
   const closeThreshold = Math.max(windowHeight * 0.12, 96);
 
-  // Wyjazd arkusza poza ekran - używany przez gest, tło i przycisk zamknięcia
   const animateClose = useCallback(() => {
     // eslint-disable-next-line react-hooks/immutability
     translateY.value = withTiming(
@@ -341,7 +335,7 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
     }
   }, [financialData, selectedReturnPeriod]);
 
-  // Stylesheet dla komponentu ModalChartView (widok wykresu w formie modala)
+  // Stylesheet dla komponentu ModalChartView
   const styles = useMemo(() => ({
     gestureRoot: {
       flex: 1,
@@ -483,7 +477,6 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
 
           <Reanimated.View style={[styles.sheet, sheetAnimatedStyle]}>
             <View style={[styles.header, { borderBottomColor: theme.colors.borderGlass }]}>
-              {/* Górna belka */}
               <GestureDetector gesture={dragGesture}>
                 <View
                   style={styles.dragArea}

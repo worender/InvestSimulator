@@ -25,7 +25,6 @@ type Portfolio = {
   cashBalance: number;
   profitCurrency: number;
   profitPercent: number;
-  /** Stonowany, szarawy odcień charakterystyczny dla danego portfela. */
   accent: string;
   stock: string;
   stockName: string;
@@ -75,7 +74,7 @@ type PortfolioCardProps = {
   onPress: () => void;
 };
 
-// Komponent pojedynczej karty portfela w talii — 1:1 z SinglePortfolioCard
+// Komponent pojedynczej karty portfela w talii
 function PortfolioCard({ data, index, isFront, phase, opacity, onPress }: PortfolioCardProps) {
   const { colors, mode } = useTheme();
   const animatedStyle = useAnimatedStyle(() => {
@@ -132,7 +131,6 @@ function PortfolioCard({ data, index, isFront, phase, opacity, onPress }: Portfo
         onPress={isFront ? onPress : undefined}
         style={styles.card}
       >
-        {/* Efekt Liquid Glass z blurem - bardziej przeźroczyste tło z blurem jak w AssetCategoryCard */}
         <BlurView
           intensity={45}
           tint={mode === 'dark' ? 'dark' : 'light'}
@@ -143,7 +141,7 @@ function PortfolioCard({ data, index, isFront, phase, opacity, onPress }: Portfo
           style={[
             StyleSheet.absoluteFill,
             {
-              backgroundColor: cardAccent + '15', // Bardziej przeźroczyste tło
+              backgroundColor: cardAccent + '15',
               opacity: mode === 'dark' ? 0.78 : 0.65,
             },
           ]}

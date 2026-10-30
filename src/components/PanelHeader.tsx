@@ -27,30 +27,16 @@ type HeaderSearch = {
 
 type PanelHeaderProps = {
   title: string;
-  /** Ikony/skróty po lewej stronie nagłówka. */
   left?: ReactNode;
-  /** Ikony/skróty po prawej stronie nagłówka. */
   right?: ReactNode;
-  /** Pole wyszukiwania rozwijane w miejscu tytułu. */
   search?: HeaderSearch;
-  /**
-   * Ref do `BlurTargetView` z treścią ekranu. Wymagany, aby rozmycie działało
-   * również na Androidzie (RenderNode API).
-   */
   blurTarget?: RefObject<ComponentRef<typeof View> | null>;
 };
 
 const SEARCH_ANIMATION_MS = 180;
 const SIDE_WIDTH = 84;
-
-/** Wysokość paska nagłówka bez safe-area (paddingTop + zawartość + paddingBottom). */
 export const PANEL_HEADER_HEIGHT = 50;
 
-/**
- * Nagłówek panelu z tytułem wyśrodkowanym względem ekranu.
- * Renderowany poza ScrollView, więc zawsze pozostaje przyklejony do góry.
- * Wyszukiwanie rozwija się w miejscu tytułu, a ikony skrótów znikają.
- */
 export function PanelHeader({ title, left, right, search, blurTarget }: PanelHeaderProps) {
   const { colors, mode } = useTheme();
   const { top } = useSafeAreaInsets();
@@ -142,7 +128,6 @@ export function PanelHeader({ title, left, right, search, blurTarget }: PanelHea
         },
       ]}
     >
-      {/* Tło typu liquid glass: rozmycie pod headerem + delikatny tint */}
       <BlurView
         pointerEvents="none"
         intensity={isDark ? 55 : 70}
@@ -158,7 +143,6 @@ export function PanelHeader({ title, left, right, search, blurTarget }: PanelHea
           { backgroundColor: isDark ? 'rgba(13, 17, 23, 0.32)' : 'rgba(255, 255, 255, 0.42)' },
         ]}
       />
-      {/* Delikatna linia oddzielająca header od treści (nad rozmyciem) */}
       <View
         pointerEvents="none"
         style={[styles.bottomLine, { backgroundColor: colors.borderGlass }]}
