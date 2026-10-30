@@ -30,8 +30,10 @@ import {
   StockFinancialData,
 } from '../api/marketService';
 import { currencySymbol } from '../currency';
+import { useLockScreenWhileActive } from '../interactionLock';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
+import type { ChartInterval } from './ChartFullscreenModal';
 import { Section } from './Section';
 import { Skeleton } from './Skeleton';
 import { StockCandleChart } from './StockCandleChart';
@@ -47,6 +49,8 @@ interface ModalChartViewProps {
   };
   financialData?: StockFinancialData;
   onClose: () => void;
+  initialRangeIndex?: number;
+  initialInterval?: ChartInterval;
 }
 
 // Funkcja formatująca wartość pieniężną zgodnie z ustawieniami regionalnymi i symbolem waluty
@@ -150,8 +154,12 @@ const dataItemStyles = StyleSheet.create({
 });
 
 // Komponent wyświetlający widok wykresu w formie modala
-export function ModalChartView({ instrument, financialData: propFinancialData, onClose }: ModalChartViewProps) {
+export function ModalChartView({ instrument, financialData: propFinancialData, onClose, initialRangeIndex, initialInterval }: ModalChartViewProps) {
   const theme = useTheme();
+
+  // Blokuje gesty ekranu pod spodem
+  useLockScreenWhileActive(true);
+
   const [financialData, setFinancialData] = useState<StockFinancialData | null>(
     propFinancialData ?? instrument.financialData ?? null,
   );
@@ -161,11 +169,8 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
   const [isFavorite, setIsFavorite] = useState(false);
   const [favScale] = useState(() => new Animated.Value(1));
   
-  // Przeciąganie i animacja modala
   const { height: windowHeight } = useWindowDimensions();
-  // Wartość przesunięcia arkusza w dół
   const translateY = useSharedValue(windowHeight);
-  // Pozycja arkusza w chwili rozpoczęcia gestu
   const dragStart = useSharedValue(0);
   const finishClose = useCallback(() => {
     onClose();
@@ -174,7 +179,6 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
   // Próg przesunięcia, po którym modal zostanie zamknięty
   const closeThreshold = Math.max(windowHeight * 0.12, 96);
 
-  // Wyjazd arkusza poza ekran - używany przez gest, tło i przycisk zamknięcia
   const animateClose = useCallback(() => {
     // eslint-disable-next-line react-hooks/immutability
     translateY.value = withTiming(
@@ -331,7 +335,7 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
     }
   }, [financialData, selectedReturnPeriod]);
 
-  // Stylesheet dla komponentu ModalChartView (widok wykresu w formie modala)
+  // Stylesheet dla komponentu ModalChartView
   const styles = useMemo(() => ({
     gestureRoot: {
       flex: 1,
@@ -473,7 +477,6 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
 
           <Reanimated.View style={[styles.sheet, sheetAnimatedStyle]}>
             <View style={[styles.header, { borderBottomColor: theme.colors.borderGlass }]}>
-              {/* Górna belka */}
               <GestureDetector gesture={dragGesture}>
                 <View
                   style={styles.dragArea}
@@ -538,11 +541,14 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
             >
               <View style={styles.chartContainer}>
                 <StockCandleChart
+                  key={`${instrument.stock}-${initialRangeIndex ?? 'default'}-${initialInterval ?? 'default'}`}
                   stock={instrument.stock}
                   title={instrument.title}
                   currency={financialData?.currency ?? instrument.currency}
                   exchange={instrument.exchange}
                   variant="embedded"
+                  initialRangeIndex={initialRangeIndex}
+                  initialInterval={initialInterval}
                 />
               </View>
 

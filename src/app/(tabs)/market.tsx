@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useEffect, useState } from 'react';
+import { BlurTargetView } from 'expo-blur';
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -17,7 +18,7 @@ import {
   StockFinancialData,
 } from '../../api/marketService';
 import { ModalChartView } from '../../components/ModalChartView';
-import { PanelHeader } from '../../components/PanelHeader';
+import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { Skeleton } from '../../components/Skeleton';
 import { currencySymbol, resolveCurrency } from '../../currency';
@@ -65,7 +66,9 @@ const FILTER_LABELS = {
 // Ekran "Rynek" wyświetlający notowania giełdowe i umożliwiający wyszukiwanie instrumentów 
 export default function MarketScreen() {
   const { colors } = useTheme();
-  const { bottom } = useSafeAreaInsets();
+  const { bottom, top } = useSafeAreaInsets();
+  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
+  const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -230,6 +233,7 @@ export default function MarketScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
+        blurTarget={blurTargetRef}
         title="Rynek"
         left={
           <Pressable
@@ -257,185 +261,177 @@ export default function MarketScreen() {
           placeholder: 'Nazwa lub ticker, np. Apple',
         }}
       />
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: 24, paddingBottom: 38 + bottom }]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        {...scrollNav}
-      >
-        {!isSearching && (
-          <>
-            <Text style={[styles.eyebrow, { color: colors.accent }]}>RYNEK GIEŁDOWY</Text>
-            <Text style={[styles.title, { color: colors.text }]}>Notowania na żywo</Text>
-            <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-              Sprawdź aktualne ceny akcji i indeksów i kryptowalut
-            </Text>
-          </>
-        )}
-
-        <Section
-          first={isSearching}
-          label={
-            isSearching
-              ? searchLoading
-                ? 'Wyszukiwanie...'
-                : `Wyniki dla "${searchQuery}" (${searchResults.length})`
-              : stockSectionTitle
-          }
+      <BlurTargetView ref={blurTargetRef} style={styles.blurTarget}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingTop: top + PANEL_HEADER_HEIGHT + 8, paddingBottom: 38 + bottom }]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          {...scrollNav}
         >
-          {!isSearching && (
-            <View style={styles.filtersRow}>
-              {(['ALL', 'PL', 'GLOBAL'] as const).map((filterKey) => {
-                const active = selectedFilter === filterKey;
-                return (
-                  <Pressable key={filterKey} onPress={() => setSelectedFilter(filterKey)}>
-                    <Text
+          <Section
+            first={isSearching}
+            label={
+              isSearching
+                ? searchLoading
+                  ? 'Wyszukiwanie...'
+                  : `Wyniki dla "${searchQuery}" (${searchResults.length})`
+                : stockSectionTitle
+            }
+          >
+            {!isSearching && (
+              <View style={styles.filtersRow}>
+                {(['ALL', 'PL', 'GLOBAL'] as const).map((filterKey) => {
+                  const active = selectedFilter === filterKey;
+                  return (
+                    <Pressable key={filterKey} onPress={() => setSelectedFilter(filterKey)}>
+                      <Text
+                        style={[
+                          styles.filterText,
+                          {
+                            color: active ? colors.accent : colors.textMuted,
+                            borderBottomColor: active ? colors.accent : 'transparent',
+                          },
+                        ]}
+                      >
+                        {FILTER_LABELS[filterKey]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            {isSearching ? (
+              searchLoading ? (
+                <View>
+                  {[1, 2, 3, 4].map((i) => (
+                    <View
+                      key={i}
                       style={[
-                        styles.filterText,
-                        {
-                          color: active ? colors.accent : colors.textMuted,
-                          borderBottomColor: active ? colors.accent : 'transparent',
-                        },
+                        styles.stockRow,
+                        { borderBottomColor: colors.borderGlass, borderBottomWidth: StyleSheet.hairlineWidth },
                       ]}
                     >
-                      {FILTER_LABELS[filterKey]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-
-          {isSearching ? (
-            searchLoading ? (
-              <View>
-                {[1, 2, 3, 4].map((i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.stockRow,
-                      { borderBottomColor: colors.borderGlass, borderBottomWidth: StyleSheet.hairlineWidth },
-                    ]}
-                  >
-                    <View style={styles.skeletonCopy}>
-                      <Skeleton width="45%" height={14} />
-                      <Skeleton width="30%" height={10} style={styles.skeletonSubline} />
+                      <View style={styles.skeletonCopy}>
+                        <Skeleton width="45%" height={14} />
+                        <Skeleton width="30%" height={10} style={styles.skeletonSubline} />
+                      </View>
+                      <Skeleton width={58} height={14} />
                     </View>
-                    <Skeleton width={58} height={14} />
-                  </View>
-                ))}
-              </View>
-            ) : searchResults.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Ionicons name="search-outline" size={34} color={colors.textMuted} />
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>Nie znaleziono spółek</Text>
-                <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-                  Spróbuj wpisać inny ticker lub nazwę firmy (np. Apple, KGHM, NVDA).
-                </Text>
-              </View>
+                  ))}
+                </View>
+              ) : searchResults.length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Ionicons name="search-outline" size={34} color={colors.textMuted} />
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>Nie znaleziono spółek</Text>
+                  <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
+                    Spróbuj wpisać inny ticker lub nazwę firmy (np. Apple, KGHM, NVDA).
+                  </Text>
+                </View>
+              ) : (
+                <View>
+                  {searchResults.map((item, index) => (
+                    <TouchableOpacity
+                      key={`${item.symbol}-${item.exchange}`}
+                      style={[
+                        styles.stockRow,
+                        index < searchResults.length - 1 && {
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                          borderBottomColor: colors.borderGlass,
+                        },
+                      ]}
+                      onPress={() =>
+                        openStockModal({
+                          symbol: item.symbol,
+                          name: item.name,
+                          exchange: item.exchange,
+                          exchangeName: item.exchangeName,
+                        })
+                      }
+                      activeOpacity={0.6}
+                    >
+                      <View style={styles.stockMeta}>
+                        <View style={styles.stockSymbolRow}>
+                          <Text style={[styles.stockSymbol, { color: colors.text }]}>{item.symbol.replace(/\.PA$/, '')}</Text>
+                          <Text style={[styles.exchangeTag, { color: colors.textMuted }]}>
+                            · {item.exchangeName || item.exchange}
+                          </Text>
+                        </View>
+                        <Text style={[styles.stockName, { color: colors.textMuted }]} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )
             ) : (
               <View>
-                {searchResults.map((item, index) => (
-                  <TouchableOpacity
-                    key={`${item.symbol}-${item.exchange}`}
-                    style={[
-                      styles.stockRow,
-                      index < searchResults.length - 1 && {
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderBottomColor: colors.borderGlass,
-                      },
-                    ]}
-                    onPress={() =>
-                      openStockModal({
-                        symbol: item.symbol,
-                        name: item.name,
-                        exchange: item.exchange,
-                        exchangeName: item.exchangeName,
-                      })
-                    }
-                    activeOpacity={0.6}
-                  >
-                    <View style={styles.stockMeta}>
-                      <View style={styles.stockSymbolRow}>
-                        <Text style={[styles.stockSymbol, { color: colors.text }]}>{item.symbol.replace(/\.PA$/, '')}</Text>
-                        <Text style={[styles.exchangeTag, { color: colors.textMuted }]}>
-                          · {item.exchangeName || item.exchange}
-                        </Text>
-                      </View>
-                      <Text style={[styles.stockName, { color: colors.textMuted }]} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )
-          ) : (
-            <View>
-              {filteredStocks.map((stock, index) => {
-                const hasPrice = stock.price !== undefined;
-                const isPositive = (stock.change ?? 0) >= 0;
+                {filteredStocks.map((stock, index) => {
+                  const hasPrice = stock.price !== undefined;
+                  const isPositive = (stock.change ?? 0) >= 0;
 
-                return (
-                  <TouchableOpacity
-                    key={stock.symbol}
-                    style={[
-                      styles.stockRow,
-                      index < filteredStocks.length - 1 && {
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderBottomColor: colors.borderGlass,
-                      },
-                    ]}
-                    onPress={() => openStockModal(stock)}
-                    activeOpacity={0.6}
-                  >
-                    <View style={styles.stockMeta}>
-                      <View style={styles.stockSymbolRow}>
-                        <Text
-                          style={[
-                            styles.stockSymbol,
-                            { color: colors.text },
-                          ]}
-                        >
-                          {stock.symbol.replace(/\.PA$/, '')}
-                        </Text>
-                        <Text style={[styles.exchangeTag, { color: colors.textMuted }]}>
-                          · {stock.exchangeName}
-                        </Text>
-                      </View>
-                      <Text style={[styles.stockName, { color: colors.textMuted }]} numberOfLines={1}>
-                        {stock.name}
-                      </Text>
-                    </View>
-
-                    <View style={styles.stockRight}>
-                      {hasPrice ? (
-                        <>
-                          <Text style={[styles.priceText, { color: colors.text }]}>
-                            {formatPrice(stock.price, stock.currency)}
-                          </Text>
+                  return (
+                    <TouchableOpacity
+                      key={stock.symbol}
+                      style={[
+                        styles.stockRow,
+                        index < filteredStocks.length - 1 && {
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                          borderBottomColor: colors.borderGlass,
+                        },
+                      ]}
+                      onPress={() => openStockModal(stock)}
+                      activeOpacity={0.6}
+                    >
+                      <View style={styles.stockMeta}>
+                        <View style={styles.stockSymbolRow}>
                           <Text
                             style={[
-                              styles.changeText,
-                              { color: isPositive ? colors.positive : colors.negative },
+                              styles.stockSymbol,
+                              { color: colors.text },
                             ]}
                           >
-                            {isPositive ? '+' : ''}
-                            {(stock.changePercent ?? 0).toFixed(2)}%
+                            {stock.symbol.replace(/\.PA$/, '')}
                           </Text>
-                        </>
-                      ) : (
-                        <Skeleton width={72} height={16} />
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-        </Section>
-      </ScrollView>
+                          <Text style={[styles.exchangeTag, { color: colors.textMuted }]}>
+                            · {stock.exchangeName}
+                          </Text>
+                        </View>
+                        <Text style={[styles.stockName, { color: colors.textMuted }]} numberOfLines={1}>
+                          {stock.name}
+                        </Text>
+                      </View>
+
+                      <View style={styles.stockRight}>
+                        {hasPrice ? (
+                          <>
+                            <Text style={[styles.priceText, { color: colors.text }]}>
+                              {formatPrice(stock.price, stock.currency)}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.changeText,
+                                { color: isPositive ? colors.positive : colors.negative },
+                              ]}
+                            >
+                              {isPositive ? '+' : ''}
+                              {(stock.changePercent ?? 0).toFixed(2)}%
+                            </Text>
+                          </>
+                        ) : (
+                          <Skeleton width={72} height={16} />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </Section>
+        </ScrollView>
+      </BlurTargetView>
 
       {modalVisible && modalInstrument && (
         <ModalChartView
@@ -450,6 +446,7 @@ export default function MarketScreen() {
 
 // Stylesheet dla komponentu MarketScreen (ekran "Rynek")
 const styles = StyleSheet.create({
+  blurTarget: { flex: 1 },
   root: {
     flex: 1,
   },

@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { InteractionLockProvider } from '../interactionLock';
 import { NavigationVisibilityProvider } from '../navigationVisibility';
 import { NotificationProvider } from '../notifications';
 import { ThemeProvider, useTheme } from '../theme';
@@ -29,11 +30,13 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <NavigationVisibilityProvider>
-          <NotificationProvider>
-            <AppStack />
-          </NotificationProvider>
-        </NavigationVisibilityProvider>
+        <InteractionLockProvider>
+          <NavigationVisibilityProvider>
+            <NotificationProvider>
+              <AppStack />
+            </NotificationProvider>
+          </NavigationVisibilityProvider>
+        </InteractionLockProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

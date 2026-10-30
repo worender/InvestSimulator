@@ -5,23 +5,17 @@ import { CandlestickChart } from 'react-native-wagmi-charts';
 import { CandleData, getStockCandles } from '../api/marketService';
 import { currencySymbol } from '../currency';
 import { useTheme } from '../theme';
+import {
+  CHART_INTERVALS,
+  CHART_RANGES,
+  ChartFullscreenModal,
+  ChartInterval,
+  DEFAULT_CHART_INTERVAL,
+  DEFAULT_CHART_RANGE_INDEX,
+  formatCandleTime,
+  isIntradayInterval,
+} from './ChartFullscreenModal';
 import { Skeleton } from './Skeleton';
-
-
-type CandleInterval = '1m' | '5m' | '15m' | '1h' | '1d' | '1wk';
-type ChartRange = { label: string; days: number };
-
-const ranges: ChartRange[] = [
-  { label: '1D', days: 1 }, { label: '5D', days: 5 }, { label: '1M', days: 30 },
-  { label: '3M', days: 90 }, { label: '1R', days: 365 },
-];
-const intervals: { label: string; value: CandleInterval }[] = [
-  { label: '15 min', value: '15m' }, { label: '1 godz.', value: '1h' },
-  { label: '1 dzień', value: '1d' }, { label: '1 tydz.', value: '1wk' },
-];
-const DEFAULT_RANGE_INDEX = 1;
-const DEFAULT_INTERVAL: CandleInterval = '1h';
-const intraday = (value: CandleInterval) => ['1m', '5m', '15m', '1h'].includes(value);
 
 type StockCandleChartProps = {
   stock?: string;
@@ -29,6 +23,8 @@ type StockCandleChartProps = {
   exchange?: string;
   currency?: string;
   variant?: 'card' | 'embedded';
+  initialRangeIndex?: number;
+  initialInterval?: ChartInterval;
 };
 
 // Komponent wyświetlający wykres świecowy dla danego aktywa giełdowego
@@ -38,13 +34,20 @@ export function StockCandleChart({
   currency = 'zł',
   exchange = 'GPW',
   variant = 'card',
+  initialRangeIndex = DEFAULT_CHART_RANGE_INDEX,
+  initialInterval = DEFAULT_CHART_INTERVAL,
 }: StockCandleChartProps) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
+  const isDark = mode === 'dark';
   const [candles, setCandles] = useState<CandleData[]>([]);
-  const [rangeIndex, setRangeIndex] = useState(DEFAULT_RANGE_INDEX);
-  const [interval, setInterval] = useState<CandleInterval>(DEFAULT_INTERVAL);
+  const [rangeIndex, setRangeIndex] = useState(() =>
+    Math.min(Math.max(initialRangeIndex, 0), CHART_RANGES.length - 1),
+  );
+  const [interval, setInterval] = useState<ChartInterval>(initialInterval);
   const [loading, setLoading] = useState(true);
-  const range = ranges[rangeIndex];
+  // Pełnoekranowy widok wykresu (wspólny komponent dla każdego wykresu świecowego).
+  const [fullscreenVisible, setFullscreenVisible] = useState(false);
+  const range = CHART_RANGES[rangeIndex];
   const intradayDisabled = range.days > 60;
   const latest = candles[candles.length - 1];
   const previous = candles[candles.length - 2];
@@ -56,7 +59,7 @@ export function StockCandleChart({
     let active = true;
     const load = async () => {
       setLoading(true);
-      const requestedInterval = intradayDisabled && intraday(interval) ? '1d' : interval;
+      const requestedInterval = intradayDisabled && isIntradayInterval(interval) ? '1d' : interval;
       const data = await getStockCandles(stock, requestedInterval, range.days, exchange);
       if (active) {
         setCandles(data ?? []);
@@ -88,26 +91,44 @@ export function StockCandleChart({
             {change >= 0 ? '+' : ''}{formatPrice(change)} {unit} ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)
           </Text>
         </View>
-        <View style={[styles.badge, { backgroundColor: colors.surfaceMutedGlass, borderColor: colors.borderGlass }]}>
-          <Ionicons name="business-outline" size={12} color={colors.textMuted} />
-          <Text style={[styles.badgeText, { color: colors.textMuted }]}>{exchange}</Text>
+        <View style={styles.headerActions}>
+          <View style={[styles.badge, { backgroundColor: colors.surfaceMutedGlass, borderColor: colors.borderGlass }]}>
+            <Ionicons name="business-outline" size={12} color={colors.textMuted} />
+            <Text style={[styles.badgeText, { color: colors.textMuted }]}>{exchange}</Text>
+          </View>
+          <Pressable
+            onPress={() => setFullscreenVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Powiększ wykres na pełny ekran"
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.expandBtn,
+              {
+                backgroundColor: colors.surfaceMutedGlass,
+                borderColor: colors.borderGlass,
+                opacity: pressed ? 0.65 : 1,
+              },
+            ]}
+          >
+            <Ionicons name="expand-outline" size={15} color={colors.accent} />
+          </Pressable>
         </View>
       </View>
       <Text style={[styles.controlLabel, { color: colors.textMuted }]}>ZAKRES</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controls}>
-        {ranges.map((item, index) => (
+        {CHART_RANGES.map((item, index) => (
           <ChartButton key={item.label} label={item.label} active={index === rangeIndex} onPress={() => {
             setRangeIndex(index);
-            if (item.days > 60 && intraday(interval)) setInterval('1d');
+            if (item.days > 60 && isIntradayInterval(interval)) setInterval('1d');
           }} colors={colors} />
         ))}
       </ScrollView>
       <Text style={[styles.controlLabel, { color: colors.textMuted }]}>INTERWAŁ</Text>
       {intradayDisabled && <Text style={[styles.hint, { color: colors.textMuted }]}>Dla zakresu powyżej 60 dni dostępne są dane dzienne lub tygodniowe.</Text>}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controls}>
-        {intervals.map((item) => (
+        {CHART_INTERVALS.map((item) => (
           <ChartButton key={item.value} label={item.label} active={item.value === interval}
-            disabled={intradayDisabled && intraday(item.value)} onPress={() => setInterval(item.value)} colors={colors} />
+            disabled={intradayDisabled && isIntradayInterval(item.value)} onPress={() => setInterval(item.value)} colors={colors} />
         ))}
       </ScrollView>
       <View style={styles.chart}>
@@ -121,14 +142,46 @@ export function StockCandleChart({
         </View>
           : candles.length === 0 ? <View style={styles.placeholder}><Ionicons name="calendar-outline" size={40} color={colors.textMuted} /><Text style={[styles.muted, { color: colors.textMuted }]}>Brak notowań dla tego zakresu.</Text></View>
             : <CandlestickChart.Provider data={candles}>
-              <CandlestickChart height={280}><CandlestickChart.Candles useAnimations={false} /><CandlestickChart.Crosshair minDurationMs={320}><CandlestickChart.Tooltip /></CandlestickChart.Crosshair></CandlestickChart>
+              <CandlestickChart height={280}>
+                <CandlestickChart.Candles useAnimations={false} />
+                <CandlestickChart.Crosshair color={colors.textMuted} minDurationMs={320}>
+                  {/* Tooltip spójny z wykresem w ModalChartView / ChartFullscreenModal. */}
+                  <CandlestickChart.Tooltip
+                    style={[
+                      styles.tooltip,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(22, 27, 34, 0.96)'
+                          : 'rgba(255, 255, 255, 0.96)',
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    tooltipTextProps={{
+                      precision: 2,
+                      style: { color: colors.text, fontSize: 12, fontWeight: '700' },
+                    }}
+                  />
+                </CandlestickChart.Crosshair>
+              </CandlestickChart>
               <View style={styles.crosshair}><CandlestickChart.DatetimeText locale="pl-PL" style={{ color: colors.textMuted, fontSize: 11 }} /></View>
             </CandlestickChart.Provider>}
             
       </View>
       {candles.length > 0 && <View style={[styles.axis, { borderTopColor: colors.borderGlass }]}>
-        {axis.map((item, index) => <Text key={`${item.timestamp}-${index}`} style={[styles.axisText, { color: colors.textMuted }]}>{formatTime(item.timestamp, interval)}</Text>)}
+        {axis.map((item, index) => <Text key={`${item.timestamp}-${index}`} style={[styles.axisText, { color: colors.textMuted }]}>{formatCandleTime(item.timestamp, interval)}</Text>)}
       </View>}
+
+      {/* Pełnoekranowy widok tego samego wykresu z siatką, OHLC i legendą */}
+      <ChartFullscreenModal
+        visible={fullscreenVisible}
+        onClose={() => setFullscreenVisible(false)}
+        stock={stock}
+        title={title}
+        exchange={exchange}
+        currency={currency}
+        initialRangeIndex={rangeIndex}
+        initialInterval={interval}
+      />
     </View>
   );
 }
@@ -156,14 +209,6 @@ function ChartButton({ label, active, disabled = false, onPress, colors }: { lab
   );
 }
 
-// Funkcja formatująca znacznik czasu na czytelną datę i godzinę w zależności od interwału wykresu
-function formatTime(timestamp: number, interval: CandleInterval) {
-  const options: Intl.DateTimeFormatOptions = intraday(interval)
-    ? { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }
-    : { day: '2-digit', month: '2-digit', year: 'numeric' };
-  return new Date(timestamp).toLocaleString('pl-PL', options);
-}
-
 // Stylesheet dla komponentu StockCandleChart (wykres świecowy)
 const styles = StyleSheet.create({
   card: { overflow: 'hidden' },
@@ -174,6 +219,8 @@ const styles = StyleSheet.create({
   price: { fontSize: 28, fontWeight: '800', marginTop: 4, letterSpacing: -0.5 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1 },
   badgeText: { fontSize: 10, fontWeight: '700' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  expandBtn: { width: 30, height: 30, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   description: { fontSize: 12, lineHeight: 18, marginTop: 10 },
   controlLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginTop: 18, marginBottom: 8 },
   controls: { flexDirection: 'row', gap: 8, paddingRight: 8 },
@@ -187,6 +234,7 @@ const styles = StyleSheet.create({
   skeletonLine: { marginVertical: 4 },
   skeletonTrend: { alignSelf: 'center', marginTop: 8 },
   crosshair: { alignItems: 'center', marginTop: 4 },
+  tooltip: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4 },
   interactionHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 8 },
   interactionHintText: { fontSize: 10, fontWeight: '600' },
   axis: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, paddingTop: 10, marginTop: 4 },

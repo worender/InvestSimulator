@@ -1,11 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { BlurTargetView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getStockData, InstrumentSearchResult, searchInstruments, StockFinancialData } from '../../api/marketService';
 import { ModalChartView } from '../../components/ModalChartView';
-import { PanelHeader } from '../../components/PanelHeader';
+import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
 import { PortfolioOverviewCard } from '../../components/PortfolioOverviewCard';
 import { Section } from '../../components/Section';
 import { Skeleton } from '../../components/Skeleton';
@@ -25,7 +26,9 @@ const portfolioStocks: Record<string, { currency: string; stock: string; title: 
 
 export default function Index() {
   const { colors, defaultCurrency, multiCurrency } = useTheme();
-  const { bottom } = useSafeAreaInsets();
+  const { bottom, top } = useSafeAreaInsets();
+  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
+  const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const router = useRouter();
   const scrollNav = useScrollAwareNavigation();
   const [portfolioStock, setPortfolioStock] = useState(() => portfolioStocks[defaultCurrency]);
@@ -133,6 +136,7 @@ export default function Index() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
+        blurTarget={blurTargetRef}
         title="Pulpit"
         left={
           <Pressable onPress={() => setSearchOpen(true)} accessibilityLabel="Szukaj instrumentu" hitSlop={8}>
@@ -156,14 +160,14 @@ export default function Index() {
           placeholder: 'Nazwa lub ticker, np. Apple',
         }}
       />
-      <View style={styles.body}>
+      <BlurTargetView ref={blurTargetRef} style={styles.body}>
         <ScrollView
           style={{ backgroundColor: colors.background }}
-          contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom }]}
+          contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom, paddingTop: top + PANEL_HEADER_HEIGHT + 8 }]}
           keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
           {...scrollNav}
         >
-          <Text style={[styles.eyebrow, { color: colors.accent }]}>EDUKACYJNY SYMULATOR</Text>
           <Text style={[styles.title, { color: colors.text }]}>Dzień dobry, inwestorze</Text>
 
           <Section label="Portfel">
@@ -223,7 +227,7 @@ export default function Index() {
             )}
           </View>
         )}
-      </View>
+      </BlurTargetView>
 
       {/* Modal Chart View */}
       {modalVisible && modalInstrument?.stock && (
@@ -243,7 +247,7 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },
-  title: { fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
+  title: { fontSize: 25, fontWeight: '700', letterSpacing: -0.5, marginTop: 8 },
   resultsOverlay: {
     position: 'absolute',
     top: 0,

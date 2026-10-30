@@ -22,7 +22,7 @@ export function Section({ label, first = false, children }: SectionProps) {
 }
 
 const styles = StyleSheet.create({
-  section: { marginTop: 36 },
+  section: { marginTop: 24, marginBottom: 8 },
   first: { marginTop: 0 },
   label: {
     fontSize: 11,
