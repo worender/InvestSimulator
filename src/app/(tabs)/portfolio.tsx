@@ -4,6 +4,7 @@ import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Reanimated, {
   Easing,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -53,7 +54,7 @@ export default function PortfolioScreen() {
   } | null>(null);
 
   // Menu przycisku "+" w headerze (osobny overlay, nie wpływa na układ treści)
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuMounted, setMenuMounted] = useState(false);
 
   // Overlay wyszukiwania instrumentu (wspólny dla karty i menu headera)
   const [searchSheetOpen, setSearchSheetOpen] = useState(false);
@@ -70,6 +71,19 @@ export default function PortfolioScreen() {
     transform: [{ rotate: `${menuIconRotation.value}deg` }],
   }));
 
+  // Animacja wypłynięcia menu: lekki zjazd z góry + fade, tempo zbliżone do powiadomień
+  const menuProgress = useSharedValue(0);
+  const menuCardStyle = useAnimatedStyle(() => ({
+    opacity: menuProgress.value,
+    transform: [
+      { translateY: (1 - menuProgress.value) * -12 },
+      { scale: 0.96 + menuProgress.value * 0.04 },
+    ],
+  }));
+  const menuBackdropStyle = useAnimatedStyle(() => ({
+    opacity: menuProgress.value,
+  }));
+
   const currentPortfolio = portfolios[activePortfolioIndex] || portfolios[0];
   const hasMultiplePortfolios = portfolios.length > 1;
   const isAddDisabled = portfolios.length >= 5;
@@ -82,19 +96,43 @@ export default function PortfolioScreen() {
     setActivePortfolioIndex((prev) => (prev + 1) % portfolios.length);
   };
 
-  // Otwieranie/zamykanie menu przycisku "+" z animacją ikony
-  const toggleMenu = () => {
-    const next = !menuOpen;
-    setMenuOpen(next);
-    menuIconRotation.value = withTiming(next ? 45 : 0, {
+  // Otwieranie menu: montuje overlay i wypływa go z góry (220 ms — nieco szybciej niż powiadomienie)
+  const openMenu = () => {
+    setMenuMounted(true);
+    // eslint-disable-next-line react-hooks/immutability
+    menuProgress.value = withTiming(1, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+    });
+    menuIconRotation.value = withTiming(45, {
       duration: 200,
       easing: Easing.out(Easing.cubic),
     });
   };
 
+  // Zamykanie: najpierw animacja wyjścia, dopiero potem odmontowanie overlayu
   const closeMenu = () => {
-    setMenuOpen(false);
+    // eslint-disable-next-line react-hooks/immutability
+    menuProgress.value = withTiming(
+      0,
+      { duration: 160, easing: Easing.in(Easing.cubic) },
+      (finished) => {
+        'worklet';
+        if (finished) {
+          runOnJS(setMenuMounted)(false);
+        }
+      },
+    );
     menuIconRotation.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) });
+  };
+
+  // Przełączanie menu przycisku "+" z animacją ikony i wypłynięciem panelu
+  const toggleMenu = () => {
+    if (menuMounted) {
+      closeMenu();
+    } else {
+      openMenu();
+    }
   };
 
   // Dodanie nowego portfela na bazie aktualnie wybranego (limit 5)
@@ -221,8 +259,8 @@ export default function PortfolioScreen() {
             {/* Przycisk "+": otwiera menu portfeli/instrumentów, ikona zmienia się w "x" */}
             <Pressable
               onPress={toggleMenu}
-              accessibilityLabel={menuOpen ? 'Zamknij menu dodawania' : 'Dodaj portfel lub instrument'}
-              accessibilityState={{ expanded: menuOpen }}
+              accessibilityLabel={menuMounted ? 'Zamknij menu dodawania' : 'Dodaj portfel lub instrument'}
+              accessibilityState={{ expanded: menuMounted }}
               hitSlop={10}
               style={({ pressed }) => [
                 styles.addButton,
@@ -241,13 +279,15 @@ export default function PortfolioScreen() {
       />
 
       {/* Menu przycisku "+" jako osobny overlay nad treścią - nie przesuwa kart pod spodem */}
-      {menuOpen && (
+      {menuMounted && (
         <View style={styles.menuLayer} pointerEvents="box-none">
-          <Pressable
-            style={[StyleSheet.absoluteFill, styles.menuBackdrop]}
-            onPress={closeMenu}
-            accessibilityLabel="Zamknij menu"
-          />
+          <Reanimated.View style={[StyleSheet.absoluteFill, styles.menuBackdrop, menuBackdropStyle]}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={closeMenu}
+              accessibilityLabel="Zamknij menu"
+            />
+          </Reanimated.View>
           <Reanimated.View
             style={[
               styles.menuCard,
@@ -256,6 +296,7 @@ export default function PortfolioScreen() {
                 backgroundColor: mode === 'dark' ? 'rgba(22, 27, 34, 0.97)' : 'rgba(255, 255, 255, 0.98)',
                 borderColor: colors.borderGlass,
               },
+              menuCardStyle,
             ]}
           >
             <Pressable
