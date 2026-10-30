@@ -7,8 +7,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
   useWindowDimensions,
+  View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
@@ -23,8 +23,8 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { CandlestickChart } from 'react-native-wagmi-charts';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CandlestickChart } from 'react-native-wagmi-charts';
 import { CandleData, getStockCandles } from '../api/marketService';
 import { currencySymbol } from '../currency';
 import { useLockScreenWhileActive } from '../interactionLock';
@@ -37,7 +37,7 @@ export type ChartRange = { label: string; days: number };
 // Wspólne definicje zakresów i interwałów dla każdego wykresu świecowego w aplikacji.
 export const CHART_RANGES: ChartRange[] = [
   { label: '1D', days: 1 },
-  { label: '5D', days: 5 },
+  { label: '7D', days: 7 },
   { label: '1M', days: 30 },
   { label: '3M', days: 90 },
   { label: '1R', days: 365 },
@@ -91,16 +91,16 @@ export type ChartFullscreenModalProps = {
   currency?: string;
   initialRangeIndex?: number;
   initialInterval?: ChartInterval;
-  /** Pozwala ukryć selektory, gdy rodzic już je pokazuje (np. w modalach). */
+  // Pozwala ukryć selektory, gdy rodzic już je pokazuje (np. w modalach)
   showRangeControls?: boolean;
 };
 
 /**
- * Pełnoekranowy, wielokrotnego użytku widok wykresu świecowego.
+ * Pełnoekranowy, wielokrotnego użytku widok wykresu świecowego
  *
  * Zawiera gęstą siatkę z osią cen, crosshair z tooltipem, przełączanie zakresów
  * i interwałów, panel OHLC (otwarcie / maksimum / minimum / zamknięcie)
- * oraz legendę pod wykresem.
+ * oraz legendę pod wykresem
  */
 export function ChartFullscreenModal({
   visible,
@@ -119,10 +119,9 @@ export function ChartFullscreenModal({
   const isDark = mode === 'dark';
   const unit = currencySymbol(currency);
 
-  // Blokuje gesty ekranu pod modalem (swipe zakładek, bąbelek nawigacji).
+  // Blokuje gesty ekranu pod modalem
   useLockScreenWhileActive(visible);
 
-  // Animacje arkusza 1:1 z pozostałymi oknami modalnymi (InstrumentDetailModal).
   const translateY = useSharedValue(height);
   const dragStart = useSharedValue(0);
   const closeThreshold = Math.max(height * 0.12, 96);
@@ -225,8 +224,6 @@ export function ChartFullscreenModal({
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(-1);
 
-  // Po każdym otwarciu widoku wracamy do zakresu/interwału przekazanego przez rodzica.
-  // Wzorzec "adjust state when props change" zamiast efektu (brak kaskadowych renderów).
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -282,7 +279,7 @@ export function ChartFullscreenModal({
           maximumFractionDigits: 2,
         });
 
-  // Zakres cen do narysowania siatki i etykiet osi Y.
+  // Zakres cen do narysowania siatki i etykiet osi Y
   const domain = useMemo(() => {
     if (candles.length === 0) return null;
     let min = Number.POSITIVE_INFINITY;
@@ -330,16 +327,13 @@ export function ChartFullscreenModal({
       statusBarTranslucent
     >
       <View style={styles.modalRoot}>
-        {/* Tło z możliwością kliknięcia do zamknięcia */}
         <Reanimated.View style={[styles.backdrop, backdropAnimatedStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} />
         </Reanimated.View>
 
-        {/* Wysuwany arkusz 91% wysokości (jak w pozostałych modalach) */}
         <Reanimated.View
           style={[styles.sheet, { backgroundColor: colors.background }, sheetAnimatedStyle]}
         >
-          {/* Belka do przeciągania w dół */}
           <GestureDetector gesture={dragGesture}>
             <View style={styles.dragArea}>
               <Reanimated.View style={[styles.dragHandle, handleAnimatedStyle]} />

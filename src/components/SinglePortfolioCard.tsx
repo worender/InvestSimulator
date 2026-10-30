@@ -1,23 +1,21 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { BlurView } from 'expo-blur';
 import { useMemo } from 'react';
 import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
-import { LineChart } from 'react-native-wagmi-charts';
 import { MockPortfolio } from '../database/mockPortfolioData';
 import { useTheme } from '../theme';
-import { GlassSurface } from './GlassSurface';
+import { PortfolioResultChart, buildPortfolioSeries } from './PortfolioResultChart';
 
 interface SinglePortfolioCardProps {
   portfolio: MockPortfolio;
 }
 
 export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
-  const { colors } = useTheme();
-  const { width } = useWindowDimensions();
+  const { colors, mode } = useTheme();
 
   const formatNumber = (val: number) =>
     Math.abs(val).toLocaleString('pl-PL', {
@@ -41,109 +39,66 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
     const baseVal = portfolio.totalValue - portfolio.profitCurrency;
     const midVal = baseVal + portfolio.profitCurrency * 0.45;
     const endVal = portfolio.totalValue;
-    return [
-      { timestamp: 1, value: Math.max(1, Math.round(baseVal)) },
-      { timestamp: 2, value: Math.max(1, Math.round(midVal)) },
-      { timestamp: 3, value: Math.max(1, Math.round(endVal)) },
-    ];
+    return buildPortfolioSeries([baseVal, midVal, endVal], 90);
   }, [portfolio]);
 
-  const chartLabels = [
-    chartData[chartData.length - 1].value,
-    chartData[Math.floor(chartData.length / 2)].value,
-    chartData[0].value,
-  ];
-
-  const chartWidth = Math.max(width - 124, 180);
   const cardAccent = colors.accent;
 
   return (
     <View style={styles.wrapper}>
-      {/* Karta 1:1 z dashboard (index.tsx / PortfolioOverviewCard) */}
-      <View style={[styles.card, { borderColor: cardAccent }]}>
-        <GlassSurface
+      <View style={styles.card}>
+        <BlurView
+          intensity={45}
+          tint={mode === 'dark' ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
           pointerEvents="none"
-          tintColor={cardAccent}
-          style={[StyleSheet.absoluteFill, styles.cardGlass]}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: cardAccent + '15',
+              opacity: mode === 'dark' ? 0.78 : 0.65,
+            },
+          ]}
         />
 
-        <View>
+        <View style={styles.cardContent}>
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                WARTOŚĆ PORTFELA · 3 MIESIĄCE
+              <Text style={[styles.stockText, { color: colors.text }]} numberOfLines={1}>
+                {portfolio.name} · {portfolio.currency}
               </Text>
               <Text style={[styles.total, { color: colors.text }]}>{totalFormatted}</Text>
+              <View style={styles.returnProfit}>
+                <Ionicons name={arrowIcon} size={13} color={arrowColor} />
+                <Text style={[styles.returnText, { color: colors.text }]}>
+                  {profitFormatted} ({profitPctFormatted})
+                </Text>
+              </View>
             </View>
-            <Ionicons name="wallet-outline" size={24} color={cardAccent} />
+            <Ionicons name="wallet-outline" size={24} color={cardAccent}/>
           </View>
 
-          {/* Stock / Portfolio Name row */}
-          <View style={styles.stockRow}>
-            <Ionicons name="trending-up-outline" size={16} color={cardAccent} />
-            <Text style={[styles.stockText, { color: colors.text }]} numberOfLines={1}>
-              {portfolio.name}
-            </Text>
-          </View>
-
-          {/* Subtitle */}
-          <Text style={[styles.swipeHint, { color: colors.textMuted }]}>
-            Portfel inwestycyjny · {portfolio.currency}
-          </Text>
 
           {/* Breakdown: Aktywne / Nieaktywne */}
-          <View style={styles.breakdown}>
+          <View style={[styles.breakdown, { marginBottom: 16 }]}>
             <Text style={[styles.breakdownText, { color: colors.textMuted }]}>
-              Aktywne <Text style={{ color: colors.text }}>{activeFormatted}</Text>
+              Aktywne: <Text style={{ color: colors.text }}>{activeFormatted}</Text>
             </Text>
             <Text style={[styles.breakdownText, { color: colors.textMuted }]}>
-              Nieaktywne <Text style={{ color: colors.text }}>{inactiveFormatted}</Text>
+              Nieaktywne: <Text style={{ color: colors.text }}>{inactiveFormatted}</Text>
             </Text>
           </View>
 
-          {/* Wykres z osią Y i liniami siatki */}
-          <View style={styles.chartRow}>
-            <View style={styles.yAxis}>
-              {chartLabels.map((value, pointIndex) => (
-                <Text
-                  key={`${value}-${pointIndex}`}
-                  style={[styles.yAxisLabel, { color: colors.textMuted }]}
-                >
-                  {value.toLocaleString('pl-PL')} {portfolio.currencySymbol}
-                </Text>
-              ))}
-            </View>
-            <View style={styles.chart}>
-              <View pointerEvents="none" style={styles.grid}>
-                {[0, 1, 2].map((gridIndex) => (
-                  <View
-                    key={gridIndex}
-                    style={[
-                      styles.gridLine,
-                      { top: gridIndex * 54, backgroundColor: colors.border },
-                    ]}
-                  />
-                ))}
-              </View>
-              <LineChart.Provider data={chartData}>
-                <LineChart height={110} width={chartWidth}>
-                  <LineChart.Path color={cardAccent} width={2.5} />
-                </LineChart>
-              </LineChart.Provider>
-            </View>
-          </View>
-
-          {/* Stopka z wynikiem: kolorowa strzałka, ale czysty tekst zgodnie z wytycznymi */}
-          <View style={styles.returnFooter}>
-            <Ionicons name={arrowIcon} size={15} color={arrowColor} />
-            <Text style={[styles.returnText, { color: colors.text }]}>
-              {profitFormatted} ({profitPctFormatted})
-            </Text>
-            <Text style={[styles.returnPeriod, { color: colors.textMuted }]}>
-              · wynik za ostatnie 3 miesiące
-            </Text>
-          </View>
+          {/* Wykres wyników portfela z pionową legendą i zakresem dat */}
+          <PortfolioResultChart
+            data={chartData}
+            currencySymbol={portfolio.currencySymbol}
+            periodLabel="3 miesiące"
+            height={110}
+          />
         </View>
       </View>
     </View>
@@ -153,18 +108,22 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'relative',
-    marginBottom: 20,
-    marginTop: 10,
+    marginTop: 16,
+    marginBottom: 4,
   },
   card: {
-    borderWidth: 1,
     borderRadius: 18,
     padding: 18,
     minHeight: 260,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  cardGlass: {
-    borderRadius: 18,
+  cardContent: {
+    zIndex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -203,50 +162,15 @@ const styles = StyleSheet.create({
   breakdownText: {
     fontSize: 12,
   },
-  chartRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    marginTop: 12,
-  },
-  yAxis: {
-    width: 46,
-    height: 110,
-    justifyContent: 'space-between',
-    paddingVertical: 2,
-  },
-  yAxisLabel: {
-    fontSize: 8,
-    textAlign: 'right',
-  },
-  chart: {
-    flex: 1,
-    height: 110,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  grid: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    zIndex: 0,
-  },
-  gridLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: StyleSheet.hairlineWidth,
-  },
-  returnFooter: {
+  returnProfit: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginTop: 12,
+    gap: 4,
+    marginTop: 4,
   },
   returnText: {
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 11,
   },
   returnPeriod: {
     fontSize: 12,

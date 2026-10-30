@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { BlurView } from 'expo-blur';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Reanimated, {
   Easing,
   Extrapolation,
@@ -12,17 +13,27 @@ import Reanimated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { LineChart } from 'react-native-wagmi-charts';
 import { Currency, useTheme } from '../theme';
-import { GlassSurface } from './GlassSurface';
+import { PortfolioResultChart, buildPortfolioSeries } from './PortfolioResultChart';
 
 const currencyOrder: Currency[] = ['PLN', 'EUR', 'USD'];
-type Portfolio = { symbol: string; total: string; active: string; inactive: string; accent: string; stock: string; stockName: string; values: { timestamp: number; value: number }[] };
+type Portfolio = {
+  name: string;
+  currency: Currency;
+  symbol: string;
+  totalValue: number;
+  cashBalance: number;
+  profitCurrency: number;
+  profitPercent: number;
+  accent: string;
+  stock: string;
+  stockName: string;
+};
 // Przykładowe dane portfela dla każdej waluty
 const cards: Record<Currency, Portfolio> = {
-  PLN: { symbol: 'zł', total: '10 000,00', active: '7 450,00', inactive: '2 550,00', accent: '#2563eb', stock: 'PKO', stockName: 'PKO Bank Polski', values: [{ timestamp: 1, value: 6800 }, { timestamp: 2, value: 7100 }, { timestamp: 3, value: 7450 }] },
-  EUR: { symbol: '€', total: '2 320,00', active: '1 780,00', inactive: '540,00', accent: '#7c3aed', stock: 'MC.PA', stockName: 'Louis Vuitton / LVMH', values: [{ timestamp: 1, value: 1600 }, { timestamp: 2, value: 1700 }, { timestamp: 3, value: 1780 }] },
-  USD: { symbol: '$', total: '2 520,00', active: '1 940,00', inactive: '580,00', accent: '#059669', stock: 'AAPL', stockName: 'Apple', values: [{ timestamp: 1, value: 1750 }, { timestamp: 2, value: 1860 }, { timestamp: 3, value: 1940 }] },
+  PLN: { name: 'Portfel podstawowy', currency: 'PLN', symbol: 'zł', totalValue: 10000, cashBalance: 2550, profitCurrency: 800, profitPercent: 8.70, accent: '#607a99', stock: 'PKO', stockName: 'PKO Bank Polski' },
+  EUR: { name: 'Portfel europejski', currency: 'EUR', symbol: '€', totalValue: 2320, cashBalance: 540, profitCurrency: 180, profitPercent: 8.41, accent: '#81779c', stock: 'MC.PA', stockName: 'Louis Vuitton / LVMH' },
+  USD: { name: 'Portfel amerykański', currency: 'USD', symbol: '$', totalValue: 2520, cashBalance: 580, profitCurrency: 220, profitPercent: 9.57, accent: '#648a78', stock: 'AAPL', stockName: 'Apple' },
 };
 
 const SHUFFLE_MS = 380;
@@ -55,11 +66,8 @@ function fadeCardIn(opacity: SharedValue<number>) {
 
 type PortfolioCardProps = {
   data: Portfolio;
-  currency: Currency;
   index: number;
   isFront: boolean;
-  width: number;
-  multiCurrency: boolean;
   // Pozycja karty w talii
   phase: SharedValue<number>;
   opacity: SharedValue<number>;
@@ -67,8 +75,8 @@ type PortfolioCardProps = {
 };
 
 // Komponent pojedynczej karty portfela w talii
-function PortfolioCard({ data, currency, index, isFront, width, multiCurrency, phase, opacity, onPress }: PortfolioCardProps) {
-  const { colors } = useTheme();
+function PortfolioCard({ data, index, isFront, phase, opacity, onPress }: PortfolioCardProps) {
+  const { colors, mode } = useTheme();
   const animatedStyle = useAnimatedStyle(() => {
     const pos = phase.value;
     return {
@@ -82,7 +90,33 @@ function PortfolioCard({ data, currency, index, isFront, width, multiCurrency, p
   const contentStyle = useAnimatedStyle(() => ({
     opacity: interpolate(phase.value, [0, 0.6], [1, 0], Extrapolation.CLAMP),
   }));
-  const chartLabels = [data.values[data.values.length - 1].value, data.values[Math.floor(data.values.length / 2)].value, data.values[0].value];
+
+  const formatNumber = (val: number) =>
+    Math.abs(val).toLocaleString('pl-PL', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+  const isPositive = data.profitCurrency >= 0;
+  const arrowColor = isPositive ? '#10b981' : '#ef4444';
+  const arrowIcon = isPositive ? 'arrow-up' : 'arrow-down';
+  const sign = isPositive ? '+' : '-';
+
+  const totalFormatted = `${formatNumber(data.totalValue)} ${data.symbol}`;
+  const activeFormatted = `${formatNumber(Math.max(0, data.totalValue - data.cashBalance))} ${data.symbol}`;
+  const inactiveFormatted = `${formatNumber(data.cashBalance)} ${data.symbol}`;
+  const profitFormatted = `${sign}${formatNumber(data.profitCurrency)} ${data.symbol}`;
+  const profitPctFormatted = `${sign}${Math.abs(data.profitPercent).toFixed(2)}%`;
+
+  // Punkty wykresu dla 3 miesięcy
+  const chartData = useMemo(() => {
+    const baseVal = data.totalValue - data.profitCurrency;
+    const midVal = baseVal + data.profitCurrency * 0.45;
+    const endVal = data.totalValue;
+    return buildPortfolioSeries([baseVal, midVal, endVal], 90);
+  }, [data]);
+
+  const cardAccent = data.accent;
 
   return (
     <Reanimated.View
@@ -95,61 +129,59 @@ function PortfolioCard({ data, currency, index, isFront, width, multiCurrency, p
     >
       <Pressable
         onPress={isFront ? onPress : undefined}
-        style={[styles.card, { borderColor: data.accent }]}
+        style={styles.card}
       >
-        <GlassSurface
+        <BlurView
+          intensity={45}
+          tint={mode === 'dark' ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
           pointerEvents="none"
-          tintColor={data.accent}
-          style={[StyleSheet.absoluteFill, styles.cardGlass]}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: cardAccent + '15',
+              opacity: mode === 'dark' ? 0.78 : 0.65,
+            },
+          ]}
         />
 
-        <Reanimated.View pointerEvents="none" style={contentStyle}>
-            <View style={styles.header}>
-              <View>
-                <Text style={[styles.label, { color: colors.textMuted }]}>WARTOŚĆ PORTFELA · 3 MIESIĄCE</Text>
-                <Text style={[styles.total, { color: colors.text }]}>{data.total} {data.symbol}</Text>
+        <Reanimated.View pointerEvents="none" style={[styles.cardContent, contentStyle]}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View>
+              <Text style={[styles.stockText, { color: colors.text }]} numberOfLines={1}>
+                {data.name} · {data.currency}
+              </Text>
+              <Text style={[styles.total, { color: colors.text }]}>{totalFormatted}</Text>
+              <View style={styles.returnProfit}>
+                <Ionicons name={arrowIcon} size={13} color={arrowColor} />
+                <Text style={[styles.returnText, { color: colors.text }]}>
+                  {profitFormatted} ({profitPctFormatted})
+                </Text>
               </View>
-              <Ionicons name="wallet-outline" size={24} color={data.accent} />
             </View>
-            <View style={styles.stockRow}>
-              <Ionicons name="trending-up-outline" size={16} color={data.accent} />
-              <Text style={[styles.stockText, { color: colors.text }]}>{data.stockName} · {data.stock}</Text>
-            </View>
-            <Text style={[styles.swipeHint, { color: colors.textMuted }]}>
-              {multiCurrency
-                ? `Dotknij karty dwa razy, aby zmienić portfel · ${currency}`
-                : `Domyślna waluta portfela · ${currency}`}
+            <Ionicons name="wallet-outline" size={24} color={cardAccent} />
+          </View>
+
+          {/* Breakdown: Aktywne / Nieaktywne */}
+          <View style={[styles.breakdown, { marginBottom: 16 }]}>
+            <Text style={[styles.breakdownText, { color: cardAccent }]}>
+              Aktywne: <Text style={{ color: colors.text }}>{activeFormatted}</Text>
             </Text>
-            <View style={styles.breakdown}>
-              <Text style={[styles.breakdownText, { color: colors.textMuted }]}>
-                Aktywne <Text style={{ color: colors.text }}>{data.active} {data.symbol}</Text>
-              </Text>
-              <Text style={[styles.breakdownText, { color: colors.textMuted }]}>
-                Nieaktywne <Text style={{ color: colors.text }}>{data.inactive} {data.symbol}</Text>
-              </Text>
-            </View>
-            <View style={styles.chartRow}>
-              <View style={styles.yAxis}>
-                {chartLabels.map((value, pointIndex) => (
-                  <Text key={`${value}-${pointIndex}`} style={[styles.yAxisLabel, { color: colors.textMuted }]}>
-                    {value.toLocaleString('pl-PL')} {data.symbol}
-                  </Text>
-                ))}
-              </View>
-              <View style={styles.chart}>
-                <View pointerEvents="none" style={styles.grid}>
-                  {[0, 1, 2].map((gridIndex) => (
-                    <View key={gridIndex} style={[styles.gridLine, { top: gridIndex * 54, backgroundColor: colors.border }]} />
-                  ))}
-                </View>
-                <LineChart.Provider data={data.values}>
-                  <LineChart height={110} width={Math.max(width - 124, 1)}>
-                    <LineChart.Path color={data.accent} width={2.5} />
-                  </LineChart>
-                </LineChart.Provider>
-              </View>
-            </View>
-            <Text style={{ color: colors.positive, fontWeight: '700' }}>+8,70% · wynik za ostatnie 3 miesiące</Text>
+            <Text style={[styles.breakdownText, { color: colors.textMuted }]}>
+              Nieaktywne: <Text style={{ color: colors.text }}>{inactiveFormatted}</Text>
+            </Text>
+          </View>
+
+          {/* Wykres wyników portfela z pionową legendą i zakresem dat */}
+          <PortfolioResultChart
+            data={chartData}
+            currencySymbol={data.symbol}
+            periodLabel="3 miesiące"
+            height={110}
+          />
         </Reanimated.View>
       </Pressable>
     </Reanimated.View>
@@ -158,7 +190,6 @@ function PortfolioCard({ data, currency, index, isFront, width, multiCurrency, p
 
 export function PortfolioOverviewCard({ onStockChange }: { onStockChange?: (stock: string, title: string, currency: Currency) => void }) {
   const { defaultCurrency, multiCurrency } = useTheme();
-  const { width } = useWindowDimensions();
   // Kolejność talii: [wierzch, środek, spód]. Zmieniana dopiero po zakończeniu animacji
   const [deckOrder, setDeckOrder] = useState<Currency[]>(() => {
     const selected = currencyOrder.filter((item) => item !== defaultCurrency);
@@ -223,12 +254,9 @@ export function PortfolioOverviewCard({ onStockChange }: { onStockChange?: (stoc
       {(multiCurrency ? currencyOrder : [deckOrder[0]]).map((item) => (
         <PortfolioCard
           key={item}
-          currency={item}
           data={cards[item]}
           index={deckOrder.indexOf(item)}
           isFront={deckOrder[0] === item}
-          width={width}
-          multiCurrency={multiCurrency}
           phase={phases[item]}
           opacity={opacities[item]}
           onPress={handleCardPress}
@@ -243,12 +271,50 @@ const styles = StyleSheet.create({
   deck: { position: 'relative', marginBottom: 12 },
   frontSlot: { position: 'relative' },
   backSlot: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  card: { borderWidth: 1, borderRadius: 18, padding: 18, minHeight: 260, overflow: 'hidden' },
-  cardGlass: { borderRadius: 18 },
-  header: { flexDirection: 'row', justifyContent: 'space-between' }, label: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 }, total: { fontSize: 28, fontWeight: '700', marginTop: 7 },
-  stockRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 16 }, stockText: { fontSize: 12, fontWeight: '700' }, swipeHint: { fontSize: 10, marginTop: 6 },
-  breakdown: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }, breakdownText: { fontSize: 12 },
-  chartRow: { flexDirection: 'row', alignItems: 'stretch', marginTop: 12 }, yAxis: { width: 46, height: 110, justifyContent: 'space-between', paddingVertical: 2 },
-  yAxisLabel: { fontSize: 8, textAlign: 'right' }, chart: { flex: 1, height: 110, overflow: 'hidden', position: 'relative' },
-  grid: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 0 }, gridLine: { position: 'absolute', left: 0, right: 0, height: StyleSheet.hairlineWidth },
+  card: {
+    borderRadius: 18,
+    padding: 18,
+    minHeight: 260,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardContent: {
+    zIndex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  total: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginTop: 7,
+  },
+  stockText: {
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
+  },
+  breakdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+  breakdownText: {
+    fontSize: 12,
+  },
+  returnProfit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  returnText: {
+    fontWeight: '700',
+    fontSize: 11,
+  },
 });

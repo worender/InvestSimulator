@@ -37,6 +37,7 @@ import { useLockScreenWhileActive } from '../interactionLock';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
 import { MarketClosedNoticeModal } from './MarketClosedNoticeModal';
+import { StockCandleChart } from './StockCandleChart';
 import { TradeInstrumentView } from './TradeInstrumentView';
 
 export type ModalTab = 'details' | 'trade';
@@ -58,6 +59,14 @@ interface InstrumentDetailModalProps {
     quantity: number,
     total: number,
   ) => void;
+  modalInstrument?: {
+    stock: string;
+    title: string;
+    currency: string;
+    symbol: string;
+    exchange: string;
+    financialData?: any;
+  } | null;
 }
 
 export function InstrumentDetailModal({
@@ -68,31 +77,28 @@ export function InstrumentDetailModal({
   onClose,
   initialTab = 'details',
   onMarketClosedAlert,
+  modalInstrument,
 }: InstrumentDetailModalProps) {
   const { colors, mode } = useTheme();
   const { bottom } = useSafeAreaInsets();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const isDark = mode === 'dark';
 
-  // Blokuje gesty ekranu pod spodem (np. swipe między zakładkami), gdy modal jest otwarty.
+  // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(visible);
 
   const [userSelectedTab, setUserSelectedTab] = useState<ModalTab | null>(null);
   const activeTab = userSelectedTab ?? initialTab;
 
-  // Przejście między zakładkami 1:1 jak "shift" w (tabs): obie strony leżą obok
-  // siebie i przesuwają się poziomo w 260 ms z Easing.out(Easing.cubic).
   const activeTabIndex = activeTab === 'trade' ? 1 : 0;
   const pagerX = useSharedValue(-activeTabIndex * windowWidth);
   const wasVisibleRef = useRef(visible);
 
   const [selectedAssetIndex, setSelectedAssetIndex] = useState(0);
 
-  // Rozwinięta lista wyboru instrumentu w kategorii
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerButtonHeight, setPickerButtonHeight] = useState(0);
 
-  // Stan modalnego powiadomienia o zamkniętym rynku
   const [noticeVisible, setNoticeVisible] = useState(false);
   const [noticeData, setNoticeData] = useState<{
     instrument: SearchableInstrument;
@@ -101,7 +107,6 @@ export function InstrumentDetailModal({
     totalCost: number;
   } | null>(null);
 
-  // Animacje przeciągania i belka zamykania w dół (1:1 jak w ModalChartView)
   const translateY = useSharedValue(windowHeight);
   const dragStart = useSharedValue(0);
 
@@ -113,7 +118,6 @@ export function InstrumentDetailModal({
     onClose();
   }, [onClose]);
 
-  // Reset pozycji pagera po zamknięciu modala (bez animacji przy ponownym otwarciu).
   useEffect(() => {
     const target = -activeTabIndex * windowWidth;
     if (!visible || !wasVisibleRef.current) {
@@ -283,14 +287,17 @@ export function InstrumentDetailModal({
       maximumFractionDigits: maxDecimals,
     });
 
-  // Wszystkie instrumenty w kategorii (do przełącznika)
+  // Wszystkie instrumenty w kategorii
   const categoryItems = useMemo(
     () => (category?.items ?? []).map((item, idx) => ({ ...item, index: idx })),
     [category],
   );
 
-  // Aktualny instrument lub null jeśli brak
-  const currentAsset = asset ?? categoryItems[selectedAssetIndex] ?? null;
+  // Aktualny instrument z kategorii lub bezpośrednio przekazany do modala.
+  // Gdy kategoria jest wybrana, liczy się pozycja z listy
+  const currentAsset = category
+    ? categoryItems[selectedAssetIndex] ?? categoryItems[0] ?? asset
+    : asset;
 
   const isProfit = (currentAsset?.profitCurrency ?? 0) >= 0;
   const arrowColor = isProfit ? '#10b981' : '#ef4444';
@@ -344,20 +351,43 @@ export function InstrumentDetailModal({
       ]
     : [];
 
-  const modalTitle = currentAsset
-    ? currentAsset.symbol
+  // Obsługa modalInstrument (dodawanie instrumentu bezpośrednio przez zieloną kartę)
+  const displayAsset = modalInstrument ? {
+    symbol: modalInstrument.symbol,
+    name: modalInstrument.title,
+    exchange: modalInstrument.exchange,
+    riskLevel: 'Niski', // Domyślnie niskie ryzyko dla nowych instrumentów
+    profitCurrency: 0,
+    totalValue: 0,
+    cashBalance: 0,
+    currencySymbol: modalInstrument.currency,
+    currency: modalInstrument.currency,
+    returns: {
+      oneMonth: undefined,
+      threeMonths: undefined,
+      sixMonths: undefined,
+      oneYear: undefined,
+      threeYears: undefined,
+      fiveYears: undefined,
+    },
+  } : currentAsset;
+
+  const currentAssetForDisplay = displayAsset ?? currentAsset;
+
+  const modalTitle = currentAssetForDisplay
+    ? currentAssetForDisplay.symbol
     : category
       ? category.title
       : 'Szczegóły';
-  const modalSubtitle = currentAsset
-    ? currentAsset.name
+  const modalSubtitle = currentAssetForDisplay
+    ? currentAssetForDisplay.name
     : category
       ? category.title
       : portfolio.name;
 
-  // Pozycja instrumentu na skali ryzyka (0-3).
-  const riskIndex = currentAsset
-    ? Math.max(0, RISK_LEVELS.indexOf(currentAsset.riskLevel as (typeof RISK_LEVELS)[number]))
+  // Pozycja instrumentu na skali ryzyka
+  const riskIndex = currentAssetForDisplay
+    ? Math.max(0, RISK_LEVELS.indexOf(currentAssetForDisplay.riskLevel as (typeof RISK_LEVELS)[number]))
     : 0;
   const riskColor = RISK_COLORS[riskIndex] ?? RISK_COLORS[0];
   const riskPercent = (riskIndex / (RISK_LEVELS.length - 1)) * 100;
@@ -374,14 +404,11 @@ export function InstrumentDetailModal({
         statusBarTranslucent
       >
         <View style={styles.modalRoot}>
-          {/* Tło z możliwością kliknięcia do zamknięcia */}
           <Reanimated.View style={[styles.backdrop, backdropAnimatedStyle]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} />
           </Reanimated.View>
 
-          {/* Wysuwany arkusz modalny (bottom sheet) */}
           <Reanimated.View style={[styles.sheet, { backgroundColor: colors.background }, sheetAnimatedStyle]}>
-            {/* Belka do ciągnięcia (drag handle bar) 1:1 jak w ModalChartView */}
             <GestureDetector gesture={dragGesture}>
               <View style={styles.dragArea}>
                 <Reanimated.View style={[styles.dragHandle, handleAnimatedStyle]} />
@@ -427,7 +454,6 @@ export function InstrumentDetailModal({
               </View>
             </GestureDetector>
 
-            {/* Zakładki z border-bottom */}
             <View style={[styles.tabsBar, { borderBottomColor: colors.border }]}>
               <Pressable
                 onPress={() => setUserSelectedTab('details')}
@@ -466,7 +492,7 @@ export function InstrumentDetailModal({
               </Pressable>
             </View>
 
-            {/* Zawartość zakładek — swipe w lewo/prawo przełącza zakładki */}
+            {/* Zawartość zakładek */}
             <GestureDetector gesture={tabSwipeGesture}>
               <View style={styles.tabContent}>
                 <Reanimated.View
@@ -485,7 +511,6 @@ export function InstrumentDetailModal({
                     contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 + bottom }]}
                     showsVerticalScrollIndicator={false}
                   >
-                    {/* Wybór instrumentu w kategorii — czytelny selektor z listą */}
                     {categoryItems.length > 1 && (
                       <View style={styles.instrumentPicker}>
                         <Pressable
@@ -609,9 +634,23 @@ export function InstrumentDetailModal({
                       </View>
                     )}
 
+                    {/* Wykres wybranego instrumentu z kategorii */}
+                    {currentAssetForDisplay && (
+                      <View style={styles.chartSection}>
+                        <StockCandleChart
+                          key={`${currentAssetForDisplay.symbol}-${currentAssetForDisplay.exchange}`}
+                          stock={currentAssetForDisplay.symbol}
+                          title={currentAssetForDisplay.name}
+                          currency={currentAssetForDisplay.currency}
+                          exchange={currentAssetForDisplay.exchange}
+                          variant="embedded"
+                        />
+                      </View>
+                    )}
+
                     {currentAsset ? (
                       <>
-                        {/* 1. Główne dane liczbowe (czyste linie/wiersze, BEZ divów/boxów) */}
+                        {/* Dane liczbowe */}
                         <View style={styles.metricsContainer}>
                           <View style={styles.metricRow}>
                             <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
@@ -667,7 +706,7 @@ export function InstrumentDetailModal({
                           </View>
                         </View>
 
-                        {/* 2. ZYSKI W POSTACI BLOKÓW (JAKO JEDYNE) ZE SCROLLEM POZIOMYM */}
+                        {/* Zyski w okresach */}
                         <View style={styles.periodBlocksSection}>
                           <Text style={[styles.sectionHeading, { color: colors.textMuted }]}>
                             ZYSK W OKRESACH
@@ -718,7 +757,7 @@ export function InstrumentDetailModal({
                       </ScrollView>
                         </View>
 
-                        {/* 3. HISTORIA ZAKUPÓW I SPRZEDAŻY (BEZ DIVÓW/BOXÓW) */}
+                        {/* Historia transakcji */}
                         <View style={styles.txSection}>
                           <Text style={[styles.sectionHeading, { color: colors.textMuted }]}>
                             TRANSAKCJE
@@ -770,7 +809,7 @@ export function InstrumentDetailModal({
                           ))}
                         </View>
 
-                        {/* 4. INFORMACJE O AKTYWIE — duży tytuł, opis i wskaźniki */}
+                        {/* Informacje o aktywie */}
                         <View style={styles.assetInfoSection}>
                           <Text style={[styles.assetInfoTitle, { color: colors.text }]}>
                             {currentAsset.name}
@@ -873,7 +912,7 @@ export function InstrumentDetailModal({
         </View>
       </Modal>
 
-      {/* Powiadomienie modalne o zamkniętym rynku (poza Modal dla widoczności) */}
+      {/* Powiadomienie modalne o zamkniętym rynku */}
       <MarketClosedNoticeModal
         visible={noticeVisible}
         instrument={noticeData?.instrument ?? null}
@@ -1001,6 +1040,9 @@ const styles = StyleSheet.create({
     zIndex: 20,
     elevation: 20,
   },
+  chartSection: {
+    marginBottom: 20,
+  },
   instrumentPickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1114,7 +1156,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  // Zyski w postaci bloków (jako jedyne ze scrollem poziomym)
   periodBlocksSection: {
     marginBottom: 24,
   },
@@ -1154,7 +1195,6 @@ const styles = StyleSheet.create({
   periodBlockUnavailable: {
     fontSize: 12,
   },
-  // Transakcje bez divów
   txSection: {
     marginBottom: 26,
   },
@@ -1196,7 +1236,6 @@ const styles = StyleSheet.create({
   txTotal: {
     fontSize: 11,
   },
-  // Informacje o aktywie na dole
   assetInfoSection: {
     marginTop: 8,
     paddingTop: 16,

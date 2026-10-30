@@ -165,9 +165,9 @@ export default function Index() {
           style={{ backgroundColor: colors.background }}
           contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom, paddingTop: top + PANEL_HEADER_HEIGHT + 8 }]}
           keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
           {...scrollNav}
         >
-          <Text style={[styles.eyebrow, { color: colors.accent }]}>EDUKACYJNY SYMULATOR</Text>
           <Text style={[styles.title, { color: colors.text }]}>Dzień dobry, inwestorze</Text>
 
           <Section label="Portfel">
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },
-  title: { fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
+  title: { fontSize: 25, fontWeight: '700', letterSpacing: -0.5, marginTop: 8 },
   resultsOverlay: {
     position: 'absolute',
     top: 0,
