@@ -4,6 +4,7 @@ import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Reanimated, {
   Easing,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -30,7 +31,7 @@ import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 export default function PortfolioScreen() {
   const { colors, mode } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
-  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
+  // Widok treści rozmywanej pod nagłówkiem 
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
 
@@ -52,8 +53,8 @@ export default function PortfolioScreen() {
     financialData?: any;
   } | null>(null);
 
-  // Menu przycisku "+" w headerze (osobny overlay, nie wpływa na układ treści)
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Menu przycisku "+" w headerze
+  const [menuMounted, setMenuMounted] = useState(false);
 
   // Overlay wyszukiwania instrumentu (wspólny dla karty i menu headera)
   const [searchSheetOpen, setSearchSheetOpen] = useState(false);
@@ -70,6 +71,19 @@ export default function PortfolioScreen() {
     transform: [{ rotate: `${menuIconRotation.value}deg` }],
   }));
 
+  // Animacja wypłynięcia menu: lekki zjazd z góry + fade
+  const menuProgress = useSharedValue(0);
+  const menuCardStyle = useAnimatedStyle(() => ({
+    opacity: menuProgress.value,
+    transform: [
+      { translateY: (1 - menuProgress.value) * -12 },
+      { scale: 0.96 + menuProgress.value * 0.04 },
+    ],
+  }));
+  const menuBackdropStyle = useAnimatedStyle(() => ({
+    opacity: menuProgress.value,
+  }));
+
   const currentPortfolio = portfolios[activePortfolioIndex] || portfolios[0];
   const hasMultiplePortfolios = portfolios.length > 1;
   const isAddDisabled = portfolios.length >= 5;
@@ -82,19 +96,43 @@ export default function PortfolioScreen() {
     setActivePortfolioIndex((prev) => (prev + 1) % portfolios.length);
   };
 
-  // Otwieranie/zamykanie menu przycisku "+" z animacją ikony
-  const toggleMenu = () => {
-    const next = !menuOpen;
-    setMenuOpen(next);
-    menuIconRotation.value = withTiming(next ? 45 : 0, {
+  // Otwieranie menu
+  const openMenu = () => {
+    setMenuMounted(true);
+    // eslint-disable-next-line react-hooks/immutability
+    menuProgress.value = withTiming(1, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+    });
+    menuIconRotation.value = withTiming(45, {
       duration: 200,
       easing: Easing.out(Easing.cubic),
     });
   };
 
+  // Zamykanie menu
   const closeMenu = () => {
-    setMenuOpen(false);
+    // eslint-disable-next-line react-hooks/immutability
+    menuProgress.value = withTiming(
+      0,
+      { duration: 160, easing: Easing.in(Easing.cubic) },
+      (finished) => {
+        'worklet';
+        if (finished) {
+          runOnJS(setMenuMounted)(false);
+        }
+      },
+    );
     menuIconRotation.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) });
+  };
+
+  // Przełączanie menu przycisku "+"
+  const toggleMenu = () => {
+    if (menuMounted) {
+      closeMenu();
+    } else {
+      openMenu();
+    }
   };
 
   // Dodanie nowego portfela na bazie aktualnie wybranego (limit 5)
@@ -178,7 +216,6 @@ export default function PortfolioScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* Stały tytuł headeru: Portfolio (punkt 4) */}
       <PanelHeader
         blurTarget={blurTargetRef}
         title="Portfolio"
@@ -198,7 +235,6 @@ export default function PortfolioScreen() {
         }
         right={
           <View style={styles.headerButtons}>
-            {/* Przycisk edycji/portfolio - mniejszy, jasny (biały w trybie ciemnym) */}
             <Pressable
               onPress={() => {
                 notify({
@@ -214,20 +250,19 @@ export default function PortfolioScreen() {
               <Ionicons
                 name="pencil-outline"
                 size={18}
-                color={mode === 'dark' ? '#ffffff' : colors.text}
+                color={mode === 'dark' ? colors.textMuted : colors.text}
               />
             </Pressable>
 
-            {/* Przycisk "+": otwiera menu portfeli/instrumentów, ikona zmienia się w "x" */}
             <Pressable
               onPress={toggleMenu}
-              accessibilityLabel={menuOpen ? 'Zamknij menu dodawania' : 'Dodaj portfel lub instrument'}
-              accessibilityState={{ expanded: menuOpen }}
+              accessibilityLabel={menuMounted ? 'Zamknij menu dodawania' : 'Dodaj portfel lub instrument'}
+              accessibilityState={{ expanded: menuMounted }}
               hitSlop={10}
               style={({ pressed }) => [
                 styles.addButton,
                 {
-                  backgroundColor: menuOpen ? colors.accentGlass : 'transparent',
+                  backgroundColor: 'transparent',
                   opacity: pressed ? 0.7 : 1,
                 },
               ]}
@@ -240,14 +275,15 @@ export default function PortfolioScreen() {
         }
       />
 
-      {/* Menu przycisku "+" jako osobny overlay nad treścią - nie przesuwa kart pod spodem */}
-      {menuOpen && (
+      {menuMounted && (
         <View style={styles.menuLayer} pointerEvents="box-none">
-          <Pressable
-            style={[StyleSheet.absoluteFill, styles.menuBackdrop]}
-            onPress={closeMenu}
-            accessibilityLabel="Zamknij menu"
-          />
+          <Reanimated.View style={[StyleSheet.absoluteFill, styles.menuBackdrop, menuBackdropStyle]}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={closeMenu}
+              accessibilityLabel="Zamknij menu"
+            />
+          </Reanimated.View>
           <Reanimated.View
             style={[
               styles.menuCard,
@@ -256,6 +292,7 @@ export default function PortfolioScreen() {
                 backgroundColor: mode === 'dark' ? 'rgba(22, 27, 34, 0.97)' : 'rgba(255, 255, 255, 0.98)',
                 borderColor: colors.borderGlass,
               },
+              menuCardStyle,
             ]}
           >
             <Pressable
@@ -297,10 +334,8 @@ export default function PortfolioScreen() {
           showsVerticalScrollIndicator={false}
           {...scrollNav}
         >
-          {/* Pojedyncza karta portfela 1:1 z dashboard */}
           <SinglePortfolioCard portfolio={currentPortfolio} />
 
-          {/* Sekcja z kolorowymi kafelkami w siatce 2x2 (punkty 1, 3) */}
           <Section label="Kategorie aktywów">
             <View style={styles.categoriesGrid}>
               {currentPortfolio.categories.map((category) => (
@@ -312,7 +347,6 @@ export default function PortfolioScreen() {
                 />
               ))}
 
-              {/* Karta dodawania instrumentu - należy do siatki i zajmuje dokładnie tyle samo miejsca co jedna karta */}
               <Pressable
                 onPress={handleOpenSearchSheet}
                 accessibilityLabel="Dodaj instrument do portfela"
@@ -358,7 +392,6 @@ export default function PortfolioScreen() {
         </ScrollView>
       </BlurTargetView>
 
-      {/* Overlay wyszukiwania instrumentu (zielona karta + menu headera) */}
       {searchSheetOpen && (
         <InstrumentSearchSheet
           visible
@@ -367,7 +400,6 @@ export default function PortfolioScreen() {
         />
       )}
 
-      {/* Okno modalne szczegółów instrumentu i zakupu (punkty 6, 7, 8, 9, 10, 11, 12) */}
       <InstrumentDetailModal
         visible={modalVisible}
         asset={selectedAsset}
@@ -395,14 +427,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Overlay menu "+": zajmuje cały ekran, ale leży nad treścią i nie zmienia układu
+  // Overlay menu "+": zajmuje cały ekra
   menuLayer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    // Poniżej nagłówka (zIndex 20), aby przycisk "+" pozostał klikalny i mógł zamknąć menu
     zIndex: 15,
     elevation: 15,
   },
@@ -442,7 +473,6 @@ const styles = StyleSheet.create({
   menuLimit: {
     fontSize: 11,
   },
-  // Karta dodawania instrumentu: te same wymiary co pojedyncza karta kategorii
   addCard: {
     width: '48%',
     borderRadius: 20,

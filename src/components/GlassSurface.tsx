@@ -10,7 +10,7 @@ type GlassSurfaceProps = PropsWithChildren<{
   pointerEvents?: 'auto' | 'none' | 'box-none';
 }>;
 
-// Komponent z efektem "szklanej powierzchni" 
+// Komponent z efektem liquidglass
 export function GlassSurface({
   tintColor,
   intensity = 45,

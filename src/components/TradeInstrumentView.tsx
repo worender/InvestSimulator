@@ -142,7 +142,7 @@ export function TradeInstrumentView({
 
         setYahooResults(mapped);
       } catch {
-        // błąd obsłużony cicho w wyszukiwarce pomocniczej
+        // błąd obsłużony cicho
       } finally {
         if (isMounted) setIsSearchingYahoo(false);
       }
@@ -184,7 +184,7 @@ export function TradeInstrumentView({
   // Obliczenia ilości i kosztów
   const parseNumber = (value: string) => parseFloat(value.replace(',', '.')) || 0;
 
-  // W trybie "za kwotę" ilość wyliczamy z kwoty (części instrumentu do 0.01).
+  // Tryb za kwotę
   const parsedAmount = parseNumber(amountStr);
   const amountDerivedQuantity =
     activeInstrument.price > 0
@@ -214,7 +214,7 @@ export function TradeInstrumentView({
     setQuantityStr(isCrypto ? nextVal.toFixed(2) : Math.round(nextVal).toString());
   };
 
-  // Zmiana trybu: za ilość <-> za kwotę (z animacją obrotu strzałki).
+  // Zmiana trybu: za ilość <-> za kwotę
   const handleToggleInputMode = () => {
     modeRotation.value = withTiming(modeRotation.value + 180, {
       duration: 320,
@@ -324,7 +324,7 @@ export function TradeInstrumentView({
         ) : null}
       </View>
 
-      {/* Filtry kategorii — nagłówek + pigułki z ikonami */}
+      {/* Filtry kategorii */}
       <View style={styles.filtersHeader}>
         <Text style={[styles.filtersLabel, { color: colors.textMuted }]}>FILTR KATEGORII</Text>
         <Text style={[styles.filtersCount, { color: colors.textMuted }]}>
@@ -375,7 +375,7 @@ export function TradeInstrumentView({
         })}
       </ScrollView>
 
-      {/* Horyzontalna lista dopasowanych instrumentów */}
+      {/* Horyzontalna lista instrumentów */}
       {filteredInstruments.length === 0 && (
         <Text style={[styles.emptyResults, { color: colors.textMuted }]}>
           Brak instrumentów dla wybranych filtrów.
@@ -417,7 +417,7 @@ export function TradeInstrumentView({
         })}
       </ScrollView>
 
-      {/* Aktywny instrument – CZYSTY, BEZ BOXÓW/DIVÓW (punkt 8, 11) */}
+      {/* Aktywny instrument */}
       <View style={styles.instrumentSection}>
         <View style={styles.instrumentMetaRow}>
           <View>
@@ -457,7 +457,7 @@ export function TradeInstrumentView({
           </View>
         </View>
 
-        {/* Pomniejszony wykres instrumentu bez pudła */}
+        {/* Pomniejszony wykres*/}
         <View style={styles.chartWrapper}>
           <LineChart.Provider data={activeInstrument.chartPoints}>
             <LineChart height={84} width={chartWidth}>
@@ -466,7 +466,7 @@ export function TradeInstrumentView({
           </LineChart.Provider>
         </View>
 
-        {/* Informacja o posiadanych jednostkach i wolnych środkach w postaci czystych linii */}
+        {/* Informacja o posiadanych jednostkach i wolnych środkach */}
         <View style={[styles.portfolioStatusRow, { borderTopColor: colors.border }]}>
           <View>
             <Text style={[styles.statusMiniLabel, { color: colors.textMuted }]}>Posiadasz:</Text>
@@ -483,11 +483,8 @@ export function TradeInstrumentView({
         </View>
       </View>
 
-      {/* Selektor ilości / kwoty i zlecenia kupna-sprzedaży (bez pudełkowego card) */}
       <View style={styles.tradeControls}>
-        {/* Pasek trybu z rotującą strzałką do zmiany: za ilość <-> za kwotę */}
         <View style={styles.quantitySelectorRow}>
-          {/* Rotująca strzałka przełącza tryb: za ilość <-> za kwotę */}
           <Pressable
             onPress={handleToggleInputMode}
             accessibilityRole="button"
@@ -541,7 +538,6 @@ export function TradeInstrumentView({
           </Text>
         )}
 
-        {/* Skróty MAX */}
         <View style={styles.quickShortcutsRow}>
           <Pressable
             onPress={handleSetMaxForBuy}
@@ -559,7 +555,6 @@ export function TradeInstrumentView({
           )}
         </View>
 
-        {/* Czysty wiersz łącznej kwoty */}
         <View style={styles.totalCalcRow}>
           <Text style={[styles.totalCalcLabel, { color: colors.textMuted }]}>
             {inputMode === 'quantity' ? 'Łącznie:' : 'Kwota:'}
@@ -622,6 +617,7 @@ export function TradeInstrumentView({
   );
 }
 
+// StyleSheet dla komponentu TradeInstrumentView
 const styles = StyleSheet.create({
   container: {
     flex: 1,

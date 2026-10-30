@@ -41,7 +41,6 @@ export function MarketClosedNoticeModal({
       onRequestClose={onClose}
     >
       <View style={styles.backdrop}>
-        {/* Rozmyte tło */}
         <BlurView
           intensity={isDark ? 50 : 35}
           tint={isDark ? 'dark' : 'light'}
@@ -49,7 +48,6 @@ export function MarketClosedNoticeModal({
         />
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
-        {/* Wyśrodkowana karta powiadomienia modalnego */}
         <View
           style={[
             styles.modalCard,

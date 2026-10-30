@@ -23,6 +23,8 @@ type StockCandleChartProps = {
   exchange?: string;
   currency?: string;
   variant?: 'card' | 'embedded';
+  initialRangeIndex?: number;
+  initialInterval?: ChartInterval;
 };
 
 // Komponent wyświetlający wykres świecowy dla danego aktywa giełdowego
@@ -32,11 +34,16 @@ export function StockCandleChart({
   currency = 'zł',
   exchange = 'GPW',
   variant = 'card',
+  initialRangeIndex = DEFAULT_CHART_RANGE_INDEX,
+  initialInterval = DEFAULT_CHART_INTERVAL,
 }: StockCandleChartProps) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
+  const isDark = mode === 'dark';
   const [candles, setCandles] = useState<CandleData[]>([]);
-  const [rangeIndex, setRangeIndex] = useState(DEFAULT_CHART_RANGE_INDEX);
-  const [interval, setInterval] = useState<ChartInterval>(DEFAULT_CHART_INTERVAL);
+  const [rangeIndex, setRangeIndex] = useState(() =>
+    Math.min(Math.max(initialRangeIndex, 0), CHART_RANGES.length - 1),
+  );
+  const [interval, setInterval] = useState<ChartInterval>(initialInterval);
   const [loading, setLoading] = useState(true);
   // Pełnoekranowy widok wykresu (wspólny komponent dla każdego wykresu świecowego).
   const [fullscreenVisible, setFullscreenVisible] = useState(false);
@@ -135,7 +142,27 @@ export function StockCandleChart({
         </View>
           : candles.length === 0 ? <View style={styles.placeholder}><Ionicons name="calendar-outline" size={40} color={colors.textMuted} /><Text style={[styles.muted, { color: colors.textMuted }]}>Brak notowań dla tego zakresu.</Text></View>
             : <CandlestickChart.Provider data={candles}>
-              <CandlestickChart height={280}><CandlestickChart.Candles useAnimations={false} /><CandlestickChart.Crosshair minDurationMs={320}><CandlestickChart.Tooltip /></CandlestickChart.Crosshair></CandlestickChart>
+              <CandlestickChart height={280}>
+                <CandlestickChart.Candles useAnimations={false} />
+                <CandlestickChart.Crosshair color={colors.textMuted} minDurationMs={320}>
+                  {/* Tooltip spójny z wykresem w ModalChartView / ChartFullscreenModal. */}
+                  <CandlestickChart.Tooltip
+                    style={[
+                      styles.tooltip,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(22, 27, 34, 0.96)'
+                          : 'rgba(255, 255, 255, 0.96)',
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    tooltipTextProps={{
+                      precision: 2,
+                      style: { color: colors.text, fontSize: 12, fontWeight: '700' },
+                    }}
+                  />
+                </CandlestickChart.Crosshair>
+              </CandlestickChart>
               <View style={styles.crosshair}><CandlestickChart.DatetimeText locale="pl-PL" style={{ color: colors.textMuted, fontSize: 11 }} /></View>
             </CandlestickChart.Provider>}
             
@@ -207,6 +234,7 @@ const styles = StyleSheet.create({
   skeletonLine: { marginVertical: 4 },
   skeletonTrend: { alignSelf: 'center', marginTop: 8 },
   crosshair: { alignItems: 'center', marginTop: 4 },
+  tooltip: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4 },
   interactionHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 8 },
   interactionHintText: { fontSize: 10, fontWeight: '600' },
   axis: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, paddingTop: 10, marginTop: 4 },

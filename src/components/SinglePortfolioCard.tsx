@@ -5,11 +5,10 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
-import { LineChart } from 'react-native-wagmi-charts';
 import { MockPortfolio } from '../database/mockPortfolioData';
 import { useTheme } from '../theme';
+import { PortfolioResultChart, buildPortfolioSeries } from './PortfolioResultChart';
 
 interface SinglePortfolioCardProps {
   portfolio: MockPortfolio;
@@ -17,7 +16,6 @@ interface SinglePortfolioCardProps {
 
 export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
   const { colors, mode } = useTheme();
-  const { width } = useWindowDimensions();
 
   const formatNumber = (val: number) =>
     Math.abs(val).toLocaleString('pl-PL', {
@@ -41,27 +39,14 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
     const baseVal = portfolio.totalValue - portfolio.profitCurrency;
     const midVal = baseVal + portfolio.profitCurrency * 0.45;
     const endVal = portfolio.totalValue;
-    return [
-      { timestamp: 1, value: Math.max(1, Math.round(baseVal)) },
-      { timestamp: 2, value: Math.max(1, Math.round(midVal)) },
-      { timestamp: 3, value: Math.max(1, Math.round(endVal)) },
-    ];
+    return buildPortfolioSeries([baseVal, midVal, endVal], 90);
   }, [portfolio]);
 
-  const chartLabels = [
-    chartData[chartData.length - 1].value,
-    chartData[Math.floor(chartData.length / 2)].value,
-    chartData[0].value,
-  ];
-
-  const chartWidth = Math.max(width - 124, 180);
   const cardAccent = colors.accent;
 
   return (
     <View style={styles.wrapper}>
-      {/* Karta 1:1 z dashboard (index.tsx / PortfolioOverviewCard) */}
-      <View style={[styles.card, { borderColor: cardAccent }]}>
-        {/* Efekt Liquid Glass z blurem - bardziej przeźroczyste tło z blurem jak w AssetCategoryCard */}
+      <View style={styles.card}>
         <BlurView
           intensity={45}
           tint={mode === 'dark' ? 'dark' : 'light'}
@@ -72,7 +57,7 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
           style={[
             StyleSheet.absoluteFill,
             {
-              backgroundColor: cardAccent + '15', // Bardziej przeźroczyste tło
+              backgroundColor: cardAccent + '15',
               opacity: mode === 'dark' ? 0.78 : 0.65,
             },
           ]}
@@ -99,7 +84,7 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
 
           {/* Breakdown: Aktywne / Nieaktywne */}
           <View style={[styles.breakdown, { marginBottom: 16 }]}>
-            <Text style={[styles.breakdownText, { color: colors.accent }]}>
+            <Text style={[styles.breakdownText, { color: colors.textMuted }]}>
               Aktywne: <Text style={{ color: colors.text }}>{activeFormatted}</Text>
             </Text>
             <Text style={[styles.breakdownText, { color: colors.textMuted }]}>
@@ -107,37 +92,13 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
             </Text>
           </View>
 
-          {/* Wykres z osią Y i liniami siatki */}
-          <View style={styles.chartRow}>
-            <View style={styles.yAxis}>
-              {chartLabels.map((value, pointIndex) => (
-                <Text
-                  key={`${value}-${pointIndex}`}
-                  style={[styles.yAxisLabel, { color: colors.textMuted }]}
-                >
-                  {value.toLocaleString('pl-PL')} {portfolio.currencySymbol}
-                </Text>
-              ))}
-            </View>
-            <View style={styles.chart}>
-              <View pointerEvents="none" style={styles.grid}>
-                {[0, 1, 2].map((gridIndex) => (
-                  <View
-                    key={gridIndex}
-                    style={[
-                      styles.gridLine,
-                      { top: gridIndex * 54, backgroundColor: colors.border },
-                    ]}
-                  />
-                ))}
-              </View>
-              <LineChart.Provider data={chartData}>
-                <LineChart height={110} width={chartWidth}>
-                  <LineChart.Path color={cardAccent} width={2.5} />
-                </LineChart>
-              </LineChart.Provider>
-            </View>
-          </View>
+          {/* Wykres wyników portfela z pionową legendą i zakresem dat */}
+          <PortfolioResultChart
+            data={chartData}
+            currencySymbol={portfolio.currencySymbol}
+            periodLabel="3 miesiące"
+            height={110}
+          />
         </View>
       </View>
     </View>
@@ -151,11 +112,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   card: {
-    borderWidth: 1,
     borderRadius: 18,
     padding: 18,
     minHeight: 260,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   cardContent: {
     zIndex: 1,
@@ -196,41 +161,6 @@ const styles = StyleSheet.create({
   },
   breakdownText: {
     fontSize: 12,
-  },
-  chartRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    marginTop: 12,
-  },
-  yAxis: {
-    width: 46,
-    height: 110,
-    justifyContent: 'space-between',
-    paddingVertical: 2,
-  },
-  yAxisLabel: {
-    fontSize: 8,
-    textAlign: 'right',
-  },
-  chart: {
-    flex: 1,
-    height: 110,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  grid: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    zIndex: 0,
-  },
-  gridLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: StyleSheet.hairlineWidth,
   },
   returnProfit: {
     flexDirection: 'row',

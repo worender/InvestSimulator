@@ -27,8 +27,7 @@ interface InstrumentSearchSheetProps {
 const SEARCH_DEBOUNCE_MS = 280;
 
 /**
- * Overlay do wyszukiwania i wyboru instrumentu, który ma zostać dodany do portfela.
- * Współdzielony przez zieloną kartę w siatce oraz pozycję "Dodaj instrument" w menu headera.
+ * Overlay do wyszukiwania i wyboru instrumentu, który ma zostać dodany do portfela
  */
 export function InstrumentSearchSheet({ visible, onClose, onSelect }: InstrumentSearchSheetProps) {
   const { colors, mode } = useTheme();
@@ -39,7 +38,7 @@ export function InstrumentSearchSheet({ visible, onClose, onSelect }: Instrument
   const [results, setResults] = useState<InstrumentSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Wyszukiwanie z opóźnieniem, aby nie odpytywać API po każdym znaku.
+  // Wyszukiwanie z opóźnieniem
   useEffect(() => {
     const trimmed = query.trim();
     if (trimmed.length < 2) return;
@@ -69,7 +68,6 @@ export function InstrumentSearchSheet({ visible, onClose, onSelect }: Instrument
   const visibleResults = showPrompt ? [] : results;
   const isSearching = !showPrompt && loading;
 
-  // Wybór instrumentu zamyka klawiaturę i przekazuje wynik do ekranu nadrzędnego.
   const handleSelect = (instrument: InstrumentSearchResult) => {
     Keyboard.dismiss();
     onSelect(instrument);
@@ -87,7 +85,6 @@ export function InstrumentSearchSheet({ visible, onClose, onSelect }: Instrument
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Rozmyte tło overlayu */}
         <BlurView
           intensity={isDark ? 45 : 30}
           tint={isDark ? 'dark' : 'light'}
