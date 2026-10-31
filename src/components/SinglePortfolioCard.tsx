@@ -2,6 +2,10 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMemo } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { MockPortfolio } from "../database/mockPortfolioData";
+import {
+  convertForDisplay,
+  displaySymbol,
+} from "../displayCurrency";
 import { useTheme } from "../theme";
 import { GlassBackground } from "./GlassBackground";
 import {
@@ -27,10 +31,11 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
   const arrowIcon = isPositive ? "arrow-up" : "arrow-down";
   const sign = isPositive ? "+" : "-";
 
-  const totalFormatted = `${formatNumber(portfolio.totalValue)} ${portfolio.currencySymbol}`;
-  const activeFormatted = `${formatNumber(Math.max(0, portfolio.totalValue - portfolio.cashBalance))} ${portfolio.currencySymbol}`;
-  const inactiveFormatted = `${formatNumber(portfolio.cashBalance)} ${portfolio.currencySymbol}`;
-  const profitFormatted = `${sign}${formatNumber(portfolio.profitCurrency)} ${portfolio.currencySymbol}`;
+  const symbol = displaySymbol(portfolio.currency);
+  const totalFormatted = `${formatNumber(convertForDisplay(portfolio.totalValue, portfolio.currency))} ${symbol}`;
+  const activeFormatted = `${formatNumber(convertForDisplay(Math.max(0, portfolio.totalValue - portfolio.cashBalance), portfolio.currency))} ${symbol}`;
+  const inactiveFormatted = `${formatNumber(convertForDisplay(portfolio.cashBalance, portfolio.currency))} ${symbol}`;
+  const profitFormatted = `${sign}${formatNumber(convertForDisplay(portfolio.profitCurrency, portfolio.currency))} ${symbol}`;
   const profitPctFormatted = `${sign}${Math.abs(portfolio.profitPercent).toFixed(2)}%`;
 
   // Punkty wykresu dla 3 miesięcy
@@ -38,7 +43,12 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
     const baseVal = portfolio.totalValue - portfolio.profitCurrency;
     const midVal = baseVal + portfolio.profitCurrency * 0.45;
     const endVal = portfolio.totalValue;
-    return buildPortfolioSeries([baseVal, midVal, endVal], 90);
+    return buildPortfolioSeries([baseVal, midVal, endVal], 90).map(
+      (point) => ({
+        ...point,
+        value: convertForDisplay(point.value, portfolio.currency),
+      }),
+    );
   }, [portfolio]);
 
   const cardAccent = colors.accent;
@@ -93,7 +103,7 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
             {/* Wykres wyników portfela z pionową legendą i zakresem dat */}
             <PortfolioResultChart
               data={chartData}
-              currencySymbol={portfolio.currencySymbol}
+              currencySymbol={symbol}
               periodLabel="3 miesiące"
               height={110}
             />

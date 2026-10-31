@@ -24,6 +24,10 @@ import {
   SEARCHABLE_INSTRUMENTS,
   SearchableInstrument,
 } from '../database/mockSearchableInstruments';
+import {
+  convertForDisplay,
+  displaySymbol,
+} from '../displayCurrency';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
 
@@ -202,6 +206,9 @@ export function TradeInstrumentView({
       minimumFractionDigits: 2,
       maximumFractionDigits: maxDecimals,
     });
+
+  const formatDisplayMoney = (num: number, sourceCurrency: string) =>
+    `${formatNumber(convertForDisplay(num, sourceCurrency))} ${displaySymbol(sourceCurrency)}`;
 
   const handleStepQuantity = (delta: number) => {
     if (inputMode === 'amount') {
@@ -410,7 +417,7 @@ export function TradeInstrumentView({
                 {item.symbol}
               </Text>
               <Text style={[styles.chipPrice, { color: colors.textMuted }]}>
-                {formatNumber(item.price)} {item.currency}
+                {formatDisplayMoney(item.price, item.currency)}
               </Text>
             </Pressable>
           );
@@ -436,7 +443,7 @@ export function TradeInstrumentView({
 
           <View style={styles.activePriceCol}>
             <Text style={[styles.activePrice, { color: colors.text }]}>
-              {formatNumber(activeInstrument.price)} {activeInstrument.currency}
+              {formatDisplayMoney(activeInstrument.price, activeInstrument.currency)}
             </Text>
             <View style={styles.marketStatusRow}>
               <View
@@ -477,7 +484,7 @@ export function TradeInstrumentView({
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={[styles.statusMiniLabel, { color: colors.textMuted }]}>Wolne środki:</Text>
             <Text style={[styles.statusMiniVal, { color: colors.text }]}>
-              {formatNumber(portfolio.cashBalance)} {portfolio.currencySymbol}
+              {formatDisplayMoney(portfolio.cashBalance, portfolio.currency)}
             </Text>
           </View>
         </View>
@@ -517,7 +524,7 @@ export function TradeInstrumentView({
               textAlign="center"
             />
             <Text style={[styles.quantityUnit, { color: colors.textMuted }]}>
-              {inputMode === 'quantity' ? 'szt.' : activeInstrument.currency}
+              {inputMode === 'quantity' ? 'szt.' : displaySymbol(activeInstrument.currency)}
             </Text>
           </View>
 
@@ -560,7 +567,7 @@ export function TradeInstrumentView({
             {inputMode === 'quantity' ? 'Łącznie:' : 'Kwota:'}
           </Text>
           <Text style={[styles.totalCalcVal, { color: colors.text }]}>
-            {formatNumber(totalCost)} {activeInstrument.currency}
+            {formatDisplayMoney(totalCost, activeInstrument.currency)}
           </Text>
         </View>
 
@@ -578,13 +585,13 @@ export function TradeInstrumentView({
             ]}
           >
             <Text style={[styles.tradeBtnText, { color: hasEnoughCash ? '#ffffff' : colors.textMuted }]}>
-              Kup (za {formatNumber(totalCost)} {activeInstrument.currency})
+              Kup (za {formatDisplayMoney(totalCost, activeInstrument.currency)})
             </Text>
           </Pressable>
 
           {!hasEnoughCash && parsedQuantity > 0 && (
             <Text style={[styles.validationWarning, { color: '#ef4444' }]}>
-              Brak wystarczających środków ({formatNumber(Math.max(0, totalCost - portfolio.cashBalance))} {portfolio.currencySymbol}).
+              Brak wystarczających środków ({formatDisplayMoney(Math.max(0, totalCost - portfolio.cashBalance), portfolio.currency)}).
             </Text>
           )}
 
@@ -600,7 +607,7 @@ export function TradeInstrumentView({
             ]}
           >
             <Text style={[styles.tradeBtnText, { color: hasEnoughUnits ? '#ffffff' : colors.textMuted }]}>
-              Sprzedaj (za {formatNumber(totalCost)} {activeInstrument.currency})
+              Sprzedaj (za {formatDisplayMoney(totalCost, activeInstrument.currency)})
             </Text>
           </Pressable>
 

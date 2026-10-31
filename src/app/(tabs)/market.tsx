@@ -21,7 +21,11 @@ import { ModalChartView } from '../../components/ModalChartView';
 import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { Skeleton } from '../../components/Skeleton';
-import { currencySymbol, resolveCurrency } from '../../currency';
+import { resolveCurrency } from '../../currency';
+import {
+  convertForDisplay,
+  displaySymbol,
+} from '../../displayCurrency';
 import { notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
@@ -200,8 +204,9 @@ export default function MarketScreen() {
   // Weryfikacja znaku waluty i zwracanie odpowiedniego symbolu waluty
   const formatPrice = (val?: number, curr?: string) => {
     if (val === undefined || val === null) return '--';
-    const sym = currencySymbol(curr);
-    return `${val.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${sym}`;
+    const converted = convertForDisplay(val, curr);
+    const sym = displaySymbol(curr);
+    return `${converted.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${sym}`;
   };
 
   // Filtrowanie spółek w zależności od wybranego filtra rynku (ALL, PL, GLOBAL)

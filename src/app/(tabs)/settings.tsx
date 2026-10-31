@@ -1,27 +1,70 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { BlurTargetView } from 'expo-blur';
-import { useRef, type ComponentRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
-import { Section } from '../../components/Section';
-import { Currency, ThemeAccent, useTheme } from '../../theme';
-import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { BlurTargetView } from "expo-blur";
+import Constants from "expo-constants";
+import * as LocalAuthentication from "expo-local-authentication";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
+import {
+  BackHandler,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ScrollViewInstance,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
+import { AccentColorPicker } from "../../components/settings/AccentColorPicker";
+import { AccountFormSheet } from "../../components/settings/AccountFormSheet";
+import { AccountSwitcher } from "../../components/settings/AccountSwitcher";
+import {
+  ChoiceSlider,
+  type ChoiceOption,
+} from "../../components/settings/ChoiceSlider";
+import { ColorPickerSheet } from "../../components/settings/ColorPickerSheet";
+import { ConfirmDialog } from "../../components/settings/ConfirmDialog";
+import { PasswordSheet } from "../../components/settings/PasswordSheet";
+import {
+  SettingsCategory,
+  SettingsRow,
+} from "../../components/settings/SettingsPrimitives";
+import { SettingsToggle } from "../../components/settings/SettingsToggle";
+import { hasPassword } from "../../database/passwords";
+import { displayRateLabel } from "../../displayCurrency";
+import { notify } from "../../notificationBus";
+import { pickAvatar } from "../../settings/avatars";
+import { NOTIFICATION_CATEGORY_OPTIONS } from "../../settings/notificationSettings";
+import {
+  useTheme,
+  type Currency,
+  type FontSizePreference,
+  type ThemeMode,
+} from "../../theme";
+import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
-// Opcje kolorów akcentu dostępne w ustawieniach aplikacji
-const accentOptions: ThemeAccent[] = ['Niebieski', 'Fioletowy', 'Zielony', 'Pomarańczowy'];
-const accentColors: Record<ThemeAccent, string> = {
-  Niebieski: '#0969da',
-  Fioletowy : '#8250df',
-  Zielony: '#1a7f37',
-  Pomarańczowy: '#bc4c00',
-};
+const THEME_OPTIONS: ChoiceOption<ThemeMode>[] = [
+  { key: "light", label: "Jasny" },
+  { key: "dark", label: "Ciemny" },
+];
 
-// Komponent ekranu ustawień aplikacji, umożliwiający użytkownikowi dostosowanie wyglądu, koloru akcentu, waluty i innych preferencji
+const FONT_OPTIONS: ChoiceOption<FontSizePreference>[] = [
+  { key: "small", label: "S" },
+  { key: "medium", label: "M" },
+  { key: "large", label: "L" },
+];
+
+const CURRENCY_OPTIONS: ChoiceOption<Currency>[] = [
+  { key: "PLN", label: "PLN" },
+  { key: "EUR", label: "EUR" },
+  { key: "USD", label: "USD" },
+];
+
 export default function SettingsScreen() {
   const {
     mode,
     colors,
+    setMode,
     toggleMode,
     accent,
     setAccent,
@@ -29,13 +72,140 @@ export default function SettingsScreen() {
     setDefaultCurrency,
     multiCurrency,
     setMultiCurrency,
+    fontSizePreference,
+    setFontSizePreference,
+    accounts,
+    activeAccount,
+    switchAccount,
+    addAccount,
+    updateAccount,
+    notificationsEnabled,
+    setNotificationsEnabled,
+    notificationCategories,
+    setNotificationCategory,
+    biometricEnabled,
+    setBiometricEnabled,
+    loggedIn,
+    logout,
+    rates,
+    ratesUpdatedAt,
+    ratesLoading,
+    refreshRates,
   } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
-  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
   const scrollRef = useRef<ScrollViewInstance>(null);
-  const isDark = mode === 'dark';
+  const isDark = mode === "dark";
+  const appName = Constants.expoConfig?.name ?? "InvestSimulator";
+
+  const [accountListOpen, setAccountListOpen] = useState(false);
+  const [addAccountOpen, setAddAccountOpen] = useState(false);
+  const [editAccountOpen, setEditAccountOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [passwordConfigured, setPasswordConfigured] = useState(false);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!activeAccount) return;
+
+    hasPassword(activeAccount.id).then((value) => {
+      if (active) setPasswordConfigured(value);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [activeAccount]);
+
+  const changeAvatar = async () => {
+    const avatarUri = await pickAvatar();
+    if (!avatarUri) return;
+
+    await updateAccount({ avatar_uri: avatarUri });
+    notify({
+      variant: "success",
+      title: "Zdjęcie profilowe zmienione",
+      message: "Nowe zdjęcie jest już widoczne na Twoim koncie.",
+    });
+  };
+
+  const toggleBiometrics = async (enabled: boolean) => {
+    if (!enabled) {
+      await setBiometricEnabled(false);
+      return;
+    }
+
+    const hardware = await LocalAuthentication.hasHardwareAsync();
+    const enrolled = await LocalAuthentication.isEnrolledAsync();
+
+    if (!hardware || !enrolled) {
+      notify({
+        variant: "warning",
+        title: "Biometria niedostępna",
+        message:
+          "To urządzenie nie ma skonfigurowanego odcisku palca ani rozpoznawania twarzy.",
+      });
+      return;
+    }
+
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: "Włącz logowanie biometryczne",
+      cancelLabel: "Anuluj",
+    });
+
+    if (!result.success) {
+      notify({
+        variant: "info",
+        title: "Biometria nie została włączona",
+        message: "Potwierdź tożsamość, aby korzystać z logowania biometrią.",
+      });
+      return;
+    }
+
+    await setBiometricEnabled(true);
+    notify({
+      variant: "success",
+      title: "Biometria włączona",
+      message: "Możesz logować się do aplikacji odciskiem palca lub twarzą.",
+    });
+  };
+
+  const confirmLeave = () => {
+    setLeaveOpen(false);
+    if (Platform.OS === "android") {
+      BackHandler.exitApp();
+      return;
+    }
+    notify({
+      variant: "info",
+      title: "Do zobaczenia!",
+      message: `Możesz teraz zamknąć ${appName}.`,
+    });
+  };
+
+  const customAccent = /^#[0-9a-f]{6}$/i.test(accent)
+    ? accent
+    : mode === "dark"
+      ? "#58a6ff"
+      : "#0969da";
+
+  const ratesDescription = `${displayRateLabel("EUR", rates)} · ${displayRateLabel(
+    "USD",
+    rates,
+  )}${
+    ratesUpdatedAt
+      ? ` · ${new Date(ratesUpdatedAt).toLocaleTimeString("pl-PL", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}`
+      : ""
+  }`;
+
+  if (!loggedIn) return null;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -44,173 +214,488 @@ export default function SettingsScreen() {
         title="Ustawienia"
         left={
           <Pressable
-            onPress={toggleMode}
-            accessibilityLabel={isDark ? 'Włącz tryb jasny' : 'Włącz tryb ciemny'}
+            onPress={() => {
+              void toggleMode();
+            }}
+            accessibilityLabel={
+              isDark ? "Włącz tryb jasny" : "Włącz tryb ciemny"
+            }
             hitSlop={8}
           >
-            <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={22} color={colors.accent} />
+            <Ionicons
+              name={isDark ? "sunny-outline" : "moon-outline"}
+              size={22}
+              color={colors.accent}
+            />
           </Pressable>
         }
         right={
           <Pressable
             onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
-            accessibilityLabel="Przewiń do informacji o aplikacji"
+            accessibilityLabel="Przewiń do akcji konta"
             hitSlop={8}
           >
-            <Ionicons name="information-circle-outline" size={24} color={colors.textMuted} />
+            <Ionicons
+              name="information-circle-outline"
+              size={24}
+              color={colors.textMuted}
+            />
           </Pressable>
         }
       />
+
       <BlurTargetView ref={blurTargetRef} style={styles.blurTarget}>
         <ScrollView
           ref={scrollRef}
           style={{ backgroundColor: colors.background }}
-          contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom, paddingTop: top + PANEL_HEADER_HEIGHT + 8 }]}
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingBottom: 38 + bottom,
+              paddingTop: top + PANEL_HEADER_HEIGHT + 8,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
           {...scrollNav}
         >
-          <Text style={[styles.intro, { color: colors.textMuted }]}>Dostosuj aplikację do swoich preferencji.</Text>
+          <AccountSwitcher
+            accounts={accounts}
+            activeAccountId={activeAccount?.id}
+            expanded={accountListOpen}
+            onToggle={() => setAccountListOpen((current) => !current)}
+            onSelect={(account) => {
+              setAccountListOpen(false);
+              if (account.id !== activeAccount?.id) {
+                void switchAccount(account.id);
+              }
+            }}
+            onAdd={() => {
+              setAccountListOpen(false);
+              setAddAccountOpen(true);
+            }}
+          />
 
-          <Section label="Wygląd">
-            <View style={[styles.settingRow, { borderBottomColor: colors.borderGlass }]}>
-              <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={colors.text} />
-              <View style={styles.copy}>
-                <Text style={[styles.title, { color: colors.text }]}>Tryb {isDark ? 'ciemny' : 'jasny'}</Text>
-                <Text style={[styles.subtitle, { color: colors.textMuted }]}>Motyw dopasowany do pory dnia</Text>
-              </View>
-              <Pressable
-                accessibilityRole="switch"
-                accessibilityState={{ checked: isDark }}
-                onPress={toggleMode}
-                style={[styles.switch, { backgroundColor: isDark ? colors.accent : colors.surfaceMuted }]}
-              >
-                <View
-                  style={[
-                    styles.thumb,
-                    {
-                      backgroundColor: isDark ? '#ffffff' : colors.textMuted,
-                      transform: [{ translateX: isDark ? 18 : 2 }],
-                    },
-                  ]}
+          <SettingsCategory title="Wygląd">
+            <SettingsRow
+              icon={isDark ? "moon-outline" : "sunny-outline"}
+              title="Tryb aplikacji"
+              subtitle={
+                isDark
+                  ? "Ciemny motyw dopasowany do wieczoru"
+                  : "Jasny motyw do pracy w dzień"
+              }
+              right={
+                <ChoiceSlider
+                  options={THEME_OPTIONS}
+                  value={mode}
+                  onChange={(next) => {
+                    if (next !== mode) void setMode(next);
+                  }}
                 />
-              </Pressable>
-            </View>
-          </Section>
+              }
+            />
 
-          <Section label="Kolor akcentu">
-            <View style={styles.accentRow}>
-              {accentOptions.map((item) => {
-                const active = item === accent;
-                return (
-                  <Pressable key={item} accessibilityRole="button" onPress={() => setAccent(item)} style={styles.accentOption}>
-                    <View
-                      style={[
-                        styles.accentDot,
-                        { backgroundColor: accentColors[item] },
-                        active && { borderWidth: 2, borderColor: colors.text },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.accentLabel,
-                        { color: active ? colors.text : colors.textMuted, fontWeight: active ? '700' : '500' },
-                      ]}
-                    >
-                      {item}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Section>
-
-          <Section label="Portfele i waluta">
-            <View style={[styles.settingBlock, { borderBottomColor: colors.borderGlass }]}>
-              <Text style={[styles.title, { color: colors.text }]}>Domyślna waluta</Text>
-              <Text style={[styles.subtitle, { color: colors.textMuted }]}>Pierwsza karta po otwarciu dashboardu</Text>
-              <View style={styles.currencyRow}>
-                {(['PLN', 'EUR', 'USD'] as Currency[]).map((item) => {
-                  const active = defaultCurrency === item;
-                  return (
-                    <Pressable key={item} onPress={() => setDefaultCurrency(item)} style={styles.currencyOption}>
-                      <Text
-                        style={[
-                          styles.currencyText,
-                          {
-                            color: active ? colors.accent : colors.textMuted,
-                            borderBottomColor: active ? colors.accent : 'transparent',
-                          },
-                        ]}
-                      >
-                        {item}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            <View style={[styles.settingRow, { borderBottomColor: colors.borderGlass }]}>
-              <Ionicons name="layers-outline" size={20} color={colors.text} />
-              <View style={styles.copy}>
-                <Text style={[styles.title, { color: colors.text }]}>Wiele walut</Text>
-                <Text style={[styles.subtitle, { color: colors.textMuted }]}>Włącz zmianę kart między PLN, EUR i USD</Text>
-              </View>
-              <Pressable
-                accessibilityRole="switch"
-                accessibilityState={{ checked: multiCurrency }}
-                onPress={() => setMultiCurrency(!multiCurrency)}
-                style={[styles.switch, { backgroundColor: multiCurrency ? colors.accent : colors.surfaceMuted }]}
-              >
-                <View
-                  style={[
-                    styles.thumb,
-                    {
-                      backgroundColor: multiCurrency ? '#ffffff' : colors.textMuted,
-                      transform: [{ translateX: multiCurrency ? 18 : 2 }],
-                    },
-                  ]}
+            <SettingsRow
+              icon="text-outline"
+              title="Rozmiar czcionki"
+              subtitle="Skaluje tekst w całej aplikacji"
+              right={
+                <ChoiceSlider
+                  options={FONT_OPTIONS}
+                  value={fontSizePreference}
+                  onChange={(next) => {
+                    if (next !== fontSizePreference) {
+                      void setFontSizePreference(next);
+                    }
+                  }}
                 />
-              </Pressable>
-            </View>
-          </Section>
+              }
+            />
 
-          <Section label="O aplikacji">
-            <View style={styles.about}>
-              <Text style={[styles.title, { color: colors.text }]}>InvestSimulator</Text>
-              <Text style={[styles.subtitle, { color: colors.textMuted }]}>Wersja edukacyjna 1.0</Text>
+            <SettingsRow
+              icon="color-palette-outline"
+              title="Kolor akcentu"
+              subtitle="Przyciski, ikony i aktywne elementy"
+              last
+            />
+            <View
+              style={[
+                styles.swatchArea,
+                { borderTopColor: colors.borderGlass },
+              ]}
+            >
+              <AccentColorPicker
+                accent={accent}
+                onChange={(next) => {
+                  void setAccent(next);
+                }}
+                onAddCustom={() => setColorPickerOpen(true)}
+              />
             </View>
-          </Section>
+          </SettingsCategory>
+
+          <SettingsCategory title="Autoryzacja">
+            <SettingsRow
+              icon="person-outline"
+              title="Nazwa konta"
+              subtitle={activeAccount?.username}
+              right={
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.textMuted}
+                />
+              }
+              onPress={() => setEditAccountOpen(true)}
+            />
+
+            <SettingsRow
+              icon="lock-closed-outline"
+              title="Hasło"
+              subtitle={
+                passwordConfigured
+                  ? "Zmień hasło do swojego konta"
+                  : "Ustaw hasło, aby zabezpieczyć konto"
+              }
+              right={
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.textMuted}
+                />
+              }
+              onPress={() => setPasswordOpen(true)}
+            />
+
+            <SettingsRow
+              icon="image-outline"
+              title="Zdjęcie profilowe"
+              subtitle={
+                activeAccount?.avatar_uri
+                  ? "Zmień lub usuń obecne zdjęcie"
+                  : "Dodaj zdjęcie do swojego konta"
+              }
+              right={
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.textMuted}
+                />
+              }
+              onPress={() => {
+                void changeAvatar();
+              }}
+            />
+
+            <SettingsRow
+              icon="finger-print-outline"
+              title="Logowanie biometrią"
+              subtitle={
+                biometricEnabled
+                  ? "Odcisk palca lub rozpoznawanie twarzy"
+                  : "Włącz szybsze logowanie bez hasła"
+              }
+              right={
+                <SettingsToggle
+                  value={biometricEnabled}
+                  onChange={(value) => {
+                    void toggleBiometrics(value);
+                  }}
+                  accessibilityLabel="Logowanie biometrią"
+                />
+              }
+              last
+            />
+          </SettingsCategory>
+
+          <SettingsCategory title="Powiadomienia">
+            <SettingsRow
+              icon="notifications-outline"
+              title="Powiadomienia"
+              subtitle={
+                notificationsEnabled
+                  ? "Włączone — wybierz interesujące Cię kategorie"
+                  : "Wyłączone — nie będziesz otrzymywać alertów"
+              }
+              right={
+                <SettingsToggle
+                  value={notificationsEnabled}
+                  onChange={(value) => {
+                    void setNotificationsEnabled(value);
+                  }}
+                  accessibilityLabel="Powiadomienia"
+                />
+              }
+            />
+
+            {notificationsEnabled
+              ? NOTIFICATION_CATEGORY_OPTIONS.map((option) => (
+                  <SettingsRow
+                    key={option.key}
+                    icon={option.icon}
+                    title={option.label}
+                    subtitle={option.description}
+                    right={
+                      <SettingsToggle
+                        value={notificationCategories[option.key]}
+                        onChange={(value) => {
+                          void setNotificationCategory(option.key, value);
+                        }}
+                        accessibilityLabel={`Powiadomienia: ${option.label}`}
+                      />
+                    }
+                  />
+                ))
+              : null}
+
+            <SettingsRow
+              icon="phone-portrait-outline"
+              title="Powiadomienia push"
+              subtitle="Niedostępne w tej wersji aplikacji"
+              right={
+                <SettingsToggle
+                  value={false}
+                  onChange={() => undefined}
+                  disabled
+                  accessibilityLabel="Powiadomienia push — niedostępne"
+                />
+              }
+              last
+            />
+          </SettingsCategory>
+
+          <SettingsCategory title="Rynek">
+            <SettingsRow
+              icon="layers-outline"
+              title="Wiele walut"
+              subtitle={
+                multiCurrency
+                  ? "Ceny pokazywane są w walucie instrumentu"
+                  : "Wszystkie ceny przeliczane na wybraną walutę"
+              }
+              right={
+                <SettingsToggle
+                  value={multiCurrency}
+                  onChange={(value) => {
+                    void setMultiCurrency(value);
+                  }}
+                  accessibilityLabel="Wiele walut"
+                />
+              }
+              last={multiCurrency}
+            />
+
+            {!multiCurrency ? (
+              <SettingsRow
+                icon="cash-outline"
+                title="Waluta rozliczeniowa"
+                subtitle="Kurs przeliczany na bieżąco"
+                right={
+                  <ChoiceSlider
+                    options={CURRENCY_OPTIONS}
+                    value={defaultCurrency}
+                    onChange={(next) => {
+                      if (next !== defaultCurrency) {
+                        void setDefaultCurrency(next);
+                      }
+                    }}
+                  />
+                }
+                last
+              />
+            ) : null}
+
+            <SettingsRow
+              icon="refresh-outline"
+              title="Kursy walut"
+              subtitle={
+                ratesLoading ? "Aktualizowanie kursów..." : ratesDescription
+              }
+              right={
+                ratesLoading ? (
+                  <Ionicons name="sync" size={18} color={colors.accent} />
+                ) : (
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={colors.textMuted}
+                  />
+                )
+              }
+              onPress={() => {
+                void refreshRates();
+              }}
+              last
+            />
+          </SettingsCategory>
+
+          <View style={styles.accountActions}>
+            <Pressable
+              onPress={() => setLogoutOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Wyloguj"
+              style={({ pressed }) => [
+                styles.logoutButton,
+                {
+                  borderColor: colors.negative,
+                  backgroundColor: pressed
+                    ? colors.negativeGlass
+                    : "transparent",
+                },
+              ]}
+            >
+              <Ionicons
+                name="log-out-outline"
+                size={19}
+                color={colors.negative}
+              />
+              <Text style={[styles.logoutText, { color: colors.negative }]}>
+                Wyloguj
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setLeaveOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Opuść ${appName}`}
+              style={({ pressed }) => [
+                styles.leaveButton,
+                {
+                  backgroundColor: colors.negative,
+                  opacity: pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Ionicons name="exit-outline" size={20} color="#ffffff" />
+              <Text style={styles.leaveText}>Opuść {appName}</Text>
+            </Pressable>
+          </View>
         </ScrollView>
       </BlurTargetView>
+
+      {addAccountOpen ? (
+        <AccountFormSheet
+          title="Nowe konto"
+          subtitle="Dodaj konto"
+          submitLabel="Utwórz konto"
+          onClose={() => setAddAccountOpen(false)}
+          onSaved={async ({ name, avatarUri }) => {
+            await addAccount({ username: name, avatarUri });
+            notify({
+              variant: "success",
+              title: "Konto utworzone",
+              message: `${name} jest teraz aktywnym kontem.`,
+            });
+          }}
+        />
+      ) : null}
+
+      {editAccountOpen ? (
+        <AccountFormSheet
+          title="Edytuj konto"
+          subtitle="Profil"
+          submitLabel="Zapisz zmiany"
+          initialName={activeAccount?.username ?? ""}
+          initialAvatar={activeAccount?.avatar_uri ?? null}
+          onClose={() => setEditAccountOpen(false)}
+          onSaved={async ({ name, avatarUri }) => {
+            await updateAccount({ username: name, avatar_uri: avatarUri });
+            notify({
+              variant: "success",
+              title: "Profil zaktualizowany",
+              message: "Zmiany zostały zapisane.",
+            });
+          }}
+        />
+      ) : null}
+
+      {passwordOpen && activeAccount ? (
+        <PasswordSheet
+          userId={activeAccount.id}
+          onClose={() => setPasswordOpen(false)}
+          onSaved={() => setPasswordConfigured(true)}
+        />
+      ) : null}
+
+      {colorPickerOpen ? (
+        <ColorPickerSheet
+          initialColor={customAccent}
+          onClose={() => setColorPickerOpen(false)}
+          onSelect={(color) => {
+            void setAccent(color);
+            setColorPickerOpen(false);
+          }}
+        />
+      ) : null}
+
+      {logoutOpen ? (
+        <ConfirmDialog
+          title="Wylogować się?"
+          message={`Zostaniesz wylogowany z konta ${activeAccount?.username ?? ""}. Twoje dane pozostaną zapisane na urządzeniu.`}
+          confirmLabel="Wyloguj"
+          icon="log-out-outline"
+          destructive
+          onConfirm={() => {
+            setLogoutOpen(false);
+            void logout();
+          }}
+          onClose={() => setLogoutOpen(false)}
+        />
+      ) : null}
+
+      {leaveOpen ? (
+        <ConfirmDialog
+          title={`Opuścić ${appName}?`}
+          message="Niedokończone zmiany w ustawieniach są już zapisane. Do zobaczenia!"
+          confirmLabel="Opuść aplikację"
+          icon="exit-outline"
+          destructive
+          onConfirm={confirmLeave}
+          onClose={() => setLeaveOpen(false)}
+        />
+      ) : null}
     </View>
   );
 }
 
-// Stylesheet dla komponentu SettingsScreen (ekran "Ustawienia")
 const styles = StyleSheet.create({
-  blurTarget: { flex: 1 },
   root: { flex: 1 },
+  blurTarget: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
-  intro: { fontSize: 15, lineHeight: 22 },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  swatchArea: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  settingBlock: { paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
-  copy: { flex: 1 },
-  title: { fontSize: 15, fontWeight: '700' },
-  subtitle: { fontSize: 12, marginTop: 4 },
-  switch: { width: 40, height: 24, borderRadius: 12, justifyContent: 'center' },
-  thumb: { width: 20, height: 20, borderRadius: 10 },
-  accentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 18, paddingVertical: 4 },
-  accentOption: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
-  accentDot: { width: 12, height: 12, borderRadius: 6 },
-  accentLabel: { fontSize: 12, textTransform: 'capitalize' },
-  currencyRow: { flexDirection: 'row', gap: 18, marginTop: 12 },
-  currencyOption: { paddingVertical: 2 },
-  currencyText: { fontSize: 12, fontWeight: '700', paddingBottom: 4, borderBottomWidth: 2 },
-  about: { paddingVertical: 4 },
+  accountActions: {
+    marginTop: 48,
+    marginBottom: 8,
+    gap: 10,
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 0.5,
+  },
+  logoutText: {
+    fontSize: 14,
+  },
+  leaveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 50,
+    borderRadius: 14,
+  },
+  leaveText: {
+    color: "#ffffff",
+    fontSize: 14,
+  },
 });

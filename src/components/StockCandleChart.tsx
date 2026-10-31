@@ -3,7 +3,10 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CandlestickChart } from 'react-native-wagmi-charts';
 import { CandleData, getStockCandles } from '../api/marketService';
-import { currencySymbol } from '../currency';
+import {
+  convertForDisplay,
+  displaySymbol,
+} from '../displayCurrency';
 import { useTheme } from '../theme';
 import {
   CHART_INTERVALS,
@@ -53,7 +56,13 @@ export function StockCandleChart({
   const previous = candles[candles.length - 2];
   const change = latest && previous ? latest.close - previous.close : 0;
   const changePercent = previous ? (change / previous.close) * 100 : 0;
-  const formatPrice = (value?: number) => value === undefined ? '--' : value.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatPrice = (value?: number) =>
+    value === undefined
+      ? '--'
+      : convertForDisplay(value, currency).toLocaleString('pl-PL', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
 
   useEffect(() => {
     let active = true;
@@ -73,7 +82,7 @@ export function StockCandleChart({
   const axis = candles.length > 2 ? [candles[0], candles[Math.floor(candles.length / 2)], latest] : candles;
 
   const isEmbedded = variant === 'embedded';
-  const unit = currencySymbol(currency);
+  const unit = displaySymbol(currency);
 
   return (
     <View

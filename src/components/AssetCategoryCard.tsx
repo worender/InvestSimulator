@@ -4,12 +4,16 @@ import {
   AssetCategoryKey,
   PortfolioCategory,
 } from "../database/mockPortfolioData";
+import {
+  convertForDisplay,
+  displaySymbol,
+} from "../displayCurrency";
 import { useTheme } from "../theme";
 import { GlassBackground } from "./GlassBackground";
 
 interface AssetCategoryCardProps {
   category: PortfolioCategory;
-  currencySymbol: string;
+  currency: string;
   onPress: () => void;
 }
 
@@ -23,7 +27,7 @@ const CATEGORY_ICONS: Record<AssetCategoryKey, keyof typeof Ionicons.glyphMap> =
 
 export function AssetCategoryCard({
   category,
-  currencySymbol,
+  currency,
   onPress,
 }: AssetCategoryCardProps) {
   const { colors, mode } = useTheme();
@@ -40,9 +44,12 @@ export function AssetCategoryCard({
     });
 
   const sign = isPositive ? "+" : "-";
-  const formattedProfitVal = `${sign}${formatNumber(category.profitCurrency)} ${currencySymbol}`;
+  const displayedProfit = convertForDisplay(category.profitCurrency, currency);
+  const displayedTotal = convertForDisplay(category.totalValue, currency);
+  const symbol = displaySymbol(currency);
+  const formattedProfitVal = `${sign}${formatNumber(displayedProfit)} ${symbol}`;
   const formattedProfitPct = `${sign}${Math.abs(category.profitPercent).toFixed(2)}%`;
-  const formattedTotal = `${formatNumber(category.totalValue)} ${currencySymbol}`;
+  const formattedTotal = `${formatNumber(displayedTotal)} ${symbol}`;
 
   const pastelBg = isDark ? category.pastelBgDark : category.pastelBgLight;
   const iconName = CATEGORY_ICONS[category.id] ?? "cube-outline";

@@ -3,6 +3,10 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CandleData, DynamicTrendAsset, canRetryFetch, getDynamicTrends, getStockCandles, lastFetchErrorMap } from '../api/marketService';
 import { currencySymbol, resolveCurrency } from '../currency';
+import {
+  convertForDisplay,
+  displaySymbol,
+} from '../displayCurrency';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
 import { CHART_RANGES } from './ChartFullscreenModal';
@@ -173,7 +177,7 @@ function TrendCard({ asset, candles, colors, showSeparator, onPress }: { asset: 
       <View style={styles.copy}>
         <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.name, { color: colors.text }]}>{truncate(asset.name, 24)}</Text>
         <Text numberOfLines={1} style={[styles.meta, { color: colors.textMuted }]}>
-          {asset.exchangeName}{latest ? ` · ${formatPrice(latest.close)} ${currency}` : ` · ${currency}`}
+          {asset.exchangeName}{latest ? ` · ${formatPrice(latest.close, currency)} ${displaySymbol(currency)}` : ` · ${displaySymbol(currency)}`}
         </Text>
       </View>
       <View style={[styles.changeBadge, { backgroundColor: change >= 0 ? colors.positiveGlass : colors.negativeGlass }]}>
@@ -203,8 +207,11 @@ function toModalInstrument(asset: DynamicTrendAsset) {
   };
 }
 
-function formatPrice(value: number) {
-  return value.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function formatPrice(value: number, currency: string) {
+  return convertForDisplay(value, currency).toLocaleString('pl-PL', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function truncate(value: string, limit: number) {

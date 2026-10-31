@@ -396,7 +396,7 @@ export default function PortfolioScreen() {
                 <AssetCategoryCard
                   key={category.id}
                   category={category}
-                  currencySymbol={currentPortfolio.currencySymbol}
+                  currency={currentPortfolio.currency}
                   onPress={() => handleSelectCategory(category)}
                 />
               ))}
