@@ -3,52 +3,79 @@
  * Zawiera również hook `useTheme`, który umożliwia komponentom dostęp do tych ustawień.
  */
 
-import type { PropsWithChildren } from 'react';
-import { createContext, useContext, useEffect ,useMemo, useState } from 'react';
-import {getUserProfile, updateUserProfile } from './database/database';
+import type { PropsWithChildren } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { getUserProfile, updateUserProfile } from "./database/database";
 
-export type ThemeMode = 'dark' | 'light';
-export type ThemeAccent = 'Niebieski' | 'Fioletowy' | 'Zielony' | 'Pomarańczowy';
-export type Currency = 'PLN' | 'EUR' | 'USD';
+export type ThemeMode = "dark" | "light";
+export type ThemeAccent =
+  | "Niebieski"
+  | "Fioletowy"
+  | "Zielony"
+  | "Pomarańczowy";
+export type Currency = "PLN" | "EUR" | "USD";
+
+const THEME_ACCENTS: ThemeAccent[] = [
+  "Niebieski",
+  "Fioletowy",
+  "Zielony",
+  "Pomarańczowy",
+];
+const DEFAULT_ACCENT: ThemeAccent = "Niebieski";
+
+// Starsze wersje bazy zapisywały nazwy akcentów po angielsku (np. "blue")
+// Konieczne dla kompatybilności wstecznej
+const LEGACY_ACCENTS: Record<string, ThemeAccent> = {
+  blue: "Niebieski",
+  purple: "Fioletowy",
+  green: "Zielony",
+  orange: "Pomarańczowy",
+};
+
+export function resolveThemeAccent(value: unknown): ThemeAccent {
+  if (typeof value !== "string") return DEFAULT_ACCENT;
+  if (THEME_ACCENTS.includes(value as ThemeAccent)) return value as ThemeAccent;
+  return LEGACY_ACCENTS[value.trim().toLowerCase()] ?? DEFAULT_ACCENT;
+}
 
 const darkColors = {
-  background: '#0d1117',
-  surface: '#161b22',
-  surfaceGlass: 'rgba(22, 27, 34, 0.82)',
-  surfaceMuted: '#21262d',
-  surfaceMutedGlass: 'rgba(33, 38, 45, 0.72)',
-  border: '#30363d',
-  borderGlass: 'rgba(48, 54, 61, 0.65)',
-  backdrop: 'rgba(13, 17, 23, 0.72)',
-  text: '#f0f6fc',
-  textMuted: '#8b949e',
-  accent: '#58a6ff',
-  accentGlass: 'rgba(88, 166, 255, 0.16)',
-  positive: '#3fb950',
-  positiveGlass: 'rgba(63, 185, 80, 0.16)',
-  negative: '#f85149',
-  negativeGlass: 'rgba(248, 81, 73, 0.16)',
-  warning: '#d29922',
+  background: "#0d1117",
+  surface: "#161b22",
+  surfaceGlass: "rgba(22, 27, 34, 0.82)",
+  surfaceMuted: "#21262d",
+  surfaceMutedGlass: "rgba(33, 38, 45, 0.72)",
+  border: "#30363d",
+  borderGlass: "rgba(48, 54, 61, 0.65)",
+  backdrop: "rgba(13, 17, 23, 0.72)",
+  text: "#f0f6fc",
+  textMuted: "#8b949e",
+  accent: "#58a6ff",
+  accentGlass: "rgba(88, 166, 255, 0.16)",
+  positive: "#3fb950",
+  positiveGlass: "rgba(63, 185, 80, 0.16)",
+  negative: "#f85149",
+  negativeGlass: "rgba(248, 81, 73, 0.16)",
+  warning: "#d29922",
 };
 
 const lightColors = {
-  background: '#ffffff',
-  surface: '#f6f8fa',
-  surfaceGlass: 'rgba(246, 248, 250, 0.86)',
-  surfaceMuted: '#eaeef2',
-  surfaceMutedGlass: 'rgba(234, 238, 242, 0.80)',
-  border: '#d0d7de',
-  borderGlass: 'rgba(208, 215, 222, 0.70)',
-  backdrop: 'rgba(0, 0, 0, 0.45)',
-  text: '#1f2328',
-  textMuted: '#656d76',
-  accent: '#0969da',
-  accentGlass: 'rgba(9, 105, 218, 0.12)',
-  positive: '#1a7f37',
-  positiveGlass: 'rgba(26, 127, 55, 0.12)',
-  negative: '#cf222e',
-  negativeGlass: 'rgba(207, 34, 46, 0.12)',
-  warning: '#9a6700',
+  background: "#ffffff",
+  surface: "#f6f8fa",
+  surfaceGlass: "rgba(246, 248, 250, 0.86)",
+  surfaceMuted: "#eaeef2",
+  surfaceMutedGlass: "rgba(234, 238, 242, 0.80)",
+  border: "#d0d7de",
+  borderGlass: "rgba(208, 215, 222, 0.70)",
+  backdrop: "rgba(0, 0, 0, 0.45)",
+  text: "#1f2328",
+  textMuted: "#656d76",
+  accent: "#0969da",
+  accentGlass: "rgba(9, 105, 218, 0.12)",
+  positive: "#1a7f37",
+  positiveGlass: "rgba(26, 127, 55, 0.12)",
+  negative: "#cf222e",
+  negativeGlass: "rgba(207, 34, 46, 0.12)",
+  warning: "#9a6700",
 };
 
 type ThemeContextValue = {
@@ -69,19 +96,22 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const [mode, setMode] = useState<ThemeMode>('dark');
-  const [accent, setAccent] = useState<ThemeAccent>('Niebieski');
-  const [defaultCurrency, setDefaultCurrency] = useState<Currency>('PLN');
+  const [mode, setMode] = useState<ThemeMode>("dark");
+  const [accent, setAccent] = useState<ThemeAccent>(DEFAULT_ACCENT);
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency>("PLN");
   const [multiCurrency, setMultiCurrency] = useState(true);
   const colors = useMemo(() => {
-    const baseColors = mode === 'dark' ? darkColors : lightColors;
+    const baseColors = mode === "dark" ? darkColors : lightColors;
     const accentColors: Record<ThemeAccent, string> = {
-      Niebieski: mode === 'dark' ? '#58a6ff' : '#0969da',
-      Fioletowy : mode === 'dark' ? '#bc8cff' : '#8250df',
-      Zielony: mode === 'dark' ? '#3fb950' : '#1a7f37',
-      Pomarańczowy: mode === 'dark' ? '#f0883e' : '#bc4c00',
+      Niebieski: mode === "dark" ? "#58a6ff" : "#0969da",
+      Fioletowy: mode === "dark" ? "#bc8cff" : "#8250df",
+      Zielony: mode === "dark" ? "#3fb950" : "#1a7f37",
+      Pomarańczowy: mode === "dark" ? "#f0883e" : "#bc4c00",
     };
-    return { ...baseColors, accent: accentColors[accent] };
+    return {
+      ...baseColors,
+      accent: accentColors[accent] ?? accentColors[DEFAULT_ACCENT],
+    };
   }, [mode, accent]);
   const changeAccent = async (nextAccent: ThemeAccent) => {
     setAccent(nextAccent);
@@ -94,13 +124,13 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     await updateUserProfile({
       currency_default: nextCurrency,
     });
-  }
+  };
   const changeMultiCurrency = async (enabled: boolean) => {
     setMultiCurrency(enabled);
     await updateUserProfile({
       multi_currency: enabled ? 1 : 0,
     });
-  }
+  };
 
   const value = useMemo(
     () => ({
@@ -113,15 +143,12 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       multiCurrency,
       setMultiCurrency: changeMultiCurrency,
       toggleMode: async () => {
-        
-          const nextMode: ThemeMode = mode === 'dark' ? 'light' : 'dark';
-          setMode(nextMode);
+        const nextMode: ThemeMode = mode === "dark" ? "light" : "dark";
+        setMode(nextMode);
 
-          await updateUserProfile({
-            dark_mode: nextMode === 'dark' ? 1 : 0,
-          });
-          
-        
+        await updateUserProfile({
+          dark_mode: nextMode === "dark" ? 1 : 0,
+        });
       },
       spacing: themeBase.spacing,
       fontSize: themeBase.fontSize,
@@ -130,35 +157,35 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     [mode, accent, colors, defaultCurrency, multiCurrency],
   );
 
-   useEffect(() => {
+  useEffect(() => {
     let active = true;
     const loadProfile = async () => {
       try {
         const profile = await getUserProfile();
-      
 
         if (!active || !profile) {
           return;
         }
 
-        setMode(profile.dark_mode === 1 ? 'dark' : 'light');
-        setAccent(profile.color_mode as ThemeAccent);
+        setMode(profile.dark_mode === 1 ? "dark" : "light");
+        setAccent(resolveThemeAccent(profile.color_mode));
         setDefaultCurrency(profile.currency_default as Currency);
         setMultiCurrency(profile.multi_currency === 1);
       } catch (error) {
-        console.error('Nie udało się wczytać profilu z SQLite:', error);
+        console.error("Nie udało się wczytać profilu z SQLite:", error);
       }
     };
 
     void loadProfile();
 
     return () => {
-      active = false; 
+      active = false;
     };
-    }, []);
+  }, []);
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
-  
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
 }
 
 const themeBase = {
@@ -193,11 +220,10 @@ export const theme = {
   },
 };
 
-
 export function useTheme() {
   const theme = useContext(ThemeContext);
   if (!theme) {
-    throw new Error('useTheme must be used inside ThemeProvider');
+    throw new Error("useTheme must be used inside ThemeProvider");
   }
   return theme;
 }

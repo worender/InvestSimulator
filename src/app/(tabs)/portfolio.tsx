@@ -1,49 +1,64 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { BlurTargetView, BlurView } from 'expo-blur';
-import { useRef, useState, type ComponentRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { BlurTargetView } from "expo-blur";
+import { useRef, useState, type ComponentRef } from "react";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import Reanimated, {
   Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { InstrumentSearchResult, getStockData } from '../../api/marketService';
-import { AssetCategoryCard } from '../../components/AssetCategoryCard';
-import { InstrumentDetailModal, ModalTab } from '../../components/InstrumentDetailModal';
-import { InstrumentSearchSheet } from '../../components/InstrumentSearchSheet';
-import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
-import { Section } from '../../components/Section';
-import { SinglePortfolioCard } from '../../components/SinglePortfolioCard';
-import { resolveCurrency } from '../../currency';
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { InstrumentSearchResult, getStockData } from "../../api/marketService";
+import { AssetCategoryCard } from "../../components/AssetCategoryCard";
+import { GlassBackground } from "../../components/GlassBackground";
+import {
+  InstrumentDetailModal,
+  ModalTab,
+} from "../../components/InstrumentDetailModal";
+import { InstrumentSearchSheet } from "../../components/InstrumentSearchSheet";
+import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
+import { Section } from "../../components/Section";
+import { SinglePortfolioCard } from "../../components/SinglePortfolioCard";
+import { resolveCurrency } from "../../currency";
 import {
   MOCK_PORTFOLIOS,
   MockPortfolio,
   PortfolioAssetItem,
   PortfolioCategory,
-} from '../../database/mockPortfolioData';
-import { notify } from '../../notificationBus';
-import { useTheme } from '../../theme';
-import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
+} from "../../database/mockPortfolioData";
+import { notify } from "../../notificationBus";
+import { useTheme } from "../../theme";
+import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 export default function PortfolioScreen() {
   const { colors, mode } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
-  // Widok treści rozmywanej pod nagłówkiem 
+  // Widok treści rozmywanej pod nagłówkiem
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
 
   // Stan portfeli użytkownika
-  const [portfolios, setPortfolios] = useState<MockPortfolio[]>(MOCK_PORTFOLIOS);
+  const [portfolios, setPortfolios] =
+    useState<MockPortfolio[]>(MOCK_PORTFOLIOS);
   const [activePortfolioIndex, setActivePortfolioIndex] = useState(0);
 
   // Stan modalu szczegółów i zakupu instrumentu / kategorii
-  const [selectedCategory, setSelectedCategory] = useState<PortfolioCategory | null>(null);
-  const [selectedAsset, setSelectedAsset] = useState<PortfolioAssetItem | null>(null);
+  const [selectedCategory, setSelectedCategory] =
+    useState<PortfolioCategory | null>(null);
+  const [selectedAsset, setSelectedAsset] = useState<PortfolioAssetItem | null>(
+    null,
+  );
   const [modalVisible, setModalVisible] = useState(false);
-  const [modalInitialTab, setModalInitialTab] = useState<ModalTab>('details');
+  const [modalInitialTab, setModalInitialTab] = useState<ModalTab>("details");
   const [modalInstrument, setModalInstrument] = useState<{
     stock: string;
     title: string;
@@ -117,13 +132,16 @@ export default function PortfolioScreen() {
       0,
       { duration: 160, easing: Easing.in(Easing.cubic) },
       (finished) => {
-        'worklet';
+        "worklet";
         if (finished) {
           runOnJS(setMenuMounted)(false);
         }
       },
     );
-    menuIconRotation.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) });
+    menuIconRotation.value = withTiming(0, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+    });
   };
 
   // Przełączanie menu przycisku "+"
@@ -140,9 +158,9 @@ export default function PortfolioScreen() {
     closeMenu();
     if (isAddDisabled) {
       notify({
-        variant: 'info',
-        title: 'Limit osiągnięty',
-        message: 'Maksymalna liczba portfeli (5) została osiągnięta.',
+        variant: "info",
+        title: "Limit osiągnięty",
+        message: "Maksymalna liczba portfeli (5) została osiągnięta.",
       });
       return;
     }
@@ -154,8 +172,8 @@ export default function PortfolioScreen() {
     setPortfolios((prev) => [...prev, newPortfolio]);
     setActivePortfolioIndex(portfolios.length);
     notify({
-      variant: 'success',
-      title: 'Utworzono nowy portfel',
+      variant: "success",
+      title: "Utworzono nowy portfel",
       message: `${newPortfolio.name} jest gotowy do inwestowania.`,
     });
   };
@@ -168,7 +186,7 @@ export default function PortfolioScreen() {
   const handleSelectCategory = (category: PortfolioCategory) => {
     setSelectedCategory(category);
     setSelectedAsset(category.items[0] || null);
-    setModalInitialTab('details');
+    setModalInitialTab("details");
     setModalVisible(true);
   };
 
@@ -186,12 +204,15 @@ export default function PortfolioScreen() {
       exchange: instrument.exchange || instrument.exchangeName,
     };
 
-    setModalInitialTab('details');
+    setModalInitialTab("details");
     setModalInstrument(selectedInstrument);
     setModalVisible(true);
 
     try {
-      const financialData = await getStockData(instrument.symbol, instrument.exchange);
+      const financialData = await getStockData(
+        instrument.symbol,
+        instrument.exchange,
+      );
       if (!financialData) return;
       // Aktualizuj tylko wtedy, gdy modal nadal pokazuje ten sam instrument.
       setModalInstrument((current) =>
@@ -204,7 +225,7 @@ export default function PortfolioScreen() {
           : current,
       );
     } catch (error) {
-      console.error('Błąd pobierania danych finansowych:', error);
+      console.error("Błąd pobierania danych finansowych:", error);
     }
   };
 
@@ -238,9 +259,10 @@ export default function PortfolioScreen() {
             <Pressable
               onPress={() => {
                 notify({
-                  variant: 'info',
-                  title: 'Edycja/Usuwanie',
-                  message: 'Obecnie wybrane portfolio nie może być usunięte ani edytowane.',
+                  variant: "info",
+                  title: "Edycja/Usuwanie",
+                  message:
+                    "Obecnie wybrane portfolio nie może być usunięte ani edytowane.",
                 });
               }}
               accessibilityLabel="Edytuj portfel"
@@ -250,19 +272,23 @@ export default function PortfolioScreen() {
               <Ionicons
                 name="pencil-outline"
                 size={18}
-                color={mode === 'dark' ? colors.textMuted : colors.text}
+                color={mode === "dark" ? colors.textMuted : colors.text}
               />
             </Pressable>
 
             <Pressable
               onPress={toggleMenu}
-              accessibilityLabel={menuMounted ? 'Zamknij menu dodawania' : 'Dodaj portfel lub instrument'}
+              accessibilityLabel={
+                menuMounted
+                  ? "Zamknij menu dodawania"
+                  : "Dodaj portfel lub instrument"
+              }
               accessibilityState={{ expanded: menuMounted }}
               hitSlop={10}
               style={({ pressed }) => [
                 styles.addButton,
                 {
-                  backgroundColor: 'transparent',
+                  backgroundColor: "transparent",
                   opacity: pressed ? 0.7 : 1,
                 },
               ]}
@@ -277,7 +303,13 @@ export default function PortfolioScreen() {
 
       {menuMounted && (
         <View style={styles.menuLayer} pointerEvents="box-none">
-          <Reanimated.View style={[StyleSheet.absoluteFill, styles.menuBackdrop, menuBackdropStyle]}>
+          <Reanimated.View
+            style={[
+              StyleSheet.absoluteFill,
+              styles.menuBackdrop,
+              menuBackdropStyle,
+            ]}
+          >
             <Pressable
               style={StyleSheet.absoluteFill}
               onPress={closeMenu}
@@ -289,7 +321,10 @@ export default function PortfolioScreen() {
               styles.menuCard,
               {
                 top: top + PANEL_HEADER_HEIGHT + 6,
-                backgroundColor: mode === 'dark' ? 'rgba(22, 27, 34, 0.97)' : 'rgba(255, 255, 255, 0.98)',
+                backgroundColor:
+                  mode === "dark"
+                    ? "rgba(22, 27, 34, 0.97)"
+                    : "rgba(255, 255, 255, 0.98)",
                 borderColor: colors.borderGlass,
               },
               menuCardStyle,
@@ -300,11 +335,20 @@ export default function PortfolioScreen() {
               accessibilityRole="button"
               style={({ pressed }) => [
                 styles.menuItem,
-                { borderBottomColor: colors.borderGlass, opacity: pressed ? 0.65 : 1 },
+                {
+                  borderBottomColor: colors.borderGlass,
+                  opacity: pressed ? 0.65 : 1,
+                },
               ]}
             >
-              <Ionicons name="add-circle-outline" size={20} color={colors.accent} />
-              <Text style={[styles.menuText, { color: colors.text }]}>Dodaj instrument</Text>
+              <Ionicons
+                name="add-circle-outline"
+                size={20}
+                color={colors.accent}
+              />
+              <Text style={[styles.menuText, { color: colors.text }]}>
+                Dodaj instrument
+              </Text>
             </Pressable>
 
             <Pressable
@@ -318,9 +362,13 @@ export default function PortfolioScreen() {
               ]}
             >
               <Ionicons name="wallet-outline" size={20} color={colors.accent} />
-              <Text style={[styles.menuText, { color: colors.text }]}>Dodaj nowe portfolio</Text>
+              <Text style={[styles.menuText, { color: colors.text }]}>
+                Dodaj nowe portfolio
+              </Text>
               {isAddDisabled && (
-                <Text style={[styles.menuLimit, { color: colors.textMuted }]}>limit</Text>
+                <Text style={[styles.menuLimit, { color: colors.textMuted }]}>
+                  limit
+                </Text>
               )}
             </Pressable>
           </Reanimated.View>
@@ -330,7 +378,13 @@ export default function PortfolioScreen() {
       <BlurTargetView ref={blurTargetRef} style={styles.blurTarget}>
         <ScrollView
           style={{ backgroundColor: colors.background }}
-          contentContainerStyle={[styles.content, { paddingBottom: 38 + bottom, paddingTop: top + PANEL_HEADER_HEIGHT + 8 }]}
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingBottom: 38 + bottom,
+              paddingTop: top + PANEL_HEADER_HEIGHT + 8,
+            },
+          ]}
           showsVerticalScrollIndicator={false}
           {...scrollNav}
         >
@@ -352,39 +406,39 @@ export default function PortfolioScreen() {
                 accessibilityLabel="Dodaj instrument do portfela"
                 style={({ pressed }) => [
                   styles.addCard,
+                  // Cień na Androidzie rysowany jest z tła
+                  Platform.OS === "android" && {
+                    backgroundColor: colors.surface,
+                  },
                   {
-                    borderColor: '#22c55e55',
+                    borderColor: "#22c55e55",
                     transform: [{ scale: pressed ? 0.98 : 1 }],
                     opacity: pressed ? 0.92 : 1,
                   },
                 ]}
               >
-                <BlurView
-                  intensity={mode === 'dark' ? 40 : 55}
-                  tint={mode === 'dark' ? 'dark' : 'light'}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View
-                  pointerEvents="none"
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      backgroundColor: 'rgba(34, 197, 94, 0.16)',
-                      opacity: mode === 'dark' ? 0.78 : 0.65,
-                    },
-                  ]}
-                />
+                <View style={styles.addCardClip}>
+                  <GlassBackground
+                    intensity={mode === "dark" ? 40 : 55}
+                    tintColor="rgba(34, 197, 94, 0.16)"
+                  />
 
-                <View style={styles.addCardContent}>
-                  <View
-                    style={[
-                      styles.addCardButton,
-                      { backgroundColor: '#22c55e25', borderColor: '#22c55e55' },
-                    ]}
-                  >
-                    <Ionicons name="add" size={24} color="#22c55e" />
+                  <View style={styles.addCardContent}>
+                    <View
+                      style={[
+                        styles.addCardButton,
+                        {
+                          backgroundColor: "#22c55e25",
+                          borderColor: "#22c55e55",
+                        },
+                      ]}
+                    >
+                      <Ionicons name="add" size={24} color="#22c55e" />
+                    </View>
+                    <Text style={[styles.addCardLabel, { color: colors.text }]}>
+                      Dodaj
+                    </Text>
                   </View>
-                  <Text style={[styles.addCardLabel, { color: colors.text }]}>Dodaj</Text>
                 </View>
               </Pressable>
             </View>
@@ -419,17 +473,21 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
   intro: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
-  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 4 },
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginRight: 4,
+  },
   addButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  // Overlay menu "+": zajmuje cały ekra
   menuLayer: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
@@ -438,25 +496,25 @@ const styles = StyleSheet.create({
     elevation: 15,
   },
   menuBackdrop: {
-    backgroundColor: 'rgba(0, 0, 0, 0.12)',
+    backgroundColor: "rgba(0, 0, 0, 0.12)",
   },
   menuCard: {
-    position: 'absolute',
+    position: "absolute",
     right: 20,
     width: 232,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: 4,
-    overflow: 'hidden',
-    shadowColor: '#000',
+    overflow: "hidden",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.22,
     shadowRadius: 20,
     elevation: 14,
   },
   menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -467,28 +525,31 @@ const styles = StyleSheet.create({
   },
   menuText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     flex: 1,
   },
   menuLimit: {
     fontSize: 11,
   },
   addCard: {
-    width: '48%',
+    width: "48%",
     borderRadius: 20,
     borderWidth: 1.2,
     marginBottom: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
   },
+  addCardClip: {
+    borderRadius: 20,
+    overflow: "hidden",
+  },
   addCardContent: {
     padding: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     minHeight: 110,
   },
@@ -497,17 +558,17 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 21,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   addCardLabel: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
     marginTop: 6,
   },
 });

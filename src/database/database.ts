@@ -70,7 +70,7 @@ export function initializeDatabase(): Promise<void> {
       username TEXT NOT NULL,
       avatar_uri TEXT,
       dark_mode BOOLEAN NOT NULL DEFAULT 1,
-      color_mode TEXT NOT NULL DEFAULT 'blue',
+      color_mode TEXT NOT NULL DEFAULT 'Niebieski',
       currency_default TEXT NOT NULL DEFAULT 'PLN',
       "multi_currency" BOOLEAN NOT NULL DEFAULT 0
     );

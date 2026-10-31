@@ -50,15 +50,11 @@ export default function AboutScreen() {
     world: [],
   });
   const [loadingNews, setLoadingNews] = useState(true);
-  const [expandedTopics, setExpandedTopics] = useState<
-    Record<NewsTopic, boolean>
-  >({
-    poland: true,
-    world: true,
-  });
-
-  // Stałe artykuły edukacyjne: blok domyślnie rozwinięty
-  const [educationalExpanded, setEducationalExpanded] = useState(true);
+  // Tylko jedna kategoria może być rozwinięta jednocześnie
+  // Na start otwarta jest edukacja
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(
+    "educational",
+  );
 
   // Aktualnie otwarty artykuł w modalu
   const [selectedArticle, setSelectedArticle] = useState<
@@ -79,8 +75,8 @@ export default function AboutScreen() {
     };
   }, []);
 
-  const toggleTopic = (topic: NewsTopic) => {
-    setExpandedTopics((current) => ({ ...current, [topic]: !current[topic] }));
+  const toggleCategory = (category: string) => {
+    setExpandedCategory((current) => (current === category ? null : category));
   };
 
   return (
@@ -149,11 +145,12 @@ export default function AboutScreen() {
             title="Artykuły edukacyjne"
             icon="school-outline"
             count={EDUCATIONAL_ARTICLES.length}
-            expanded={educationalExpanded}
-            onToggle={() => setEducationalExpanded((value) => !value)}
+            expanded={expandedCategory === "educational"}
+            onToggle={() => toggleCategory("educational")}
           >
             <ArticleList
               items={EDUCATIONAL_ARTICLES}
+              previewCount={3}
               getMeta={(item) => `${item.readMinutes} min czytania`}
               onSelect={setSelectedArticle}
             />
@@ -168,8 +165,8 @@ export default function AboutScreen() {
                 title={topic.label}
                 icon={TOPIC_ICONS[topic.id]}
                 count={loadingNews ? undefined : topicArticles.length}
-                expanded={expandedTopics[topic.id]}
-                onToggle={() => toggleTopic(topic.id)}
+                expanded={expandedCategory === topic.id}
+                onToggle={() => toggleCategory(topic.id)}
               >
                 {loadingNews ? (
                   <View>
@@ -210,6 +207,7 @@ export default function AboutScreen() {
                 ) : (
                   <ArticleList
                     items={topicArticles}
+                    previewCount={2}
                     getMeta={formatNewsMeta}
                     onSelect={setSelectedArticle}
                   />
