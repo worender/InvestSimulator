@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as WebBrowser from "expo-web-browser";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   Modal,
   Pressable,
@@ -34,10 +34,12 @@ import { useLockScreenWhileActive } from "../interactionLock";
 import { notify } from "../notificationBus";
 import { useTheme } from "../theme";
 
-type ReadableArticle = YahooNewsItem | EducationalArticle;
+export type ReadableArticle = YahooNewsItem | EducationalArticle;
 
 type NewsArticleModalProps = {
   article: ReadableArticle;
+  saved: boolean;
+  onToggleSaved: (article: ReadableArticle) => void;
   onClose: () => void;
 };
 
@@ -68,7 +70,12 @@ const formatArticleDate = (value: string): string => {
   });
 };
 
-export function NewsArticleModal({ article, onClose }: NewsArticleModalProps) {
+export function NewsArticleModal({
+  article,
+  saved,
+  onToggleSaved,
+  onClose,
+}: NewsArticleModalProps) {
   const theme = useTheme();
   const { colors } = theme;
   const { bottom } = useSafeAreaInsets();
@@ -76,7 +83,7 @@ export function NewsArticleModal({ article, onClose }: NewsArticleModalProps) {
   // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(true);
 
-  const [isSaved, setIsSaved] = useState(false);
+  const isSaved = saved;
   const { height: windowHeight } = useWindowDimensions();
   const translateY = useSharedValue(windowHeight);
   const dragStart = useSharedValue(0);
@@ -272,7 +279,7 @@ export function NewsArticleModal({ article, onClose }: NewsArticleModalProps) {
               <View style={styles.headerRow}>
                 <View style={styles.side}>
                   <Pressable
-                    onPress={() => setIsSaved((value) => !value)}
+                    onPress={() => onToggleSaved(article)}
                     hitSlop={10}
                     accessibilityRole="button"
                     accessibilityLabel={

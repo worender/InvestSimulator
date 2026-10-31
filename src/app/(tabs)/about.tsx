@@ -11,7 +11,10 @@ import {
 } from "../../api/newsService";
 import { ArticleList } from "../../components/ArticleList";
 import { ExpandableCategoryBlock } from "../../components/ExpandableCategoryBlock";
-import { NewsArticleModal } from "../../components/NewsArticleModal";
+import {
+  NewsArticleModal,
+  type ReadableArticle,
+} from "../../components/NewsArticleModal";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import { Skeleton } from "../../components/Skeleton";
 import {
@@ -37,6 +40,17 @@ const formatNewsMeta = (item: YahooNewsItem): string => {
   return [item.publisher, dateLabel].filter(Boolean).join(" · ");
 };
 
+// Metadane artykułu zapisanego
+const formatSavedMeta = (item: ReadableArticle): string =>
+  "readMinutes" in item
+    ? `Edukacja · ${item.readMinutes} min czytania`
+    : `${formatNewsMeta(item)} · ${item.topic === "poland" ? "Polska" : "Świat"}`;
+
+// Mock: dwa istniejące artykuły startowo obecne w kategorii „Zapisane”
+const MOCK_SAVED_ARTICLES: readonly ReadableArticle[] = ["edu-01", "edu-04"]
+  .map((id) => EDUCATIONAL_ARTICLES.find((article) => article.id === id))
+  .filter((article): article is EducationalArticle => article !== undefined);
+
 export default function AboutScreen() {
   const { colors } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
@@ -57,9 +71,12 @@ export default function AboutScreen() {
   );
 
   // Aktualnie otwarty artykuł w modalu
-  const [selectedArticle, setSelectedArticle] = useState<
-    YahooNewsItem | EducationalArticle | null
-  >(null);
+  const [selectedArticle, setSelectedArticle] =
+    useState<ReadableArticle | null>(null);
+
+  // Artykuły zapisane przez użytkownika tymaczsowo w stanie komponentu (w przyszłości w bazie danych)
+  const [savedArticles, setSavedArticles] =
+    useState<readonly ReadableArticle[]>(MOCK_SAVED_ARTICLES);
 
   useEffect(() => {
     let active = true;
@@ -79,6 +96,20 @@ export default function AboutScreen() {
     setExpandedCategory((current) => (current === category ? null : category));
   };
 
+  const toggleSaved = (article: ReadableArticle) => {
+    const exists = savedArticles.some((item) => item.id === article.id);
+    const next = exists
+      ? savedArticles.filter((item) => item.id !== article.id)
+      : [article, ...savedArticles];
+
+    setSavedArticles(next);
+    if (next.length === 0) {
+      setExpandedCategory((category) =>
+        category === "saved" ? null : category,
+      );
+    }
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
@@ -91,7 +122,7 @@ export default function AboutScreen() {
                 variant: "info",
                 title: "Zapisane artykuły",
                 message:
-                  "Wkrótce będziesz mógł zapisywać wybrane materiały do późniejszej lektury.",
+                  "Otwórz artykuł i dotknij ikony zakładki, aby dodać go do kategorii „Zapisane”.",
               })
             }
             accessibilityLabel="Zapisane artykuły"
@@ -155,6 +186,23 @@ export default function AboutScreen() {
               onSelect={setSelectedArticle}
             />
           </ExpandableCategoryBlock>
+
+          {savedArticles.length > 0 && (
+            <ExpandableCategoryBlock
+              title="Zapisane"
+              icon="bookmark-outline"
+              count={savedArticles.length}
+              expanded={expandedCategory === "saved"}
+              onToggle={() => toggleCategory("saved")}
+            >
+              <ArticleList
+                items={savedArticles}
+                previewCount={3}
+                getMeta={formatSavedMeta}
+                onSelect={setSelectedArticle}
+              />
+            </ExpandableCategoryBlock>
+          )}
 
           {NEWS_TOPICS.map((topic) => {
             const topicArticles = newsByTopic[topic.id];
@@ -222,6 +270,8 @@ export default function AboutScreen() {
         <NewsArticleModal
           key={selectedArticle.id}
           article={selectedArticle}
+          saved={savedArticles.some((item) => item.id === selectedArticle.id)}
+          onToggleSaved={toggleSaved}
           onClose={() => setSelectedArticle(null)}
         />
       )}
