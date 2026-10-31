@@ -157,7 +157,7 @@ export function AccountSwitcher({
                     numberOfLines={1}
                     style={[
                       styles.rowName,
-                      { color: isActive ? colors.accent : colors.text },
+                      { color: isActive ? colors.text : colors.textMuted },
                     ]}
                   >
                     {account.username}
@@ -186,10 +186,10 @@ export function AccountSwitcher({
                 },
               ]}
             >
-              <View style={[styles.addBadge, { borderColor: colors.accent }]}>
-                <Ionicons name="add" size={19} color={colors.accent} />
+              <View style={[styles.addBadge, { borderColor: "#22c55e" }]}>
+                <Ionicons name="add" size={19} color="#22c55e" />
               </View>
-              <Text style={[styles.addText, { color: colors.accent }]}>
+              <Text style={[styles.addText, { color: colors.text }]}>
                 Dodaj nowe konto
               </Text>
             </Pressable>
@@ -272,6 +272,6 @@ const styles = StyleSheet.create({
   },
   addText: {
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "600",
   },
 });

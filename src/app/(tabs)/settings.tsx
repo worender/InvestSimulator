@@ -571,6 +571,19 @@ export default function SettingsScreen() {
               <Text style={styles.leaveText}>Opuść {appName}</Text>
             </Pressable>
           </View>
+
+          <View>
+            <Text
+              style={{
+                color: colors.textMuted,
+                fontSize: 12,
+                textAlign: "center",
+                marginTop: 24,
+              }}
+            >
+              {appName} v{Constants.expoConfig?.version ?? "?.?.?"}
+            </Text>
+          </View>
         </ScrollView>
       </BlurTargetView>
 
