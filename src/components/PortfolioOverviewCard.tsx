@@ -12,6 +12,10 @@ import Reanimated, {
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
+import {
+  convertForDisplay,
+  displaySymbol,
+} from "../displayCurrency";
 import { Currency, useTheme } from "../theme";
 import { GlassBackground } from "./GlassBackground";
 import {
@@ -152,10 +156,11 @@ function PortfolioCard({
   const arrowIcon = isPositive ? "arrow-up" : "arrow-down";
   const sign = isPositive ? "+" : "-";
 
-  const totalFormatted = `${formatNumber(data.totalValue)} ${data.symbol}`;
-  const activeFormatted = `${formatNumber(Math.max(0, data.totalValue - data.cashBalance))} ${data.symbol}`;
-  const inactiveFormatted = `${formatNumber(data.cashBalance)} ${data.symbol}`;
-  const profitFormatted = `${sign}${formatNumber(data.profitCurrency)} ${data.symbol}`;
+  const symbol = displaySymbol(data.currency);
+  const totalFormatted = `${formatNumber(convertForDisplay(data.totalValue, data.currency))} ${symbol}`;
+  const activeFormatted = `${formatNumber(convertForDisplay(Math.max(0, data.totalValue - data.cashBalance), data.currency))} ${symbol}`;
+  const inactiveFormatted = `${formatNumber(convertForDisplay(data.cashBalance, data.currency))} ${symbol}`;
+  const profitFormatted = `${sign}${formatNumber(convertForDisplay(data.profitCurrency, data.currency))} ${symbol}`;
   const profitPctFormatted = `${sign}${Math.abs(data.profitPercent).toFixed(2)}%`;
 
   // Punkty wykresu dla 3 miesięcy
@@ -163,7 +168,12 @@ function PortfolioCard({
     const baseVal = data.totalValue - data.profitCurrency;
     const midVal = baseVal + data.profitCurrency * 0.45;
     const endVal = data.totalValue;
-    return buildPortfolioSeries([baseVal, midVal, endVal], 90);
+    return buildPortfolioSeries([baseVal, midVal, endVal], 90).map(
+      (point) => ({
+        ...point,
+        value: convertForDisplay(point.value, data.currency),
+      }),
+    );
   }, [data]);
 
   const cardAccent = data.accent;
@@ -231,7 +241,7 @@ function PortfolioCard({
             {/* Wykres wyników portfela z pionową legendą i zakresem dat */}
             <PortfolioResultChart
               data={chartData}
-              currencySymbol={data.symbol}
+              currencySymbol={symbol}
               periodLabel="3 miesiące"
               height={110}
             />
@@ -272,7 +282,7 @@ export function PortfolioOverviewCard({
   const lastTap = useRef(0);
   const animating = useRef(false);
 
-  const currency = deckOrder[0];
+  const currency = multiCurrency ? deckOrder[0] : defaultCurrency;
   const data = cards[currency];
   useEffect(() => {
     onStockChange?.(data.stock, data.stockName, currency);
@@ -314,7 +324,7 @@ export function PortfolioOverviewCard({
 
   return (
     <View style={styles.deck}>
-      {(multiCurrency ? currencyOrder : [deckOrder[0]]).map((item) => (
+      {(multiCurrency ? currencyOrder : [defaultCurrency]).map((item) => (
         <PortfolioCard
           key={item}
           data={cards[item]}

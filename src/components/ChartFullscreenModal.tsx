@@ -26,7 +26,10 @@ import Reanimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CandlestickChart } from 'react-native-wagmi-charts';
 import { CandleData, getStockCandles } from '../api/marketService';
-import { currencySymbol } from '../currency';
+import {
+  convertForDisplay,
+  displaySymbol,
+} from '../displayCurrency';
 import { useLockScreenWhileActive } from '../interactionLock';
 import { useTheme } from '../theme';
 
@@ -117,7 +120,7 @@ export function ChartFullscreenModal({
   const { bottom } = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isDark = mode === 'dark';
-  const unit = currencySymbol(currency);
+  const unit = displaySymbol(currency);
 
   // Blokuje gesty ekranu pod modalem
   useLockScreenWhileActive(visible);
@@ -274,7 +277,7 @@ export function ChartFullscreenModal({
   const formatPrice = (value?: number) =>
     value === undefined
       ? '--'
-      : value.toLocaleString('pl-PL', {
+      : convertForDisplay(value, currency).toLocaleString('pl-PL', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         });
