@@ -6,6 +6,7 @@
 import type { PropsWithChildren } from "react";
 import {
   createContext,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -379,7 +380,11 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   const changeCurrency = useCallback(
     async (nextCurrency: Currency) => {
-      setDefaultCurrencyState(nextCurrency);
+      // Zmiana waluty przelicza ceny w całej aplikacji — wykonujemy ją jako
+      // zadanie o niższym priorytecie, aby nie blokować animacji dotyku.
+      startTransition(() => {
+        setDefaultCurrencyState(nextCurrency);
+      });
       await updateUserProfile(
         { currency_default: nextCurrency },
         requireAccount(),
@@ -391,8 +396,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   const changeMultiCurrency = useCallback(
     async (enabled: boolean) => {
-      setMultiCurrencyState(enabled);
-      if (!enabled) setDefaultCurrencyState("PLN");
+      startTransition(() => {
+        setMultiCurrencyState(enabled);
+        if (!enabled) setDefaultCurrencyState("PLN");
+      });
       await updateUserProfile(
         {
           multi_currency: enabled ? 1 : 0,
@@ -407,7 +414,11 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   const changeFontSize = useCallback(
     async (size: FontSizePreference) => {
-      setFontSizePreferenceState(size);
+      // Skalowanie czcionek wymusza ponowny layout całego drzewa, więc
+      // odkładamy je na niski priorytet (concurrent rendering).
+      startTransition(() => {
+        setFontSizePreferenceState(size);
+      });
       await updateUserProfile({ font_size: size }, requireAccount());
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

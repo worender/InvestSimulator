@@ -27,7 +27,6 @@ export function AccountAvatar({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: colors.surfaceMuted,
           borderColor: accentBorder ? colors.accent : colors.borderGlass,
         },
       ]}
@@ -41,12 +40,7 @@ export function AccountAvatar({
         />
       ) : initial ? (
         <View style={styles.initialWrap}>
-          <View
-            style={[
-              styles.initialBadge,
-              { backgroundColor: colors.accentGlass },
-            ]}
-          >
+          <View style={styles.initialBadge}>
             <Ionicons name="person" size={size * 0.42} color={colors.accent} />
           </View>
         </View>

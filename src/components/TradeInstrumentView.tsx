@@ -275,7 +275,7 @@ export function TradeInstrumentView({
     notify({
       variant: 'success',
       title: 'Zlecenie zrealizowane',
-      message: `Pomyślnie kupiono ${parsedQuantity} szt. ${activeInstrument.symbol} za ${formatNumber(totalCost)} ${activeInstrument.currency}.`,
+      message: `Pomyślnie kupiono ${parsedQuantity} szt. ${activeInstrument.symbol} za ${formatDisplayMoney(totalCost, activeInstrument.currency)}.`,
     });
   };
 
@@ -297,7 +297,7 @@ export function TradeInstrumentView({
     notify({
       variant: 'success',
       title: 'Zlecenie sprzedaży zrealizowane',
-      message: `Pomyślnie sprzedano ${parsedQuantity} szt. ${activeInstrument.symbol} za ${formatNumber(totalCost)} ${activeInstrument.currency}.`,
+      message: `Pomyślnie sprzedano ${parsedQuantity} szt. ${activeInstrument.symbol} za ${formatDisplayMoney(totalCost, activeInstrument.currency)}.`,
     });
   };
 

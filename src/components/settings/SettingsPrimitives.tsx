@@ -1,6 +1,23 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { PropsWithChildren, ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  useEffect,
+  useState,
+  type PropsWithChildren,
+  type ReactNode,
+} from "react";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
+import Reanimated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useTheme } from "../../theme";
 
 type SettingsCategoryProps = PropsWithChildren<{
@@ -30,6 +47,49 @@ export function SettingsCategory({ title, children }: SettingsCategoryProps) {
   );
 }
 
+type SettingsNestedProps = PropsWithChildren<{
+  expanded: boolean;
+}>;
+
+/**
+ * Zagnieżdżona, wcięta sekcja ustawień
+ */
+export function SettingsNested({ expanded, children }: SettingsNestedProps) {
+  const [contentHeight, setContentHeight] = useState(0);
+  const height = useSharedValue(0);
+
+  useEffect(() => {
+    height.value = withTiming(expanded ? contentHeight : 0, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [contentHeight, expanded, height]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    height: height.value,
+  }));
+
+  const handleContentLayout = (event: LayoutChangeEvent) => {
+    const nextHeight = event.nativeEvent.layout.height;
+    setContentHeight((current) =>
+      Math.abs(current - nextHeight) < 0.5 ? current : nextHeight,
+    );
+  };
+
+  return (
+    <Reanimated.View
+      style={[styles.nestedClip, animatedStyle]}
+      pointerEvents={expanded ? "auto" : "none"}
+      accessibilityElementsHidden={!expanded}
+      importantForAccessibility={expanded ? "auto" : "no-hide-descendants"}
+    >
+      <View onLayout={handleContentLayout} style={styles.nestedBody}>
+        <View style={styles.nestedIndent}>{children}</View>
+      </View>
+    </Reanimated.View>
+  );
+}
+
 type SettingsRowProps = {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
@@ -55,15 +115,8 @@ export function SettingsRow({
   const tint = danger ? colors.negative : colors.accent;
   const content = (
     <>
-      <View
-        style={[
-          styles.iconBadge,
-          {
-            backgroundColor: danger ? colors.negativeGlass : colors.accentGlass,
-          },
-        ]}
-      >
-        <Ionicons name={icon} size={18} color={tint} />
+      <View style={styles.iconBadge}>
+        <Ionicons name={icon} size={19} color={tint} />
       </View>
 
       <View style={styles.copy}>
@@ -133,6 +186,18 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
   },
+  nestedClip: {
+    overflow: "hidden",
+  },
+  nestedBody: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  nestedIndent: {
+    marginLeft: 26,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -142,9 +207,8 @@ const styles = StyleSheet.create({
     minHeight: 58,
   },
   iconBadge: {
-    width: 34,
+    width: 24,
     height: 34,
-    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
   },

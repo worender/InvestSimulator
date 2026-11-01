@@ -102,9 +102,6 @@ export function AccountSwitcher({
           >
             {activeAccount.username}
           </Text>
-          <Text style={[styles.accountHint, { color: colors.textMuted }]}>
-            Konto aktywne · dotknij, aby zmienić
-          </Text>
         </View>
 
         <Reanimated.View style={chevronAnimatedStyle}>
@@ -186,7 +183,7 @@ export function AccountSwitcher({
                 },
               ]}
             >
-              <View style={[styles.addBadge, { borderColor: "#22c55e" }]}>
+              <View style={styles.addBadge}>
                 <Ionicons name="add" size={19} color="#22c55e" />
               </View>
               <Text style={[styles.addText, { color: colors.text }]}>
@@ -265,8 +262,6 @@ const styles = StyleSheet.create({
   addBadge: {
     width: 34,
     height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },

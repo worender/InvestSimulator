@@ -4,6 +4,7 @@ import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useEffect, useRef, useState, type ComponentRef } from "react";
 import {
+  ActivityIndicator,
   BackHandler,
   Platform,
   Pressable,
@@ -27,11 +28,12 @@ import { ConfirmDialog } from "../../components/settings/ConfirmDialog";
 import { PasswordSheet } from "../../components/settings/PasswordSheet";
 import {
   SettingsCategory,
+  SettingsNested,
   SettingsRow,
 } from "../../components/settings/SettingsPrimitives";
 import { SettingsToggle } from "../../components/settings/SettingsToggle";
 import { hasPassword } from "../../database/passwords";
-import { displayRateLabel } from "../../displayCurrency";
+import { FALLBACK_RATES } from "../../displayCurrency";
 import { notify } from "../../notificationBus";
 import { pickAvatar } from "../../settings/avatars";
 import { NOTIFICATION_CATEGORY_OPTIONS } from "../../settings/notificationSettings";
@@ -59,6 +61,11 @@ const CURRENCY_OPTIONS: ChoiceOption<Currency>[] = [
   { key: "EUR", label: "EUR" },
   { key: "USD", label: "USD" },
 ];
+
+const RATE_CURRENCIES = [
+  { code: "EUR", name: "Euro" },
+  { code: "USD", name: "Dolar amerykański" },
+] as const;
 
 export default function SettingsScreen() {
   const {
@@ -100,6 +107,15 @@ export default function SettingsScreen() {
   const appName = Constants.expoConfig?.name ?? "InvestSimulator";
 
   const [accountListOpen, setAccountListOpen] = useState(false);
+  const [ratesOpen, setRatesOpen] = useState(false);
+  const [fontSizeDraft, setFontSizeDraft] = useState<FontSizePreference | null>(
+    null,
+  );
+  const [currencyDraft, setCurrencyDraft] = useState<Currency | null>(null);
+  const fontSizeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currencyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fontSizeValue = fontSizeDraft ?? fontSizePreference;
+  const currencyValue = currencyDraft ?? defaultCurrency;
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [editAccountOpen, setEditAccountOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -120,6 +136,32 @@ export default function SettingsScreen() {
       active = false;
     };
   }, [activeAccount]);
+
+  // Animacja przełączenia ustawień aplikacji, jest niezależna od
+  // renderowania. Renderowanie zmian ustawień odbywa się z opóźnieniem.
+  useEffect(
+    () => () => {
+      if (fontSizeTimer.current) clearTimeout(fontSizeTimer.current);
+      if (currencyTimer.current) clearTimeout(currencyTimer.current);
+    },
+    [],
+  );
+
+  const scheduleFontSize = (next: FontSizePreference) => {
+    setFontSizeDraft(next);
+    if (fontSizeTimer.current) clearTimeout(fontSizeTimer.current);
+    fontSizeTimer.current = setTimeout(() => {
+      void setFontSizePreference(next);
+    }, 140);
+  };
+
+  const scheduleCurrency = (next: Currency) => {
+    setCurrencyDraft(next);
+    if (currencyTimer.current) clearTimeout(currencyTimer.current);
+    currencyTimer.current = setTimeout(() => {
+      void setDefaultCurrency(next);
+    }, 90);
+  };
 
   const changeAvatar = async () => {
     const avatarUri = await pickAvatar();
@@ -193,17 +235,18 @@ export default function SettingsScreen() {
       ? "#58a6ff"
       : "#0969da";
 
-  const ratesDescription = `${displayRateLabel("EUR", rates)} · ${displayRateLabel(
-    "USD",
-    rates,
-  )}${
-    ratesUpdatedAt
-      ? ` · ${new Date(ratesUpdatedAt).toLocaleTimeString("pl-PL", {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}`
-      : ""
-  }`;
+  const formatRate = (code: string) =>
+    (rates[code] ?? FALLBACK_RATES[code] ?? 1).toLocaleString("pl-PL", {
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 4,
+    });
+
+  const ratesUpdatedLabel = ratesUpdatedAt
+    ? new Date(ratesUpdatedAt).toLocaleTimeString("pl-PL", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
 
   if (!loggedIn) return null;
 
@@ -267,6 +310,8 @@ export default function SettingsScreen() {
             onSelect={(account) => {
               setAccountListOpen(false);
               if (account.id !== activeAccount?.id) {
+                setFontSizeDraft(null);
+                setCurrencyDraft(null);
                 void switchAccount(account.id);
               }
             }}
@@ -303,10 +348,10 @@ export default function SettingsScreen() {
               right={
                 <ChoiceSlider
                   options={FONT_OPTIONS}
-                  value={fontSizePreference}
+                  value={fontSizeValue}
                   onChange={(next) => {
-                    if (next !== fontSizePreference) {
-                      void setFontSizePreference(next);
+                    if (next !== fontSizeValue) {
+                      scheduleFontSize(next);
                     }
                   }}
                 />
@@ -415,8 +460,8 @@ export default function SettingsScreen() {
               title="Powiadomienia"
               subtitle={
                 notificationsEnabled
-                  ? "Włączone — wybierz interesujące Cię kategorie"
-                  : "Wyłączone — nie będziesz otrzymywać alertów"
+                  ? "Włączone - wybierz interesujące Cię kategorie"
+                  : "Wyłączone - nie będziesz otrzymywać alertów"
               }
               right={
                 <SettingsToggle
@@ -429,25 +474,25 @@ export default function SettingsScreen() {
               }
             />
 
-            {notificationsEnabled
-              ? NOTIFICATION_CATEGORY_OPTIONS.map((option) => (
-                  <SettingsRow
-                    key={option.key}
-                    icon={option.icon}
-                    title={option.label}
-                    subtitle={option.description}
-                    right={
-                      <SettingsToggle
-                        value={notificationCategories[option.key]}
-                        onChange={(value) => {
-                          void setNotificationCategory(option.key, value);
-                        }}
-                        accessibilityLabel={`Powiadomienia: ${option.label}`}
-                      />
-                    }
-                  />
-                ))
-              : null}
+            <SettingsNested expanded={notificationsEnabled}>
+              {NOTIFICATION_CATEGORY_OPTIONS.map((option) => (
+                <SettingsRow
+                  key={option.key}
+                  icon={option.icon}
+                  title={option.label}
+                  subtitle={option.description}
+                  right={
+                    <SettingsToggle
+                      value={notificationCategories[option.key]}
+                      onChange={(value) => {
+                        void setNotificationCategory(option.key, value);
+                      }}
+                      accessibilityLabel={`Powiadomienia: ${option.label}`}
+                    />
+                  }
+                />
+              ))}
+            </SettingsNested>
 
             <SettingsRow
               icon="phone-portrait-outline"
@@ -458,7 +503,7 @@ export default function SettingsScreen() {
                   value={false}
                   onChange={() => undefined}
                   disabled
-                  accessibilityLabel="Powiadomienia push — niedostępne"
+                  accessibilityLabel="Powiadomienia push - niedostępne"
                 />
               }
               last
@@ -478,12 +523,12 @@ export default function SettingsScreen() {
                 <SettingsToggle
                   value={multiCurrency}
                   onChange={(value) => {
+                    if (!value) setCurrencyDraft(null);
                     void setMultiCurrency(value);
                   }}
                   accessibilityLabel="Wiele walut"
                 />
               }
-              last={multiCurrency}
             />
 
             {!multiCurrency ? (
@@ -494,40 +539,99 @@ export default function SettingsScreen() {
                 right={
                   <ChoiceSlider
                     options={CURRENCY_OPTIONS}
-                    value={defaultCurrency}
+                    value={currencyValue}
                     onChange={(next) => {
-                      if (next !== defaultCurrency) {
-                        void setDefaultCurrency(next);
+                      if (next !== currencyValue) {
+                        scheduleCurrency(next);
                       }
                     }}
                   />
                 }
-                last
               />
             ) : null}
 
             <SettingsRow
               icon="refresh-outline"
               title="Kursy walut"
-              subtitle={
-                ratesLoading ? "Aktualizowanie kursów..." : ratesDescription
-              }
+              subtitle="Aktualne kursy EUR i USD względem złotego"
               right={
-                ratesLoading ? (
-                  <Ionicons name="sync" size={18} color={colors.accent} />
-                ) : (
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={colors.textMuted}
-                  />
-                )
+                <Ionicons
+                  name={ratesOpen ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color={colors.textMuted}
+                />
               }
-              onPress={() => {
-                void refreshRates();
-              }}
-              last
+              onPress={() => setRatesOpen((open) => !open)}
+              last={!ratesOpen}
             />
+
+            <SettingsNested expanded={ratesOpen}>
+              {RATE_CURRENCIES.map(({ code, name }) => (
+                <View
+                  key={code}
+                  style={[
+                    styles.rateRow,
+                    { borderBottomColor: colors.borderGlass },
+                  ]}
+                >
+                  <View style={styles.rateCopy}>
+                    <Text style={[styles.rateCode, { color: colors.text }]}>
+                      1 {code}
+                    </Text>
+                    <Text
+                      style={[styles.rateName, { color: colors.textMuted }]}
+                    >
+                      {name}
+                    </Text>
+                  </View>
+                  <Text style={[styles.rateValue, { color: colors.text }]}>
+                    {formatRate(code)} zł
+                  </Text>
+                </View>
+              ))}
+
+              <Pressable
+                onPress={() => {
+                  void refreshRates();
+                }}
+                disabled={ratesLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Odśwież kursy walut"
+                accessibilityState={{ disabled: ratesLoading }}
+                style={({ pressed }) => [
+                  styles.rateRefresh,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Ionicons
+                  name={ratesLoading ? "sync" : "refresh-outline"}
+                  size={18}
+                  color={colors.accent}
+                />
+                <View style={styles.rateRefreshCopy}>
+                  <Text
+                    style={[styles.rateRefreshTitle, { color: colors.text }]}
+                  >
+                    Odśwież kursy
+                  </Text>
+                  <Text
+                    style={[
+                      styles.rateRefreshMeta,
+                      { color: colors.textMuted },
+                    ]}
+                  >
+                    {ratesLoading
+                      ? "Pobieranie najnowszych danych..."
+                      : ratesUpdatedLabel
+                        ? `Ostatnia aktualizacja: ${ratesUpdatedLabel}`
+                        : "Dane orientacyjne - pobierz aktualne kursy"}
+                  </Text>
+                </View>
+                {ratesLoading ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : null}
+              </Pressable>
+            </SettingsNested>
           </SettingsCategory>
 
           <View style={styles.accountActions}>
@@ -594,6 +698,8 @@ export default function SettingsScreen() {
           submitLabel="Utwórz konto"
           onClose={() => setAddAccountOpen(false)}
           onSaved={async ({ name, avatarUri }) => {
+            setFontSizeDraft(null);
+            setCurrencyDraft(null);
             await addAccount({ username: name, avatarUri });
             notify({
               variant: "success",
@@ -681,6 +787,47 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  rateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  rateCopy: { flex: 1, minWidth: 0 },
+  rateCode: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: -0.1,
+  },
+  rateName: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  rateValue: {
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+  },
+  rateRefresh: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  rateRefreshCopy: { flex: 1, minWidth: 0 },
+  rateRefreshTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  rateRefreshMeta: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15,
   },
   accountActions: {
     marginTop: 48,

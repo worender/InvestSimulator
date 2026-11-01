@@ -39,34 +39,46 @@ export function ChoiceSlider<T extends string>({
     options.findIndex((option) => option.key === value),
   );
   const position = useSharedValue(index);
-  const currentIndex = useRef(index);
+  const activeIndex = useRef(index);
+  const lastEmitted = useRef(index);
   const segmentWidth = width > 0 ? (width - PADDING * 2) / options.length : 0;
 
   useEffect(() => {
-    currentIndex.current = index;
+    activeIndex.current = index;
+    lastEmitted.current = index;
     position.value = withTiming(index, {
-      duration: 210,
+      duration: 190,
       easing: Easing.out(Easing.cubic),
     });
   }, [index, position]);
 
-  const selectFromX = useCallback(
-    (x: number, commit: boolean) => {
-      if (segmentWidth <= 0) return;
-      const next = Math.min(
-        Math.max(Math.round((x - PADDING) / segmentWidth), 0),
-        options.length - 1,
-      );
-      if (next === currentIndex.current) return;
-      currentIndex.current = next;
+  const moveTo = useCallback(
+    (next: number) => {
+      if (next === activeIndex.current) return;
+      activeIndex.current = next;
       // eslint-disable-next-line react-hooks/immutability
       position.value = withTiming(next, {
-        duration: 160,
+        duration: 150,
         easing: Easing.out(Easing.cubic),
       });
-      if (commit) onChange(options[next].key);
     },
-    [onChange, options, position, segmentWidth],
+    [position],
+  );
+
+  const updateFromX = useCallback(
+    (x: number, commit: boolean) => {
+      if (segmentWidth <= 0) return;
+      const raw = (x - PADDING) / segmentWidth;
+      const next = Math.min(Math.max(Math.floor(raw), 0), options.length - 1);
+
+      moveTo(next);
+
+      if (commit && next !== lastEmitted.current) {
+        lastEmitted.current = next;
+        onChange(options[next].key);
+      }
+    },
+    [moveTo, onChange, options, segmentWidth],
   );
 
   const panResponder = useMemo(
@@ -77,16 +89,19 @@ export function ChoiceSlider<T extends string>({
         onMoveShouldSetPanResponder: () => true,
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (event) => {
-          selectFromX(event.nativeEvent.locationX, true);
+          updateFromX(event.nativeEvent.locationX, true);
         },
         onPanResponderMove: (event) => {
-          selectFromX(event.nativeEvent.locationX, false);
+          updateFromX(event.nativeEvent.locationX, false);
         },
         onPanResponderRelease: (event) => {
-          selectFromX(event.nativeEvent.locationX, true);
+          updateFromX(event.nativeEvent.locationX, true);
+        },
+        onPanResponderTerminate: (event) => {
+          updateFromX(event.nativeEvent.locationX, true);
         },
       }),
-    [selectFromX],
+    [updateFromX],
   );
 
   const handleLayout = (event: LayoutChangeEvent) => {
@@ -103,6 +118,12 @@ export function ChoiceSlider<T extends string>({
       onLayout={handleLayout}
       accessibilityRole="adjustable"
       accessibilityLabel="Wybór opcji"
+      accessibilityValue={{
+        min: 0,
+        max: options.length - 1,
+        now: index,
+        text: options[index]?.label,
+      }}
       style={[
         styles.track,
         {
@@ -127,7 +148,7 @@ export function ChoiceSlider<T extends string>({
       {options.map((option) => {
         const selected = option.key === value;
         return (
-          <View key={option.key} style={styles.segment}>
+          <View key={option.key} pointerEvents="none" style={styles.segment}>
             <Text
               numberOfLines={1}
               style={[
@@ -152,7 +173,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     padding: PADDING,
-    minWidth: 124,
+    minWidth: 140,
     height: 32,
     overflow: "hidden",
   },
