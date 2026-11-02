@@ -46,19 +46,16 @@ Serwer wystawia 4 dedykowane endpointy rynkowe, które korzystają z czterech r�
 | `low` | `number` | Najniższa cena (dół knota świecy). |
 | `close` | `number` | Cena zamknięcia w danym interwale. |
 
-### 2.2. Status rynku i notowania (`GET /api/instruments/quote`)
-* **Metoda biblioteki:** `yahooFinance.quote(symbol, {}, { validate: false })`
-* **Przetwarzanie:** Sprawdza pole `marketState` z Yahoo i weryfikuje, czy znajduje się ono w zbiorze stanów aktywnych (`REGULAR`, `PRE`, `POST`, `PREPRE`, `POSTPOST`).
-* **Zwracany interfejs (`InstrumentQuote`):**
+
 
 | Pole | Typ | Opis |
 | :--- | :--- | :--- |
 | `symbol` | `string` | Znormalizowany ticker instrumentu (np. `PKO.WA`, `AAPL`). |
 | `exchange` | `string` | Pełna nazwa giełdy (np. `Warsaw Stock Exchange`, `NasdaqGS`). |
 | `marketState` | `string` | Surowy stan sesji giełdowej (np. `REGULAR`, `CLOSED`, `PRE`). |
-| `isOpen` | `boolean` | Flaga informująca, czy handel na instrumencie aktualnie trwa. |
 
-### 2.3. Wyszukiwarka instrumentów (`GET /api/instruments/search`)
+
+### 2.2. Wyszukiwarka instrumentów (`GET /api/instruments/search`)
 * **Metoda biblioteki:** `yahooFinance.search(query, { quotesCount: limit, newsCount: 0 })`
 * **Zwracany interfejs (`InstrumentSearchResult[]`):**
 
@@ -70,7 +67,7 @@ Serwer wystawia 4 dedykowane endpointy rynkowe, które korzystają z czterech r�
 | `exchangeName` | `string` | Czytelna nazwa giełdy do wyświetlenia w UI. |
 | `quoteType` | `string` | Klasa aktywa (np. `EQUITY`, `ETF`, `CRYPTOCURRENCY`, `INDEX`, `CURRENCY`). |
 
-### 2.4. Dynamiczne trendy rynkowe (`GET /api/trends`)
+### 2.3. Dynamiczne trendy rynkowe (`GET /api/trends`)
 * **Metoda biblioteki:** `yahooFinance.screener(screen, { count: 5 })`
 * **Dostępne kategorie (`category`):**
   * `gainers` $\rightarrow$ `day_gainers` (największe dzienne wzrosty)
@@ -87,7 +84,7 @@ Pobieranie danych o konkretnym instrumencie odbywa się dwuetapowo: poprzez **wy
 
 ### 3.1. Jak działa wyszukiwarka (`searchInstruments`)
 1. Użytkownik wpisuje frazę (minimum 2 znaki, np. `"Orlen"`, `"Apple"`, `"Bitcoin"`).
-2. Endpoint `/api/instruments/search?q=...&limit=20` odpytuje katalog Yahoo Finance (maksymalny limit wynikzabezpieczony na serwerze to 25 wyników).
+2. Endpoint `/api/instruments/search?q=...&limit=20` odpytuje katalog Yahoo Finance (maksymalny limit wynik zabezpieczony na serwerze to 25 wyników).
 3. Filtr `quote.isYahooFinance !== false && quote.symbol` odrzuca artykuły prasowe i uszkodzone rekordy, zwracając wyłącznie grywalne instrumenty wraz z ich dokładnym tickerem i kodem giełdy.
 
 ### 3.2. Reguły normalizacji tickerów (`normalizeYahooSymbol`)
@@ -107,22 +104,21 @@ Aby ułatwić odpytywanie o spółki, serwer przekształca przekazany `symbol` o
 
 ## 4. Ograniczenia techniczne API
 
-1. **Nieoficjalny charakter API i limity zapytań (Rate Limiting – HTTP 429):**
-   Biblioteka `yahoo-finance2` korzysta z publicznych endpointów webowych Yahoo. Przekroczenie bezpiecznego progu zapytań z jednego adresu IP skutkuje tymczasową blokadą. Zastosowany na serwerze 5-minutowy `stockCache` chroni endpoint `/api/candles`, jednak endpointy `/api/instruments/search`, `/api/instruments/quote` oraz `/api/trends` odpytują Yahoo w czasie rzeczywistym.
-2. **Opóźnienie notowań (Delayed Data):**
+
+1. **Opóźnienie notowań (Delayed Data):**
    * **GPW (`.WA`) i większość giełd europejskich:** Notowania i świece są opóźnione o **15 minut** ze względu na regulacje licencyjne poszczególnych giełd.
    * **Giełda USA (NASDAQ / NYSE) oraz Kryptowaluty:** Dane są dostarczane w czasie zbliżonym do rzeczywistego.
-3. **Ograniczenia zakresu historii dla małych interwałów (Intraday):**
+2. **Ograniczenia zakresu historii dla małych interwałów (Intraday):**
    Yahoo Finance ogranicza maksymalny czas wstecz (`days`), dla jakiego można pobrać szczegółowe świece:
    * Interwał **`1m`**: maksymalnie **7 dni** wstecz (w wybranych przypadkach do 30 dni).
    * Interwały **`5m`, `15m`**: maksymalnie **60 dni** wstecz.
    * Interwał **`1h`**: maksymalnie **730 dni** (2 lata) wstecz.
    * Interwały **`1d`, `1wk`**: pełna wieloletnia historia.
-4. **Dziury czasowe na wykresach poza godzinami sesji:**
+3. **Dziury czasowe na wykresach poza godzinami sesji:**
    Tradycyjne giełdy pracują wyłącznie w dni robocze w określonych godzinach (np. GPW 9:00–17:00 CET, USA 15:30–22:00 CET). W nocy oraz w weekendy API nie generuje świec, co przy odpytywaniu o `days=1` w weekend dla interwałów minutowych/godzinowych może zwrócić pustą tablicę (`404 Brak danych`).
-5. **Niska płynność na mniejszych walorach (np. GlobalConnect):**
+4. **Niska płynność na mniejszych walorach (np. GlobalConnect):**
    Jeżeli w danym oknie czasowym (np. przez 15 minut) na akcjach nie zawarto żadnej transakcji, Yahoo zwraca obiekt z wartościami `null`. Serwer odfiltrowuje takie rekordy, przez co wykres mało płynnych spółek składa się z mniejszej liczby punktów.
-6. **Zasięg modułu `screener` (`/api/trends`):**
+5. **Zasięg modułu `screener` (`/api/trends`):**
    Predefiniowane screenery Yahoo (`day_gainers`, `most_actives` itp.) domyślnie analizują **rynek amerykański (US Market)** i nie zwracają rankingów lokalnych spółek z GPW.
 
 ---
@@ -150,3 +146,5 @@ Aby ułatwić odpytywanie o spółki, serwer przekształca przekazany `symbol` o
 4. **Instrumenty rynku OTC (Over-The-Counter), CFD i produkty bankowe:**
    * Wewnętrzne kontrakty różnicowe (CFD) specyficzne dla konkretnych brokerów (np. XTB, Plus500).
    * Lokaty bankowe, konta oszczędnościowe, stopy procentowe NBP (WIBOR / WIRON) oraz transakcje na rynku prywatnym (Private Equity).
+5. **Aktywa "duchy":**
+     Warto nadmienić, że istnieją tzw. aktywa duchy, które mimo że istnieją, to nie posiadają żadnych dostępnych danych ani kwotowań.
