@@ -1,5 +1,5 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -8,11 +8,8 @@ import {
   Text,
   useWindowDimensions,
   View,
-} from 'react-native';
-import {
-  Gesture,
-  GestureDetector,
-} from 'react-native-gesture-handler';
+} from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
   cancelAnimation,
   Easing,
@@ -24,27 +21,33 @@ import Reanimated, {
   useSharedValue,
   withSpring,
   withTiming,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   MockPortfolio,
   PortfolioAssetItem,
   PortfolioCategory,
   TransactionHistoryItem,
-} from '../database/mockPortfolioData';
-import { SearchableInstrument } from '../database/mockSearchableInstruments';
-import { useLockScreenWhileActive } from '../interactionLock';
-import { notify } from '../notificationBus';
-import { useTheme } from '../theme';
-import { MarketClosedNoticeModal } from './MarketClosedNoticeModal';
-import { StockCandleChart } from './StockCandleChart';
-import { TradeInstrumentView } from './TradeInstrumentView';
+} from "../database/mockPortfolioData";
+import { SearchableInstrument } from "../database/mockSearchableInstruments";
+import { convertForDisplay, displaySymbol } from "../displayCurrency";
+import { useLockScreenWhileActive } from "../interactionLock";
+import { notify } from "../notificationBus";
+import { useTheme } from "../theme";
+import { MarketClosedNoticeModal } from "./MarketClosedNoticeModal";
+import { StockCandleChart } from "./StockCandleChart";
+import { TradeInstrumentView } from "./TradeInstrumentView";
 
-export type ModalTab = 'details' | 'trade';
+export type ModalTab = "details" | "trade";
 
 // Skala ryzyka inwestycyjnego: od najniższego do najwyższego.
-const RISK_LEVELS = ['Niski', 'Umiarkowany', 'Wysoki', 'Bardzo wysoki'] as const;
-const RISK_COLORS = ['#10b981', '#f59e0b', '#f97316', '#ef4444'] as const;
+const RISK_LEVELS = [
+  "Niski",
+  "Umiarkowany",
+  "Wysoki",
+  "Bardzo wysoki",
+] as const;
+const RISK_COLORS = ["#10b981", "#f59e0b", "#f97316", "#ef4444"] as const;
 
 interface InstrumentDetailModalProps {
   visible: boolean;
@@ -55,7 +58,7 @@ interface InstrumentDetailModalProps {
   initialTab?: ModalTab;
   onMarketClosedAlert?: (
     instrument: SearchableInstrument,
-    orderType: 'BUY' | 'SELL',
+    orderType: "BUY" | "SELL",
     quantity: number,
     total: number,
   ) => void;
@@ -75,14 +78,14 @@ export function InstrumentDetailModal({
   category,
   portfolio,
   onClose,
-  initialTab = 'details',
+  initialTab = "details",
   onMarketClosedAlert,
   modalInstrument,
 }: InstrumentDetailModalProps) {
   const { colors, mode } = useTheme();
   const { bottom } = useSafeAreaInsets();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
-  const isDark = mode === 'dark';
+  const isDark = mode === "dark";
 
   // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(visible);
@@ -90,7 +93,7 @@ export function InstrumentDetailModal({
   const [userSelectedTab, setUserSelectedTab] = useState<ModalTab | null>(null);
   const activeTab = userSelectedTab ?? initialTab;
 
-  const activeTabIndex = activeTab === 'trade' ? 1 : 0;
+  const activeTabIndex = activeTab === "trade" ? 1 : 0;
   const pagerX = useSharedValue(-activeTabIndex * windowWidth);
   const wasVisibleRef = useRef(visible);
 
@@ -102,7 +105,7 @@ export function InstrumentDetailModal({
   const [noticeVisible, setNoticeVisible] = useState(false);
   const [noticeData, setNoticeData] = useState<{
     instrument: SearchableInstrument;
-    orderType: 'BUY' | 'SELL';
+    orderType: "BUY" | "SELL";
     quantity: number;
     totalCost: number;
   } | null>(null);
@@ -139,7 +142,7 @@ export function InstrumentDetailModal({
       windowHeight,
       { duration: 220, easing: Easing.out(Easing.cubic) },
       (finished) => {
-        'worklet';
+        "worklet";
         if (finished) {
           runOnJS(finishClose)();
         }
@@ -150,7 +153,10 @@ export function InstrumentDetailModal({
   useEffect(() => {
     if (visible) {
       // eslint-disable-next-line react-hooks/immutability
-      translateY.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) });
+      translateY.value = withTiming(0, {
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+      });
     }
   }, [visible, translateY]);
 
@@ -179,7 +185,7 @@ export function InstrumentDetailModal({
               windowHeight,
               { duration, easing: Easing.out(Easing.cubic) },
               (finished) => {
-                'worklet';
+                "worklet";
                 if (finished) {
                   runOnJS(finishClose)();
                 }
@@ -198,7 +204,10 @@ export function InstrumentDetailModal({
   );
 
   const dragGesture = useMemo(() => createDragGesture(), [createDragGesture]);
-  const headerDragGesture = useMemo(() => createDragGesture(), [createDragGesture]);
+  const headerDragGesture = useMemo(
+    () => createDragGesture(),
+    [createDragGesture],
+  );
 
   // Poziomy gest przełączania zakładek modala (jak swipe między zakładkami ekranu głównego)
   const tabSwipeGesture = useMemo(
@@ -208,9 +217,9 @@ export function InstrumentDetailModal({
         .failOffsetY([-20, 20])
         .onEnd((event) => {
           if (event.translationX < -60) {
-            runOnJS(setUserSelectedTab)('trade');
+            runOnJS(setUserSelectedTab)("trade");
           } else if (event.translationX > 60) {
-            runOnJS(setUserSelectedTab)('details');
+            runOnJS(setUserSelectedTab)("details");
           }
         }),
     [],
@@ -253,7 +262,7 @@ export function InstrumentDetailModal({
 
   const handleMarketClosedAlert = (
     inst: SearchableInstrument,
-    orderType: 'BUY' | 'SELL',
+    orderType: "BUY" | "SELL",
     qty: number,
     total: number,
   ) => {
@@ -271,10 +280,10 @@ export function InstrumentDetailModal({
 
   const handleConfirmPendingOrder = () => {
     if (noticeData) {
-      const typeLabel = noticeData.orderType === 'BUY' ? 'kupna' : 'sprzedaży';
+      const typeLabel = noticeData.orderType === "BUY" ? "kupna" : "sprzedaży";
       notify({
-        variant: 'success',
-        title: 'Zlecenie oczekujące złożone',
+        variant: "success",
+        title: "Zlecenie oczekujące złożone",
         message: `Złożono zlecenie ${typeLabel} na ${noticeData.quantity} szt. ${noticeData.instrument.symbol}. Zostanie zrealizowane po wznowieniu handlu.`,
       });
     }
@@ -282,10 +291,14 @@ export function InstrumentDetailModal({
   };
 
   const formatNumber = (num: number, maxDecimals = 2) =>
-    Math.abs(num).toLocaleString('pl-PL', {
+    Math.abs(num).toLocaleString("pl-PL", {
       minimumFractionDigits: 2,
       maximumFractionDigits: maxDecimals,
     });
+
+  // Wartość przeliczona na walutę wyświetlania (gdy wyłączono wiele walut).
+  const formatMoney = (value: number, currency?: string) =>
+    `${formatNumber(convertForDisplay(value, currency))} ${displaySymbol(currency)}`;
 
   // Wszystkie instrumenty w kategorii
   const categoryItems = useMemo(
@@ -296,20 +309,20 @@ export function InstrumentDetailModal({
   // Aktualny instrument z kategorii lub bezpośrednio przekazany do modala.
   // Gdy kategoria jest wybrana, liczy się pozycja z listy
   const currentAsset = category
-    ? categoryItems[selectedAssetIndex] ?? categoryItems[0] ?? asset
+    ? (categoryItems[selectedAssetIndex] ?? categoryItems[0] ?? asset)
     : asset;
 
   const isProfit = (currentAsset?.profitCurrency ?? 0) >= 0;
-  const arrowColor = isProfit ? '#10b981' : '#ef4444';
-  const arrowName = isProfit ? 'arrow-up' : 'arrow-down';
-  const sign = isProfit ? '+' : '-';
+  const arrowColor = isProfit ? "#10b981" : "#ef4444";
+  const arrowName = isProfit ? "arrow-up" : "arrow-down";
+  const sign = isProfit ? "+" : "-";
 
   const formattedProfitVal = currentAsset
-    ? `${sign}${formatNumber(currentAsset.profitCurrency)} ${currentAsset.currency}`
-    : '-';
+    ? `${sign}${formatMoney(currentAsset.profitCurrency, currentAsset.currency)}`
+    : "-";
   const formattedProfitPct = currentAsset
     ? `${sign}${Math.abs(currentAsset.profitPercent).toFixed(2)}%`
-    : '-';
+    : "-";
 
   const purchaseYear = currentAsset
     ? new Date(currentAsset.firstPurchasedDate).getFullYear()
@@ -324,53 +337,57 @@ export function InstrumentDetailModal({
   }[] = currentAsset
     ? [
         {
-          label: '1M',
+          label: "1M",
           value: currentAsset.returns.oneMonth,
           available: true,
         },
         {
-          label: '3M',
+          label: "3M",
           value: currentAsset.returns.threeMonths,
           available: true,
         },
         {
-          label: '1R',
+          label: "1R",
           value: currentAsset.returns.oneYear,
           available: yearsHolding >= 1,
         },
         {
-          label: '3L',
+          label: "3L",
           value: currentAsset.returns.threeYears,
-          available: yearsHolding >= 3 && currentAsset.returns.threeYears !== undefined,
+          available:
+            yearsHolding >= 3 && currentAsset.returns.threeYears !== undefined,
         },
         {
-          label: '5L',
+          label: "5L",
           value: currentAsset.returns.fiveYears,
-          available: yearsHolding >= 5 && currentAsset.returns.fiveYears !== undefined,
+          available:
+            yearsHolding >= 5 && currentAsset.returns.fiveYears !== undefined,
         },
       ]
     : [];
 
   // Obsługa modalInstrument (dodawanie instrumentu bezpośrednio przez zieloną kartę)
-  const displayAsset = modalInstrument ? {
-    symbol: modalInstrument.symbol,
-    name: modalInstrument.title,
-    exchange: modalInstrument.exchange,
-    riskLevel: 'Niski', // Domyślnie niskie ryzyko dla nowych instrumentów
-    profitCurrency: 0,
-    totalValue: 0,
-    cashBalance: 0,
-    currencySymbol: modalInstrument.currency,
-    currency: modalInstrument.currency,
-    returns: {
-      oneMonth: undefined,
-      threeMonths: undefined,
-      sixMonths: undefined,
-      oneYear: undefined,
-      threeYears: undefined,
-      fiveYears: undefined,
-    },
-  } : currentAsset;
+  const displayAsset = modalInstrument
+    ? {
+        symbol: modalInstrument.symbol,
+        name: modalInstrument.title,
+        exchange: modalInstrument.exchange,
+        riskLevel: "Niski", // Domyślnie niskie ryzyko dla nowych instrumentów
+        profitCurrency: 0,
+        totalValue: 0,
+        cashBalance: 0,
+        currencySymbol: modalInstrument.currency,
+        currency: modalInstrument.currency,
+        returns: {
+          oneMonth: undefined,
+          threeMonths: undefined,
+          sixMonths: undefined,
+          oneYear: undefined,
+          threeYears: undefined,
+          fiveYears: undefined,
+        },
+      }
+    : currentAsset;
 
   const currentAssetForDisplay = displayAsset ?? currentAsset;
 
@@ -378,7 +395,7 @@ export function InstrumentDetailModal({
     ? currentAssetForDisplay.symbol
     : category
       ? category.title
-      : 'Szczegóły';
+      : "Szczegóły";
   const modalSubtitle = currentAssetForDisplay
     ? currentAssetForDisplay.name
     : category
@@ -387,7 +404,12 @@ export function InstrumentDetailModal({
 
   // Pozycja instrumentu na skali ryzyka
   const riskIndex = currentAssetForDisplay
-    ? Math.max(0, RISK_LEVELS.indexOf(currentAssetForDisplay.riskLevel as (typeof RISK_LEVELS)[number]))
+    ? Math.max(
+        0,
+        RISK_LEVELS.indexOf(
+          currentAssetForDisplay.riskLevel as (typeof RISK_LEVELS)[number],
+        ),
+      )
     : 0;
   const riskColor = RISK_COLORS[riskIndex] ?? RISK_COLORS[0];
   const riskPercent = (riskIndex / (RISK_LEVELS.length - 1)) * 100;
@@ -408,31 +430,49 @@ export function InstrumentDetailModal({
             <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} />
           </Reanimated.View>
 
-          <Reanimated.View style={[styles.sheet, { backgroundColor: colors.background }, sheetAnimatedStyle]}>
+          <Reanimated.View
+            style={[
+              styles.sheet,
+              { backgroundColor: colors.background },
+              sheetAnimatedStyle,
+            ]}
+          >
             <GestureDetector gesture={dragGesture}>
               <View style={styles.dragArea}>
-                <Reanimated.View style={[styles.dragHandle, handleAnimatedStyle]} />
+                <Reanimated.View
+                  style={[styles.dragHandle, handleAnimatedStyle]}
+                />
               </View>
             </GestureDetector>
 
             {/* Nagłówek z możliwością przeciągania */}
             <GestureDetector gesture={headerDragGesture}>
-              <View style={[styles.header, { borderBottomColor: colors.border }]}>
+              <View
+                style={[styles.header, { borderBottomColor: colors.border }]}
+              >
                 <View style={styles.headerLeft}>
                   <View style={styles.symbolRow}>
-                    <Text style={[styles.headerSymbol, { color: colors.text }]}>{modalTitle}</Text>
+                    <Text style={[styles.headerSymbol, { color: colors.text }]}>
+                      {modalTitle}
+                    </Text>
                     {currentAsset && (
                       <Text
                         style={[
                           styles.headerExchange,
-                          { color: colors.textMuted, borderColor: colors.border },
+                          {
+                            color: colors.textMuted,
+                            borderColor: colors.border,
+                          },
                         ]}
                       >
                         {currentAsset.exchange}
                       </Text>
                     )}
                   </View>
-                  <Text style={[styles.headerName, { color: colors.textMuted }]} numberOfLines={1}>
+                  <Text
+                    style={[styles.headerName, { color: colors.textMuted }]}
+                    numberOfLines={1}
+                  >
                     {modalSubtitle}
                   </Text>
                 </View>
@@ -444,7 +484,9 @@ export function InstrumentDetailModal({
                   style={({ pressed }) => [
                     styles.closeBtn,
                     {
-                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.08)"
+                        : "rgba(0,0,0,0.05)",
                       opacity: pressed ? 0.7 : 1,
                     },
                   ]}
@@ -454,19 +496,29 @@ export function InstrumentDetailModal({
               </View>
             </GestureDetector>
 
-            <View style={[styles.tabsBar, { borderBottomColor: colors.border }]}>
+            <View
+              style={[styles.tabsBar, { borderBottomColor: colors.border }]}
+            >
               <Pressable
-                onPress={() => setUserSelectedTab('details')}
+                onPress={() => setUserSelectedTab("details")}
                 style={[
                   styles.tabBtn,
-                  activeTab === 'details' && [styles.activeTabBtn, { borderBottomColor: colors.accent }],
+                  activeTab === "details" && [
+                    styles.activeTabBtn,
+                    { borderBottomColor: colors.accent },
+                  ],
                 ]}
               >
                 <Text
                   style={[
                     styles.tabText,
-                    { color: activeTab === 'details' ? colors.accent : colors.textMuted },
-                    activeTab === 'details' && styles.activeTabText,
+                    {
+                      color:
+                        activeTab === "details"
+                          ? colors.accent
+                          : colors.textMuted,
+                    },
+                    activeTab === "details" && styles.activeTabText,
                   ]}
                 >
                   Szczegóły
@@ -474,17 +526,25 @@ export function InstrumentDetailModal({
               </Pressable>
 
               <Pressable
-                onPress={() => setUserSelectedTab('trade')}
+                onPress={() => setUserSelectedTab("trade")}
                 style={[
                   styles.tabBtn,
-                  activeTab === 'trade' && [styles.activeTabBtn, { borderBottomColor: colors.accent }],
+                  activeTab === "trade" && [
+                    styles.activeTabBtn,
+                    { borderBottomColor: colors.accent },
+                  ],
                 ]}
               >
                 <Text
                   style={[
                     styles.tabText,
-                    { color: activeTab === 'trade' ? colors.accent : colors.textMuted },
-                    activeTab === 'trade' && styles.activeTabText,
+                    {
+                      color:
+                        activeTab === "trade"
+                          ? colors.accent
+                          : colors.textMuted,
+                    },
+                    activeTab === "trade" && styles.activeTabText,
                   ]}
                 >
                   Kup / Sprzedaj
@@ -496,407 +556,698 @@ export function InstrumentDetailModal({
             <GestureDetector gesture={tabSwipeGesture}>
               <View style={styles.tabContent}>
                 <Reanimated.View
-                  style={[styles.pager, { width: windowWidth * 2 }, pagerAnimatedStyle]}
+                  style={[
+                    styles.pager,
+                    { width: windowWidth * 2 },
+                    pagerAnimatedStyle,
+                  ]}
                 >
                   <View
                     style={styles.pagerPage}
-                    pointerEvents={activeTab === 'details' ? 'auto' : 'none'}
-                    accessibilityElementsHidden={activeTab !== 'details'}
+                    pointerEvents={activeTab === "details" ? "auto" : "none"}
+                    accessibilityElementsHidden={activeTab !== "details"}
                     importantForAccessibility={
-                      activeTab === 'details' ? 'auto' : 'no-hide-descendants'
+                      activeTab === "details" ? "auto" : "no-hide-descendants"
                     }
                   >
                     <ScrollView
-                    style={styles.scrollArea}
-                    contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 + bottom }]}
-                    showsVerticalScrollIndicator={false}
-                  >
-                    {categoryItems.length > 1 && (
-                      <View style={styles.instrumentPicker}>
-                        <Pressable
-                          onPress={() => setPickerOpen((open) => !open)}
-                          onLayout={(event) => setPickerButtonHeight(event.nativeEvent.layout.height)}
-                          accessibilityRole="button"
-                          accessibilityLabel="Zmień instrument"
-                          accessibilityState={{ expanded: pickerOpen }}
-                          style={styles.instrumentPickerButton}
-                        >
-                          <View style={styles.instrumentPickerCopy}>
-                            <Text
-                              style={[styles.instrumentPickerEyebrow, { color: colors.textMuted }]}
-                            >
-                              INSTRUMENT
-                            </Text>
-                            <Text
-                              style={[styles.instrumentPickerValue, { color: colors.text }]}
-                              numberOfLines={1}
-                            >
-                              {currentAsset
-                                ? `${currentAsset.symbol} · ${currentAsset.name}`
-                                : 'Wybierz instrument'}
-                            </Text>
-                          </View>
-
-                          <Text style={[styles.instrumentPickerCount, { color: colors.textMuted }]}>
-                            {selectedAssetIndex + 1}/{categoryItems.length}
-                          </Text>
-                          <Ionicons
-                            name={pickerOpen ? 'chevron-up' : 'chevron-down'}
-                            size={18}
-                            color={colors.textMuted}
-                          />
-                        </Pressable>
-
-                        {pickerOpen && (
-                          <View
-                            style={[
-                              styles.instrumentList,
-                              {
-                                top: pickerButtonHeight + 6,
-                                backgroundColor: colors.background,
-                              },
-                            ]}
+                      style={styles.scrollArea}
+                      contentContainerStyle={[
+                        styles.scrollContent,
+                        { paddingBottom: 40 + bottom },
+                      ]}
+                      showsVerticalScrollIndicator={false}
+                    >
+                      {categoryItems.length > 1 && (
+                        <View style={styles.instrumentPicker}>
+                          <Pressable
+                            onPress={() => setPickerOpen((open) => !open)}
+                            onLayout={(event) =>
+                              setPickerButtonHeight(
+                                event.nativeEvent.layout.height,
+                              )
+                            }
+                            accessibilityRole="button"
+                            accessibilityLabel="Zmień instrument"
+                            accessibilityState={{ expanded: pickerOpen }}
+                            style={styles.instrumentPickerButton}
                           >
-                            {categoryItems.map((item, idx) => {
-                              const isSelected = idx === selectedAssetIndex;
-                              const itemPositive = item.profitCurrency >= 0;
-                              return (
-                                <Pressable
-                                  key={item.id}
-                                  onPress={() => {
-                                    setSelectedAssetIndex(idx);
-                                    setPickerOpen(false);
-                                  }}
-                                  accessibilityRole="button"
-                                  accessibilityState={{ selected: isSelected }}
-                                  style={({ pressed }) => [
-                                    styles.instrumentListRow,
-                                    idx < categoryItems.length - 1 && {
-                                      borderBottomWidth: StyleSheet.hairlineWidth,
-                                      borderBottomColor: colors.border,
-                                    },
-                                    {
-                                      backgroundColor: isSelected
-                                        ? isDark
-                                          ? 'rgba(88, 166, 255, 0.12)'
-                                          : 'rgba(9, 105, 218, 0.08)'
-                                        : pressed
+                            <View style={styles.instrumentPickerCopy}>
+                              <Text
+                                style={[
+                                  styles.instrumentPickerEyebrow,
+                                  { color: colors.textMuted },
+                                ]}
+                              >
+                                INSTRUMENT
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.instrumentPickerValue,
+                                  { color: colors.text },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {currentAsset
+                                  ? `${currentAsset.symbol} · ${currentAsset.name}`
+                                  : "Wybierz instrument"}
+                              </Text>
+                            </View>
+
+                            <Text
+                              style={[
+                                styles.instrumentPickerCount,
+                                { color: colors.textMuted },
+                              ]}
+                            >
+                              {selectedAssetIndex + 1}/{categoryItems.length}
+                            </Text>
+                            <Ionicons
+                              name={pickerOpen ? "chevron-up" : "chevron-down"}
+                              size={18}
+                              color={colors.textMuted}
+                            />
+                          </Pressable>
+
+                          {pickerOpen && (
+                            <View
+                              style={[
+                                styles.instrumentList,
+                                {
+                                  top: pickerButtonHeight + 6,
+                                  backgroundColor: colors.background,
+                                },
+                              ]}
+                            >
+                              {categoryItems.map((item, idx) => {
+                                const isSelected = idx === selectedAssetIndex;
+                                const itemPositive = item.profitCurrency >= 0;
+                                return (
+                                  <Pressable
+                                    key={item.id}
+                                    onPress={() => {
+                                      setSelectedAssetIndex(idx);
+                                      setPickerOpen(false);
+                                    }}
+                                    accessibilityRole="button"
+                                    accessibilityState={{
+                                      selected: isSelected,
+                                    }}
+                                    style={({ pressed }) => [
+                                      styles.instrumentListRow,
+                                      idx < categoryItems.length - 1 && {
+                                        borderBottomWidth:
+                                          StyleSheet.hairlineWidth,
+                                        borderBottomColor: colors.border,
+                                      },
+                                      {
+                                        backgroundColor: isSelected
                                           ? isDark
-                                            ? 'rgba(255,255,255,0.04)'
-                                            : 'rgba(0,0,0,0.03)'
-                                          : 'transparent',
-                                    },
-                                  ]}
-                                >
-                                  <View style={styles.instrumentListCopy}>
-                                    <Text
-                                      style={[styles.instrumentListSymbol, { color: colors.text }]}
-                                    >
-                                      {item.symbol}
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.instrumentListName,
-                                        { color: colors.textMuted },
-                                      ]}
-                                      numberOfLines={1}
-                                    >
-                                      {item.name}
-                                    </Text>
-                                  </View>
-
-                                  <View style={styles.instrumentListRight}>
-                                    <Text style={[styles.instrumentListValue, { color: colors.text }]}>
-                                      {formatNumber(item.totalValue)} {item.currency}
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.instrumentListChange,
-                                        { color: itemPositive ? '#10b981' : '#ef4444' },
-                                      ]}
-                                    >
-                                      {itemPositive ? '+' : '-'}
-                                      {Math.abs(item.profitPercent).toFixed(2)}%
-                                    </Text>
-                                  </View>
-
-                                  <Ionicons
-                                    name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
-                                    size={18}
-                                    color={isSelected ? colors.accent : colors.textMuted}
-                                    style={styles.instrumentListCheck}
-                                  />
-                                </Pressable>
-                              );
-                            })}
-                          </View>
-                        )}
-                      </View>
-                    )}
-
-                    {/* Wykres wybranego instrumentu z kategorii */}
-                    {currentAssetForDisplay && (
-                      <View style={styles.chartSection}>
-                        <StockCandleChart
-                          key={`${currentAssetForDisplay.symbol}-${currentAssetForDisplay.exchange}`}
-                          stock={currentAssetForDisplay.symbol}
-                          title={currentAssetForDisplay.name}
-                          currency={currentAssetForDisplay.currency}
-                          exchange={currentAssetForDisplay.exchange}
-                          variant="embedded"
-                        />
-                      </View>
-                    )}
-
-                    {currentAsset ? (
-                      <>
-                        {/* Dane liczbowe */}
-                        <View style={styles.metricsContainer}>
-                          <View style={styles.metricRow}>
-                            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-                              Wartość pozycji
-                            </Text>
-                            <Text style={[styles.metricValueLarge, { color: colors.text }]}>
-                              {formatNumber(currentAsset.totalValue)} {currentAsset.currency}
-                            </Text>
-                          </View>
-
-                          <View style={styles.metricRow}>
-                            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-                              Wynik finansowy
-                            </Text>
-                            <View style={styles.profitInline}>
-                              <Ionicons name={arrowName} size={15} color={arrowColor} />
-                              <Text style={[styles.metricValue, { color: colors.text }]}>
-                                {formattedProfitVal}
-                              </Text>
-                              <Text style={[styles.profitPct, { color: colors.textMuted }]}>
-                                ({formattedProfitPct})
-                              </Text>
-                            </View>
-                          </View>
-
-                          <View style={[styles.hairline, { backgroundColor: colors.border }]} />
-
-                          <View style={styles.gridRow}>
-                            <View style={styles.gridCol}>
-                              <Text style={[styles.metricMiniLabel, { color: colors.textMuted }]}>
-                                Ilość
-                              </Text>
-                              <Text style={[styles.gridColVal, { color: colors.text }]}>
-                                {currentAsset.ownedQuantity} szt.
-                              </Text>
-                            </View>
-                            <View style={styles.gridCol}>
-                              <Text style={[styles.metricMiniLabel, { color: colors.textMuted }]}>
-                                Śr. cena kupna
-                              </Text>
-                              <Text style={[styles.gridColVal, { color: colors.text }]}>
-                                {formatNumber(currentAsset.averageBuyPrice)} {currentAsset.currency}
-                              </Text>
-                            </View>
-                            <View style={styles.gridCol}>
-                              <Text style={[styles.metricMiniLabel, { color: colors.textMuted }]}>
-                                Kurs bieżący
-                              </Text>
-                              <Text style={[styles.gridColVal, { color: colors.text }]}>
-                                {formatNumber(currentAsset.currentPrice)} {currentAsset.currency}
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-
-                        {/* Zyski w okresach */}
-                        <View style={styles.periodBlocksSection}>
-                          <Text style={[styles.sectionHeading, { color: colors.textMuted }]}>
-                            ZYSK W OKRESACH
-                          </Text>
-                          <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.periodBlocksRow}
-                          >
-                            {periodReturns.map((period, idx) => {
-                              const val = period.value ?? 0;
-                              const isPeriodPositive = val >= 0;
-                              const periodArrow = isPeriodPositive ? 'arrow-up' : 'arrow-down';
-                              const periodColor = isPeriodPositive ? '#10b981' : '#ef4444';
-
-                              return (
-                                <View
-                                  key={idx}
-                                  style={[
-                                    styles.periodBlock,
-                                    {
-                                      backgroundColor: isDark
-                                        ? 'rgba(255, 255, 255, 0.08)'
-                                        : 'rgba(0, 0, 0, 0.04)',
-                                      borderColor: colors.border,
-                                    },
-                                  ]}
-                                >
-                                  <Text style={[styles.periodBlockLabel, { color: colors.textMuted }]}>
-                                    {period.label}
-                                  </Text>
-                                  {period.available && period.value !== undefined ? (
-                                    <View style={styles.periodBlockValRow}>
-                                      <Ionicons name={periodArrow} size={13} color={periodColor} />
-                                      <Text style={[styles.periodBlockValue, { color: colors.text }]}>
-                                        {isPeriodPositive ? '+' : ''}
-                                        {period.value.toFixed(2)}%
+                                            ? "rgba(88, 166, 255, 0.12)"
+                                            : "rgba(9, 105, 218, 0.08)"
+                                          : pressed
+                                            ? isDark
+                                              ? "rgba(255,255,255,0.04)"
+                                              : "rgba(0,0,0,0.03)"
+                                            : "transparent",
+                                      },
+                                    ]}
+                                  >
+                                    <View style={styles.instrumentListCopy}>
+                                      <Text
+                                        style={[
+                                          styles.instrumentListSymbol,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        {item.symbol}
+                                      </Text>
+                                      <Text
+                                        style={[
+                                          styles.instrumentListName,
+                                          { color: colors.textMuted },
+                                        ]}
+                                        numberOfLines={1}
+                                      >
+                                        {item.name}
                                       </Text>
                                     </View>
-                                  ) : (
-                                    <Text style={[styles.periodBlockUnavailable, { color: colors.textMuted }]}>
-                                      -
-                                    </Text>
+
+                                    <View style={styles.instrumentListRight}>
+                                      <Text
+                                        style={[
+                                          styles.instrumentListValue,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        {formatMoney(
+                                          item.totalValue,
+                                          item.currency,
+                                        )}
+                                      </Text>
+                                      <Text
+                                        style={[
+                                          styles.instrumentListChange,
+                                          {
+                                            color: itemPositive
+                                              ? "#10b981"
+                                              : "#ef4444",
+                                          },
+                                        ]}
+                                      >
+                                        {itemPositive ? "+" : "-"}
+                                        {Math.abs(item.profitPercent).toFixed(
+                                          2,
+                                        )}
+                                        %
+                                      </Text>
+                                    </View>
+
+                                    <Ionicons
+                                      name={
+                                        isSelected
+                                          ? "checkmark-circle"
+                                          : "ellipse-outline"
+                                      }
+                                      size={18}
+                                      color={
+                                        isSelected
+                                          ? colors.accent
+                                          : colors.textMuted
+                                      }
+                                      style={styles.instrumentListCheck}
+                                    />
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Wykres wybranego instrumentu z kategorii */}
+                      {currentAssetForDisplay && (
+                        <View style={styles.chartSection}>
+                          <StockCandleChart
+                            key={`${currentAssetForDisplay.symbol}-${currentAssetForDisplay.exchange}`}
+                            stock={currentAssetForDisplay.symbol}
+                            title={currentAssetForDisplay.name}
+                            currency={currentAssetForDisplay.currency}
+                            exchange={currentAssetForDisplay.exchange}
+                            variant="embedded"
+                          />
+                        </View>
+                      )}
+
+                      {currentAsset ? (
+                        <>
+                          {/* Dane liczbowe */}
+                          <View style={styles.metricsContainer}>
+                            <View style={styles.metricRow}>
+                              <Text
+                                style={[
+                                  styles.metricLabel,
+                                  { color: colors.textMuted },
+                                ]}
+                              >
+                                Wartość pozycji
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.metricValueLarge,
+                                  { color: colors.text },
+                                ]}
+                              >
+                                {formatMoney(
+                                  currentAsset.totalValue,
+                                  currentAsset.currency,
+                                )}
+                              </Text>
+                            </View>
+
+                            <View style={styles.metricRow}>
+                              <Text
+                                style={[
+                                  styles.metricLabel,
+                                  { color: colors.textMuted },
+                                ]}
+                              >
+                                Wynik finansowy
+                              </Text>
+                              <View style={styles.profitInline}>
+                                <Ionicons
+                                  name={arrowName}
+                                  size={15}
+                                  color={arrowColor}
+                                />
+                                <Text
+                                  style={[
+                                    styles.metricValue,
+                                    { color: colors.text },
+                                  ]}
+                                >
+                                  {formattedProfitVal}
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.profitPct,
+                                    { color: colors.textMuted },
+                                  ]}
+                                >
+                                  ({formattedProfitPct})
+                                </Text>
+                              </View>
+                            </View>
+
+                            <View
+                              style={[
+                                styles.hairline,
+                                { backgroundColor: colors.border },
+                              ]}
+                            />
+
+                            <View style={styles.gridRow}>
+                              <View style={styles.gridCol}>
+                                <Text
+                                  style={[
+                                    styles.metricMiniLabel,
+                                    { color: colors.textMuted },
+                                  ]}
+                                >
+                                  Ilość
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.gridColVal,
+                                    { color: colors.text },
+                                  ]}
+                                >
+                                  {currentAsset.ownedQuantity} szt.
+                                </Text>
+                              </View>
+                              <View style={styles.gridCol}>
+                                <Text
+                                  style={[
+                                    styles.metricMiniLabel,
+                                    { color: colors.textMuted },
+                                  ]}
+                                >
+                                  Śr. cena kupna
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.gridColVal,
+                                    { color: colors.text },
+                                  ]}
+                                >
+                                  {formatMoney(
+                                    currentAsset.averageBuyPrice,
+                                    currentAsset.currency,
                                   )}
-                                </View>
-                              );
-                            })}
-                      </ScrollView>
-                        </View>
+                                </Text>
+                              </View>
+                              <View style={styles.gridCol}>
+                                <Text
+                                  style={[
+                                    styles.metricMiniLabel,
+                                    { color: colors.textMuted },
+                                  ]}
+                                >
+                                  Kurs bieżący
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.gridColVal,
+                                    { color: colors.text },
+                                  ]}
+                                >
+                                  {formatMoney(
+                                    currentAsset.currentPrice,
+                                    currentAsset.currency,
+                                  )}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
 
-                        {/* Historia transakcji */}
-                        <View style={styles.txSection}>
-                          <Text style={[styles.sectionHeading, { color: colors.textMuted }]}>
-                            TRANSAKCJE
-                          </Text>
-                          {currentAsset.purchaseHistory.map((tx: TransactionHistoryItem) => (
-                            <View
-                              key={tx.id}
-                              style={[styles.txLine, { borderBottomColor: colors.border }]}
+                          {/* Zyski w okresach */}
+                          <View style={styles.periodBlocksSection}>
+                            <Text
+                              style={[
+                                styles.sectionHeading,
+                                { color: colors.textMuted },
+                              ]}
                             >
-                              <View style={styles.txLineLeft}>
-                                <View style={styles.txDotLabel}>
-                                  <View style={[styles.txIndicatorDot, { backgroundColor: '#10b981' }]} />
-                                  <Text style={[styles.txName, { color: colors.text }]}>Kupno</Text>
-                                </View>
-                                <Text style={[styles.txDate, { color: colors.textMuted }]}>{tx.date}</Text>
-                              </View>
-                              <View style={styles.txLineRight}>
-                                <Text style={[styles.txQtyPrice, { color: colors.text }]}>
-                                  +{tx.quantity} szt. @ {formatNumber(tx.price)} {currentAsset.currency}
-                                </Text>
-                                <Text style={[styles.txTotal, { color: colors.textMuted }]}>
-                                  {formatNumber(tx.total)} {currentAsset.currency}
-                                </Text>
-                              </View>
-                            </View>
-                          ))}
-
-                          {currentAsset.salesHistory.map((tx: TransactionHistoryItem) => (
-                            <View
-                              key={tx.id}
-                              style={[styles.txLine, { borderBottomColor: colors.border }]}
+                              ZYSK W OKRESACH
+                            </Text>
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                              contentContainerStyle={styles.periodBlocksRow}
                             >
-                              <View style={styles.txLineLeft}>
-                                <View style={styles.txDotLabel}>
-                                  <View style={[styles.txIndicatorDot, { backgroundColor: '#ef4444' }]} />
-                                  <Text style={[styles.txName, { color: colors.text }]}>Sprzedaż</Text>
-                                </View>
-                                <Text style={[styles.txDate, { color: colors.textMuted }]}>{tx.date}</Text>
-                              </View>
-                              <View style={styles.txLineRight}>
-                                <Text style={[styles.txQtyPrice, { color: colors.text }]}>
-                                  -{tx.quantity} szt. @ {formatNumber(tx.price)} {currentAsset.currency}
-                                </Text>
-                                <Text style={[styles.txTotal, { color: colors.textMuted }]}>
-                                  {formatNumber(tx.total)} {currentAsset.currency}
-                                </Text>
-                              </View>
-                            </View>
-                          ))}
-                        </View>
+                              {periodReturns.map((period, idx) => {
+                                const val = period.value ?? 0;
+                                const isPeriodPositive = val >= 0;
+                                const periodArrow = isPeriodPositive
+                                  ? "arrow-up"
+                                  : "arrow-down";
+                                const periodColor = isPeriodPositive
+                                  ? "#10b981"
+                                  : "#ef4444";
 
-                        {/* Informacje o aktywie */}
-                        <View style={styles.assetInfoSection}>
-                          <Text style={[styles.assetInfoTitle, { color: colors.text }]}>
-                            {currentAsset.name}
-                          </Text>
-                          <Text style={[styles.assetInfoMeta, { color: colors.textMuted }]}>
-                            {currentAsset.symbol} · {currentAsset.exchange} ·{' '}
-                            {currentAsset.category.toUpperCase()}
-                          </Text>
-
-                          <Text style={[styles.assetInfoDescription, { color: colors.textMuted }]}>
-                            {currentAsset.description}
-                          </Text>
-
-                          {/* Wskaźnik ryzyka: termometr z trójkątem na skali */}
-                          <View
-                            style={[
-                              styles.riskCard,
-                              {
-                                borderColor: colors.border,
-                                backgroundColor: isDark
-                                  ? 'rgba(255,255,255,0.04)'
-                                  : 'rgba(0,0,0,0.03)',
-                              },
-                            ]}
-                          >
-                            <View style={styles.riskHeader}>
-                              <Text style={[styles.riskLabel, { color: colors.textMuted }]}>
-                                POZIOM RYZYKA
-                              </Text>
-                              <Text style={[styles.riskValue, { color: riskColor }]}>
-                                {currentAsset.riskLevel}
-                              </Text>
-                            </View>
-
-                            <View style={styles.riskMeter}>
-                              <View style={[styles.riskMarker, { left: `${riskPercent}%` }]}>
-                                <Ionicons name="caret-down" size={16} color={riskColor} />
-                              </View>
-                              <View style={styles.riskBar}>
-                                {RISK_COLORS.map((color) => (
+                                return (
                                   <View
-                                    key={color}
-                                    style={[styles.riskSegment, { backgroundColor: color }]}
+                                    key={idx}
+                                    style={[
+                                      styles.periodBlock,
+                                      {
+                                        backgroundColor: isDark
+                                          ? "rgba(255, 255, 255, 0.08)"
+                                          : "rgba(0, 0, 0, 0.04)",
+                                        borderColor: colors.border,
+                                      },
+                                    ]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.periodBlockLabel,
+                                        { color: colors.textMuted },
+                                      ]}
+                                    >
+                                      {period.label}
+                                    </Text>
+                                    {period.available &&
+                                    period.value !== undefined ? (
+                                      <View style={styles.periodBlockValRow}>
+                                        <Ionicons
+                                          name={periodArrow}
+                                          size={13}
+                                          color={periodColor}
+                                        />
+                                        <Text
+                                          style={[
+                                            styles.periodBlockValue,
+                                            { color: colors.text },
+                                          ]}
+                                        >
+                                          {isPeriodPositive ? "+" : ""}
+                                          {period.value.toFixed(2)}%
+                                        </Text>
+                                      </View>
+                                    ) : (
+                                      <Text
+                                        style={[
+                                          styles.periodBlockUnavailable,
+                                          { color: colors.textMuted },
+                                        ]}
+                                      >
+                                        -
+                                      </Text>
+                                    )}
+                                  </View>
+                                );
+                              })}
+                            </ScrollView>
+                          </View>
+
+                          {/* Historia transakcji */}
+                          <View style={styles.txSection}>
+                            <Text
+                              style={[
+                                styles.sectionHeading,
+                                { color: colors.textMuted },
+                              ]}
+                            >
+                              TRANSAKCJE
+                            </Text>
+                            {currentAsset.purchaseHistory.map(
+                              (tx: TransactionHistoryItem) => (
+                                <View
+                                  key={tx.id}
+                                  style={[
+                                    styles.txLine,
+                                    { borderBottomColor: colors.border },
+                                  ]}
+                                >
+                                  <View style={styles.txLineLeft}>
+                                    <View style={styles.txDotLabel}>
+                                      <View
+                                        style={[
+                                          styles.txIndicatorDot,
+                                          { backgroundColor: "#10b981" },
+                                        ]}
+                                      />
+                                      <Text
+                                        style={[
+                                          styles.txName,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        Kupno
+                                      </Text>
+                                    </View>
+                                    <Text
+                                      style={[
+                                        styles.txDate,
+                                        { color: colors.textMuted },
+                                      ]}
+                                    >
+                                      {tx.date}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.txLineRight}>
+                                    <Text
+                                      style={[
+                                        styles.txQtyPrice,
+                                        { color: colors.text },
+                                      ]}
+                                    >
+                                      +{tx.quantity} szt. @{" "}
+                                      {formatMoney(
+                                        tx.price,
+                                        currentAsset.currency,
+                                      )}
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        styles.txTotal,
+                                        { color: colors.textMuted },
+                                      ]}
+                                    >
+                                      {formatMoney(
+                                        tx.total,
+                                        currentAsset.currency,
+                                      )}
+                                    </Text>
+                                  </View>
+                                </View>
+                              ),
+                            )}
+
+                            {currentAsset.salesHistory.map(
+                              (tx: TransactionHistoryItem) => (
+                                <View
+                                  key={tx.id}
+                                  style={[
+                                    styles.txLine,
+                                    { borderBottomColor: colors.border },
+                                  ]}
+                                >
+                                  <View style={styles.txLineLeft}>
+                                    <View style={styles.txDotLabel}>
+                                      <View
+                                        style={[
+                                          styles.txIndicatorDot,
+                                          { backgroundColor: "#ef4444" },
+                                        ]}
+                                      />
+                                      <Text
+                                        style={[
+                                          styles.txName,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        Sprzedaż
+                                      </Text>
+                                    </View>
+                                    <Text
+                                      style={[
+                                        styles.txDate,
+                                        { color: colors.textMuted },
+                                      ]}
+                                    >
+                                      {tx.date}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.txLineRight}>
+                                    <Text
+                                      style={[
+                                        styles.txQtyPrice,
+                                        { color: colors.text },
+                                      ]}
+                                    >
+                                      -{tx.quantity} szt. @{" "}
+                                      {formatMoney(
+                                        tx.price,
+                                        currentAsset.currency,
+                                      )}
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        styles.txTotal,
+                                        { color: colors.textMuted },
+                                      ]}
+                                    >
+                                      {formatMoney(
+                                        tx.total,
+                                        currentAsset.currency,
+                                      )}
+                                    </Text>
+                                  </View>
+                                </View>
+                              ),
+                            )}
+                          </View>
+
+                          {/* Informacje o aktywie */}
+                          <View style={styles.assetInfoSection}>
+                            <Text
+                              style={[
+                                styles.assetInfoTitle,
+                                { color: colors.text },
+                              ]}
+                            >
+                              {currentAsset.name}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.assetInfoMeta,
+                                { color: colors.textMuted },
+                              ]}
+                            >
+                              {currentAsset.symbol} · {currentAsset.exchange} ·{" "}
+                              {currentAsset.category.toUpperCase()}
+                            </Text>
+
+                            <Text
+                              style={[
+                                styles.assetInfoDescription,
+                                { color: colors.textMuted },
+                              ]}
+                            >
+                              {currentAsset.description}
+                            </Text>
+
+                            {/* Wskaźnik ryzyka: termometr z trójkątem na skali */}
+                            <View
+                              style={[
+                                styles.riskCard,
+                                {
+                                  borderColor: colors.border,
+                                  backgroundColor: isDark
+                                    ? "rgba(255,255,255,0.04)"
+                                    : "rgba(0,0,0,0.03)",
+                                },
+                              ]}
+                            >
+                              <View style={styles.riskHeader}>
+                                <Text
+                                  style={[
+                                    styles.riskLabel,
+                                    { color: colors.textMuted },
+                                  ]}
+                                >
+                                  POZIOM RYZYKA
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.riskValue,
+                                    { color: riskColor },
+                                  ]}
+                                >
+                                  {currentAsset.riskLevel}
+                                </Text>
+                              </View>
+
+                              <View style={styles.riskMeter}>
+                                <View
+                                  style={[
+                                    styles.riskMarker,
+                                    { left: `${riskPercent}%` },
+                                  ]}
+                                >
+                                  <Ionicons
+                                    name="caret-down"
+                                    size={16}
+                                    color={riskColor}
                                   />
+                                </View>
+                                <View style={styles.riskBar}>
+                                  {RISK_COLORS.map((color) => (
+                                    <View
+                                      key={color}
+                                      style={[
+                                        styles.riskSegment,
+                                        { backgroundColor: color },
+                                      ]}
+                                    />
+                                  ))}
+                                </View>
+                              </View>
+
+                              <View style={styles.riskScale}>
+                                {RISK_LEVELS.map((level, idx) => (
+                                  <Text
+                                    key={level}
+                                    style={[
+                                      styles.riskScaleLabel,
+                                      {
+                                        color:
+                                          idx === riskIndex
+                                            ? riskColor
+                                            : colors.textMuted,
+                                        fontWeight:
+                                          idx === riskIndex ? "700" : "400",
+                                      },
+                                    ]}
+                                  >
+                                    {level}
+                                  </Text>
                                 ))}
                               </View>
                             </View>
 
-                            <View style={styles.riskScale}>
-                              {RISK_LEVELS.map((level, idx) => (
-                                <Text
-                                  key={level}
-                                  style={[
-                                    styles.riskScaleLabel,
-                                    {
-                                      color: idx === riskIndex ? riskColor : colors.textMuted,
-                                      fontWeight: idx === riskIndex ? '700' : '400',
-                                    },
-                                  ]}
-                                >
-                                  {level}
-                                </Text>
-                              ))}
-                            </View>
+                            <Text
+                              style={[
+                                styles.assetInfoFootnote,
+                                { color: colors.textMuted },
+                              ]}
+                            >
+                              {currentAsset.assetClassInfo}
+                            </Text>
                           </View>
-
-                          <Text style={[styles.assetInfoFootnote, { color: colors.textMuted }]}>
-                            {currentAsset.assetClassInfo}
+                        </>
+                      ) : (
+                        <View style={styles.emptyState}>
+                          <Text
+                            style={[
+                              styles.emptyStateText,
+                              { color: colors.textMuted },
+                            ]}
+                          >
+                            Brak otwartych pozycji w tej kategorii.
                           </Text>
                         </View>
-                      </>
-                    ) : (
-                      <View style={styles.emptyState}>
-                        <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
-                          Brak otwartych pozycji w tej kategorii.
-                        </Text>
-                      </View>
-                    )}
+                      )}
                     </ScrollView>
                   </View>
 
                   <View
                     style={styles.pagerPage}
-                    pointerEvents={activeTab === 'trade' ? 'auto' : 'none'}
-                    accessibilityElementsHidden={activeTab !== 'trade'}
+                    pointerEvents={activeTab === "trade" ? "auto" : "none"}
+                    accessibilityElementsHidden={activeTab !== "trade"}
                     importantForAccessibility={
-                      activeTab === 'trade' ? 'auto' : 'no-hide-descendants'
+                      activeTab === "trade" ? "auto" : "no-hide-descendants"
                     }
                   >
                     <TradeInstrumentView
@@ -916,7 +1267,7 @@ export function InstrumentDetailModal({
       <MarketClosedNoticeModal
         visible={noticeVisible}
         instrument={noticeData?.instrument ?? null}
-        orderType={noticeData?.orderType ?? 'BUY'}
+        orderType={noticeData?.orderType ?? "BUY"}
         quantity={noticeData?.quantity ?? 0}
         totalCost={noticeData?.totalCost ?? 0}
         onConfirmPendingOrder={handleConfirmPendingOrder}
@@ -929,24 +1280,24 @@ export function InstrumentDetailModal({
 const styles = StyleSheet.create({
   modalRoot: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: "flex-end",
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
   },
   sheet: {
-    height: '91%',
-    maxHeight: '91%',
+    height: "91%",
+    maxHeight: "91%",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    overflow: 'hidden',
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    overflow: "hidden",
   },
   dragArea: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingTop: 10,
     paddingBottom: 10,
   },
@@ -956,9 +1307,9 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -967,17 +1318,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   symbolRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   headerSymbol: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   headerExchange: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 6,
@@ -985,47 +1336,47 @@ const styles = StyleSheet.create({
   },
   headerName: {
     fontSize: 13,
-    fontWeight: '400',
+    fontWeight: "400",
     marginTop: 2,
   },
   closeBtn: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginLeft: 12,
   },
   tabsBar: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   tabBtn: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 12,
     borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    borderBottomColor: "transparent",
   },
   activeTabBtn: {},
   tabText: {
     fontSize: 14,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   activeTabText: {
-    fontWeight: '700',
+    fontWeight: "700",
   },
   scrollArea: {
     flex: 1,
   },
   tabContent: {
     flex: 1,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   pager: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   pagerPage: {
     flex: 1,
@@ -1036,7 +1387,7 @@ const styles = StyleSheet.create({
   },
   instrumentPicker: {
     marginBottom: 18,
-    position: 'relative',
+    position: "relative",
     zIndex: 20,
     elevation: 20,
   },
@@ -1044,8 +1395,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   instrumentPickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     paddingVertical: 6,
   },
@@ -1054,28 +1405,28 @@ const styles = StyleSheet.create({
   },
   instrumentPickerEyebrow: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.8,
     marginBottom: 2,
   },
   instrumentPickerValue: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   instrumentPickerCount: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   instrumentList: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
-    overflow: 'hidden',
+    overflow: "hidden",
     zIndex: 30,
   },
   instrumentListRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     paddingHorizontal: 12,
     paddingVertical: 11,
@@ -1085,22 +1436,22 @@ const styles = StyleSheet.create({
   },
   instrumentListSymbol: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   instrumentListName: {
     fontSize: 11,
     marginTop: 2,
   },
   instrumentListRight: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   instrumentListValue: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   instrumentListChange: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
     marginTop: 2,
   },
   instrumentListCheck: {
@@ -1111,25 +1462,25 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   metricRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   metricLabel: {
     fontSize: 13,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   metricValueLarge: {
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   metricValue: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   profitInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
   },
   profitPct: {
@@ -1140,8 +1491,8 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   gridRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingTop: 4,
   },
   gridCol: {
@@ -1149,24 +1500,24 @@ const styles = StyleSheet.create({
   },
   metricMiniLabel: {
     fontSize: 11,
-    fontWeight: '400',
+    fontWeight: "400",
     marginBottom: 2,
   },
   gridColVal: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   periodBlocksSection: {
     marginBottom: 24,
   },
   sectionHeading: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.8,
     marginBottom: 10,
   },
   periodBlocksRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
   },
   periodBlock: {
@@ -1175,22 +1526,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingVertical: 10,
     paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   periodBlockLabel: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 4,
   },
   periodBlockValRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 2,
   },
   periodBlockValue: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   periodBlockUnavailable: {
     fontSize: 12,
@@ -1199,9 +1550,9 @@ const styles = StyleSheet.create({
     marginBottom: 26,
   },
   txLine: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 11,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
@@ -1209,8 +1560,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   txDotLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   txIndicatorDot: {
@@ -1220,18 +1571,18 @@ const styles = StyleSheet.create({
   },
   txName: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   txDate: {
     fontSize: 11,
   },
   txLineRight: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
     gap: 2,
   },
   txQtyPrice: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   txTotal: {
     fontSize: 11,
@@ -1243,13 +1594,13 @@ const styles = StyleSheet.create({
   },
   assetInfoTitle: {
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: -0.4,
     lineHeight: 30,
   },
   assetInfoMeta: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     letterSpacing: 0.4,
     marginTop: 6,
   },
@@ -1260,7 +1611,7 @@ const styles = StyleSheet.create({
   },
   assetInfoFootnote: {
     fontSize: 12,
-    fontWeight: '300',
+    fontWeight: "300",
     lineHeight: 18,
     marginTop: 14,
   },
@@ -1272,52 +1623,52 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   riskHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   riskLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.8,
   },
   riskValue: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   riskMeter: {
     height: 30,
-    justifyContent: 'flex-end',
+    justifyContent: "flex-end",
     marginTop: 10,
   },
   riskMarker: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 10,
     width: 16,
-    alignItems: 'center',
+    alignItems: "center",
     marginLeft: -8,
   },
   riskBar: {
-    flexDirection: 'row',
+    flexDirection: "row",
     height: 8,
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   riskSegment: {
     flex: 1,
   },
   riskScale: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginTop: 6,
   },
   riskScaleLabel: {
     flex: 1,
     fontSize: 9,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptyState: {
     paddingVertical: 32,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyStateText: {
     fontSize: 13,
