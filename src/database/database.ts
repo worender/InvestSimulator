@@ -255,6 +255,7 @@ export async function getUserProfiles(): Promise<UserProfile[]> {
   );
 }
 
+///Create a new user profile with the given username and optional avatar URI. Returns the created UserProfile.
 export async function createUserProfile(input: {
   username: string;
   avatar_uri?: string | null;

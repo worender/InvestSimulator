@@ -19,7 +19,7 @@ export function ValidateUserName(value: string): string {
 
   if (userName.length === 0 || userName.length > 30) {
     throw new Error("Nieprawidłowa nazwa użytkownika");
-  }else if (!/^[a-zA-Z0-9._-]+$/.test(userName)) {
+  }else if (!/^[a-zA-Z0-9._ -]+$/.test(userName)) {
     throw new Error("Nazwa użytkownika może zawierać tylko litery, cyfry, kropki, podkreślenia i myślniki");
   }
 
