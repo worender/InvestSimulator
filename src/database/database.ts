@@ -36,6 +36,8 @@ let initializationPromise: Promise<void> | null = null;
 //   void testValidation();
 // }, []);
 
+
+
 function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   databasePromise ??= SQLite.openDatabaseAsync("invest-simulator.db");
   return databasePromise;
@@ -288,6 +290,7 @@ export async function createUserProfile(input: {
   return profile;
 }
 
+///Update user profile with the given changes. Returns the updated UserProfile.
 export async function updateUserProfile(
   changes: Partial<Omit<UserProfile, "id">>,
   userId = 1,
@@ -296,12 +299,14 @@ export async function updateUserProfile(
   const current = await getUserProfile(userId);
   if (!current) throw new Error("Nie znaleziono profilu użytkownika");
 
+  const validateUserName = changes.username !== undefined ? ValidateUserName(changes.username) : current.username;
+  const validateAvatarUrl = changes.avatar_uri !== undefined && changes.avatar_uri !== null ? 
+  ValidateAvatarUrl(changes.avatar_uri) : current.avatar_uri;
+
+
   const next = {
-    username: changes.username ?? current.username,
-    avatarUri:
-      changes.avatar_uri !== undefined
-        ? changes.avatar_uri
-        : current.avatar_uri,
+    username: validateUserName,
+    avatarUri: validateAvatarUrl,
     darkMode: changes.dark_mode ?? current.dark_mode,
     colorMode: changes.color_mode ?? current.color_mode,
     currencyDefault: changes.currency_default ?? current.currency_default,
@@ -346,7 +351,12 @@ export async function updateUserProfile(
   return profile;
 }
 
+///Chyba do usuniecia
 export async function getWallet(userId = 1): Promise<Wallet | null> {
+  if (userId <= 0 || !Number.isInteger(userId)) {
+    return null;
+  }
+
   const database = await getReadyDatabase();
 
   return (
@@ -357,6 +367,7 @@ export async function getWallet(userId = 1): Promise<Wallet | null> {
   );
 }
 
+///Chyba do usuniecia
 export async function updateWalletBalance(
   amount: number,
   userId = 1,
@@ -376,16 +387,18 @@ export async function updateWalletBalance(
   return wallet;
 }
 
+///Get all transactions, optionally filtered by symbol. Returns an array of Transaction objects.
 export async function getTransactions(symbol?: string): Promise<Transaction[]> {
+  const validSymbol = symbol ? normalizeAndValidateSymbol(symbol) : undefined;
   const database = await getReadyDatabase();
 
-  if (symbol) {
+  if (validSymbol) {
     return database.getAllAsync<Transaction>(
       `SELECT id, symbol, type, quantity, price, created_at
        FROM transactions
        WHERE symbol = ?
        ORDER BY created_at DESC, id DESC`,
-      symbol.trim().toUpperCase(),
+      validSymbol,
     );
   }
 
@@ -396,11 +409,13 @@ export async function getTransactions(symbol?: string): Promise<Transaction[]> {
   );
 }
 
+///Add a new transaction and update the portfolio accordingly. Returns the created Transaction object.
 export async function addTransaction(
   input: CreateTransactionInput,
 ): Promise<Transaction> {
   const database = await getReadyDatabase();
-  const symbol = input.symbol.trim().toUpperCase();
+  const validSymbol = normalizeAndValidateSymbol(input.symbol);
+  const symbol = validSymbol;
   if (!symbol) throw new Error("Symbol instrumentu jest wymagany");
   requirePositive(input.quantity, "Liczba jednostek");
   requireNonNegative(input.price, "Cena");
@@ -469,6 +484,15 @@ export async function clearLocalDatabase(): Promise<void> {
   await database.withTransactionAsync(async () => {
     await database.runAsync("DELETE FROM transactions");
     await database.runAsync("DELETE FROM portfolio");
+    await database.runAsync("DELETE FROM wallet");
+    await database.runAsync("DELETE FROM user_profil");
     await database.runAsync("UPDATE wallet SET balance = 10000 WHERE id = 1");
   });
 }
+
+///Uwaga: Funkcja clearLocalDatabase() usuwa wszystkie 
+// dane z lokalnej bazy danych, w tym transakcje, portfel i profil użytkownika. 
+// Po jej wywołaniu baza danych zostanie zresetowana do stanu początkowego, 
+// a saldo portfela zostanie ustawione na 10000. Używaj tej funkcji ostrożnie, 
+// ponieważ spowoduje to utratę wszystkich danych użytkownika.
+//void clearLocalDatabase();

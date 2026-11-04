@@ -722,7 +722,9 @@ export default function SettingsScreen() {
           initialAvatar={activeAccount?.avatar_uri ?? null}
           onClose={() => setEditAccountOpen(false)}
           onSaved={async ({ name, avatarUri }) => {
-            await updateAccount({ username: name, avatar_uri: avatarUri });
+            const success = await updateAccount({ username: name, avatar_uri: avatarUri });
+
+            if (!success) return;
 
             notify({
               variant: "success",

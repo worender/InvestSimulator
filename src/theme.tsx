@@ -192,7 +192,7 @@ type ThemeContextValue = {
   }) => Promise<UserProfile>;
   updateAccount: (
     changes: Parameters<typeof updateUserProfile>[0],
-  ) => Promise<void>;
+  ) => Promise<boolean | undefined>;
   reloadAccounts: () => Promise<void>;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
@@ -354,12 +354,25 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   const updateAccount = useCallback(
     async (changes: Parameters<typeof updateUserProfile>[0]) => {
-      if (!activeAccount) return;
-      const updated = await updateUserProfile(changes, activeAccount.id);
-      setAccounts((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
-      );
-      applyProfile(updated);
+      try {
+        if (!activeAccount) return;
+        const updated = await updateUserProfile(changes, activeAccount.id);
+        setAccounts((current) =>
+          current.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        applyProfile(updated);
+        return true;
+      } catch (error) {
+        notify({
+          variant: "error",
+          title: "Nie udało się zaktualizować konta",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Spróbuj ponownie za chwilę.",
+        });
+        return false;
+      }
     },
     [activeAccount, applyProfile],
   );
