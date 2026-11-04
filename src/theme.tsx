@@ -40,6 +40,7 @@ import {
   type NotificationCategories,
   type NotificationCategoryKey,
 } from "./settings/notificationSettings";
+import { notify } from "./notificationBus";
 
 export type ThemeMode = "dark" | "light";
 export type ThemeAccent = string;
@@ -326,6 +327,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   const addAccount = useCallback(
     async (input: { username: string; avatarUri?: string | null }) => {
+      try {
       const profile = await createUserProfile({
         username: input.username,
         avatar_uri: input.avatarUri ?? null,
@@ -335,8 +337,19 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       setActiveAccountId(profile.id);
       applyProfile(profile);
       return profile;
-    },
-    [applyProfile],
+    }catch (error) {
+      notify({
+        variant: "error",
+        title: "Nie udało się utworzyć konta",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Spróbuj ponownie za chwilę.",
+      });
+
+      return null;
+    }
+  },[applyProfile],
   );
 
   const updateAccount = useCallback(

@@ -700,7 +700,10 @@ export default function SettingsScreen() {
           onSaved={async ({ name, avatarUri }) => {
             setFontSizeDraft(null);
             setCurrencyDraft(null);
-            await addAccount({ username: name, avatarUri });
+            const profile = await addAccount({ username: name, avatarUri });
+
+            if (!profile) return;
+            
             notify({
               variant: "success",
               title: "Konto utworzone",
@@ -720,6 +723,7 @@ export default function SettingsScreen() {
           onClose={() => setEditAccountOpen(false)}
           onSaved={async ({ name, avatarUri }) => {
             await updateAccount({ username: name, avatar_uri: avatarUri });
+
             notify({
               variant: "success",
               title: "Profil zaktualizowany",

@@ -1,7 +1,40 @@
 import * as SQLite from "expo-sqlite";
+import { normalizeAndValidateSymbol,
+  ValidateUserName, ValidateAvatarUrl
+ } from "./checkSecurityParam";
+import { useEffect } from "react";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initializationPromise: Promise<void> | null = null;
+
+// SQL injection validation test
+// async function testValidation() {
+  // try {
+  //   await getPortfolioItem("' OR 1=1 --");
+  //   console.log("BŁĄD: symbol został zaakceptowany");
+  // } catch (error) {
+  //   console.log("Poprawnie odrzucono:", error);
+  // }
+
+  // try {
+  //   await getPortfolioItem("DROP TABLE portfolio; --");
+  //   console.log("BŁĄD: symbol został zaakceptowany");
+  // } catch (error) {
+  //   console.log("Poprawnie odrzucono:", error);
+  // }
+
+//   console.log("Test został uruchomiony");
+//   try {
+//     await getUserProfile("' OR 1=1 --"  as unknown as number);
+//     console.log("BŁĄD: nieprawidłowy userId został zaakceptowany");
+//   } catch (error) {
+//     console.log("Poprawnie odrzucono:", error);
+//   }
+// }
+
+// useEffect(() => {
+//   void testValidation();
+// }, []);
 
 function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   databasePromise ??= SQLite.openDatabaseAsync("invest-simulator.db");
@@ -56,7 +89,7 @@ export interface CreateTransactionInput {
   createdAt?: number;
 }
 
-export function initializeDatabase(): Promise<void> {
+export async function initializeDatabase(): Promise<void> {
   initializationPromise ??= (async () => {
     const database = await getDatabase();
 
@@ -109,6 +142,8 @@ export function initializeDatabase(): Promise<void> {
     INSERT OR IGNORE INTO wallet (id, id_user)
     VALUES (1, 1);
   `);
+
+   
 
     await migrateUserProfileColumns(database);
   })();
@@ -169,20 +204,29 @@ export async function getPortfolio(): Promise<PortfolioItem[]> {
   );
 }
 
+
+
+///Get portfolio item by symbol, returns null if not found.
 export async function getPortfolioItem(
   symbol: string,
 ): Promise<PortfolioItem | null> {
   const database = await getReadyDatabase();
+  const validSymbol = normalizeAndValidateSymbol(symbol);
 
   return (
     database.getFirstAsync<PortfolioItem>(
       "SELECT symbol, quantity, average_price FROM portfolio WHERE symbol = ?",
-      symbol.trim().toUpperCase(),
+      validSymbol,
     ) ?? null
   );
 }
 
+///Get user profile by userId, returns null if not found. Default userId is 1.
 export async function getUserProfile(userId = 1): Promise<UserProfile | null> {
+  if (userId <= 0 || !Number.isInteger(userId)) {
+    throw new Error("Nieprawidłowy identyfikator użytkownika");
+  }
+
   const database = await getReadyDatabase();
 
   return (
@@ -215,23 +259,24 @@ export async function createUserProfile(input: {
   username: string;
   avatar_uri?: string | null;
 }): Promise<UserProfile> {
-  const database = await getReadyDatabase();
-  const username = input.username.trim();
+  if (!input.username) throw new Error("Nazwa konta jest wymagana");  
 
-  if (!username) throw new Error("Nazwa konta jest wymagana");
+  const username = ValidateUserName(input.username);
+  const avatar_uri = input.avatar_uri ? ValidateAvatarUrl(input.avatar_uri) : null;
+  const database = await getReadyDatabase();
+  console.log("Tworzenie profilu użytkownika:", username, avatar_uri);
 
   const result = await database.runAsync(
     `INSERT INTO user_profil (username, avatar_uri, created_at)
      VALUES (?, ?, ?)`,
     username,
-    input.avatar_uri ?? null,
+    avatar_uri ?? null,
     Date.now(),
   );
 
   const userId = result.lastInsertRowId;
   await database.runAsync(
-    "INSERT OR IGNORE INTO wallet (id, id_user, balance, currency) VALUES (?, ?, ?, ?)",
-    userId,
+    "INSERT OR IGNORE INTO wallet (id_user, balance, currency) VALUES (?, ?, ?)",
     userId,
     10000,
     "PLN",
@@ -246,7 +291,7 @@ export async function updateUserProfile(
   changes: Partial<Omit<UserProfile, "id">>,
   userId = 1,
 ): Promise<UserProfile> {
-  const database = await getDatabase();
+  const database = await getReadyDatabase();
   const current = await getUserProfile(userId);
   if (!current) throw new Error("Nie znaleziono profilu użytkownika");
 
