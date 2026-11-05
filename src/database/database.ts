@@ -98,51 +98,117 @@ export async function initializeDatabase(): Promise<void> {
     await database.execAsync(`
     PRAGMA foreign_keys = ON;
 
-    CREATE TABLE IF NOT EXISTS portfolio (
-      symbol TEXT NOT NULL PRIMARY KEY,
-      quantity INTEGER NOT NULL DEFAULT 0,
-      average_price REAL NOT NULL DEFAULT 0
-    );
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          username TEXT NOT NULL UNIQUE DEFAULT 'Investor',
+          pass_hash TEXT,
+          avatar_uri TEXT,
+          active INTEGER DEFAULT 1,
+          created_at INTEGER NOT NULL
+        );
 
-    CREATE TABLE IF NOT EXISTS user_profil (
-      id INTEGER PRIMARY KEY NOT NULL,
-      username TEXT NOT NULL,
-      avatar_uri TEXT,
-      dark_mode BOOLEAN NOT NULL DEFAULT 1,
-      color_mode TEXT NOT NULL DEFAULT 'Niebieski',
-      currency_default TEXT NOT NULL DEFAULT 'PLN',
-      "multi_currency" BOOLEAN NOT NULL DEFAULT 1,
-      font_size TEXT NOT NULL DEFAULT 'medium',
-      notifications_enabled BOOLEAN NOT NULL DEFAULT 1,
-      notification_categories TEXT NOT NULL DEFAULT '{"portfolio":true,"market":true,"news":true,"transactions":true,"reminders":true}',
-      biometric_enabled BOOLEAN NOT NULL DEFAULT 0,
-      push_notifications_enabled BOOLEAN NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL DEFAULT 0
-    );
+        CREATE TABLE IF NOT EXISTS wallet (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          balance REAL NOT NULL DEFAULT 10000,
+          currency TEXT,
+          id_user INTEGER,
+          name TEXT,
+          icon TEXT,
+          FOREIGN KEY (id_user) REFERENCES users (id)
+        );
 
-    CREATE TABLE IF NOT EXISTS transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-      symbol TEXT NOT NULL,
-      type TEXT NOT NULL CHECK (type IN ('BUY', 'SELL')),
-      quantity INTEGER NOT NULL CHECK (quantity > 0),
-      price REAL NOT NULL CHECK (price >= 0),
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY (symbol) REFERENCES portfolio (symbol)
-    );
+        CREATE TABLE IF NOT EXISTS category_assets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          name TEXT,
+          wallet_id INTEGER,
+          FOREIGN KEY (wallet_id) REFERENCES wallet (id)
+        );
 
-    CREATE TABLE IF NOT EXISTS wallet (
-      id INTEGER PRIMARY KEY NOT NULL,
-      balance REAL NOT NULL DEFAULT 10000,
-      currency TEXT NOT NULL DEFAULT 'PLN',
-      id_user INTEGER NOT NULL,
-      FOREIGN KEY (id_user) REFERENCES user_profil (id)
-    );
+        CREATE TABLE IF NOT EXISTS positions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          category_id INTEGER NOT NULL,     -- Jedyny klucz obcy (brak wallet_id!)
+          symbol TEXT NOT NULL,
+          initial_quantity REAL NOT NULL,   -- Ile kupiono na początku w tej paczce
+          remaining_quantity REAL NOT NULL, -- Ile z tej paczki zostało
+          buy_price REAL NOT NULL,          -- Dokładna cena zakupu
+          opened_at INTEGER NOT NULL,
+          FOREIGN KEY (category_id) REFERENCES category_assets (id)
+        );
 
-    INSERT OR IGNORE INTO user_profil (id, username)
-    VALUES (1, 'Inwestor');
+        CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          wallet_id INTEGER NOT NULL,
+          snapshot_date TEXT NOT NULL, -- Format YYYY-MM-DD
+          cash_balance REAL NOT NULL,  -- Stan gotówki w danym dniu
+          assets_value REAL NOT NULL,  -- Rynkowa wartość wszystkich aktywów w danym dniu
+          FOREIGN KEY (wallet_id) REFERENCES wallet (id),
+          UNIQUE(wallet_id, snapshot_date) -- Zapobiega dublom z tego samego dnia
+        );
 
-    INSERT OR IGNORE INTO wallet (id, id_user)
-    VALUES (1, 1);
+        CREATE TABLE IF NOT EXISTS transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          symbol TEXT NOT NULL,
+          type TEXT NOT NULL,
+          quantity REAL NOT NULL,
+          price REAL NOT NULL,
+          created_at INTEGER NOT NULL,
+          id_wallet INTEGER,
+          FOREIGN KEY (id_wallet) REFERENCES wallet (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS favorite_assets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          user_id INTEGER NOT NULL,
+          symbol TEXT NOT NULL,
+          counter INTEGER, -- Licznik odwiedzin lub interakcji z danym aktywem
+          favorite INTEGER DEFAULT 0, -- 0 = nie ulubione, 1 = ulubione
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS notification_settings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          user_id INTEGER NOT NULL,
+          notifications_enabled INTEGER DEFAULT 0,
+          push_notifications_enabled INTEGER DEFAULT 0,
+          portfolio INTEGER DEFAULT 0,
+          market INTEGER DEFAULT 0,
+          news INTEGER DEFAULT 0,
+          transactions INTEGER DEFAULT 0,
+          reminders INTEGER DEFAULT 0,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS settings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          user_id INTEGER NOT NULL,
+          dark_mode INTEGER DEFAULT '1',
+          color_mode TEXT DEFAULT 'default',
+          multi_currency INTEGER DEFAULT '0',
+          font_size TEXT DEFAULT 'medium',
+          biometric_enabled INTEGER DEFAULT '0',
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS category_article (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          category TEXT NOT NULL UNIQUE
+        );
+
+        CREATE TABLE IF NOT EXISTS article (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          title TEXT,
+          text TEXT,
+          category_id INTEGER,
+          FOREIGN KEY (category_id) REFERENCES category_article (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS saved_article (
+          user_id INTEGER NOT NULL,
+          saved_article_id INTEGER NOT NULL,
+          PRIMARY KEY (user_id, saved_article_id),
+          FOREIGN KEY (user_id) REFERENCES users (id),
+          FOREIGN KEY (saved_article_id) REFERENCES article (id)
+        );
   `);
 
    
