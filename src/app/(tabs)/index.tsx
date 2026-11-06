@@ -36,6 +36,9 @@ export default function Index() {
   // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
+  const [portfolioStock, setPortfolioStock] = useState(
+    () => portfolioStocks[defaultCurrency] ?? portfolioStocks.PLN,
+  );
   const [searchOpen, setSearchOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -70,6 +73,12 @@ export default function Index() {
     }, 300);
     return () => clearTimeout(timeout);
   }, [searchQuery]);
+
+    useEffect(() => {
+    setPortfolioStock(
+      (current) => portfolioStocks[defaultCurrency] ?? current,
+    );
+  }, [defaultCurrency]);
 
   // Funkcja zamykająca wyszukiwanie; zapytanie i wyniki zostają zapamiętane,
   // dzięki czemu po ponownym otwarciu można je od razu podmienić
