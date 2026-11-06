@@ -311,8 +311,12 @@ export function PortfolioOverviewCard({
     );
   }, [commitShuffle, deckOrder, multiCurrency, opacities, phases]);
 
-  // Funkcja obsługująca naciśnięcie karty portfela: podwójne dotknięcie zmienia walutę
+  // Funkcja obsługująca naciśnięcie karty portfela: na webie zmienia walutę jedno kliknięcie, na mobile podwójne dotknięcie
   const handleCardPress = () => {
+    if (Platform.OS === "web") {
+      changeCurrency();
+      return;
+    }
     const now = Date.now();
     if (now - lastTap.current < 320) {
       lastTap.current = 0;
@@ -346,6 +350,8 @@ const styles = StyleSheet.create({
   backSlot: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   card: {
     borderRadius: 18,
+    // Kliknięcia karty na webie nie zaznaczają jej tekstu
+    userSelect: "none",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,

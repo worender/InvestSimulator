@@ -1,12 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurTargetView } from 'expo-blur';
+import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,10 +20,12 @@ import {
   searchInstruments,
   StockFinancialData,
 } from '../../api/marketService';
+import { InstrumentDetails, useInstrumentFinancialData } from '../../components/InstrumentDetails';
 import { ModalChartView } from '../../components/ModalChartView';
 import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { Skeleton } from '../../components/Skeleton';
+import { StockCandleChart } from '../../components/StockCandleChart';
 import { resolveCurrency } from '../../currency';
 import {
   convertForDisplay,
@@ -28,6 +33,8 @@ import {
 } from '../../displayCurrency';
 import { notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
+import { useKeyboardShortcut } from '../../useKeyboardShortcut';
+import { useLayoutMode } from '../../useLayoutMode';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
 interface FeaturedStock {
@@ -41,6 +48,8 @@ interface FeaturedStock {
   change?: number;
   changePercent?: number;
 }
+
+type MarketInstrument = { symbol: string; name: string; exchange: string; exchangeName?: string; currency?: string };
 
 // Domyślna lista spółek wyświetlanych w sekcji "Wybrane spółki GPW i światowe" na ekranie MarketScreen
 const DEFAULT_STOCKS: FeaturedStock[] = [
@@ -82,6 +91,12 @@ export default function MarketScreen() {
   const [completedQuery, setCompletedQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PL' | 'GLOBAL'>('ALL');
   const [stocksList, setStocksList] = useState<FeaturedStock[]>(DEFAULT_STOCKS);
+  const { isDesktop } = useLayoutMode();
+  const { width: windowWidth } = useWindowDimensions();
+  // Na węższym desktopie lista oddaje miejsce wykresowi
+  const listPanelWidth = windowWidth >= 1280 ? 420 : 340;
+  // Instrument pokazywany w prawym panelu na desktopie
+  const [selectedStock, setSelectedStock] = useState<MarketInstrument & { currency: string }>(DEFAULT_STOCKS[0]);
 
   // Modal view state
   const [modalVisible, setModalVisible] = useState(false);
@@ -153,7 +168,7 @@ export default function MarketScreen() {
 
   // Funckja otwierająca modal z wykresem dla wybranego instrumentu, pobierająca dane finansowe w tle
   const openStockModal = useCallback(
-    async (item: { symbol: string; name: string; exchange: string; exchangeName?: string; currency?: string }) => {
+    async (item: MarketInstrument) => {
       const currency = item.currency || resolveCurrency(item);
 
       const instrumentData = {
@@ -195,6 +210,15 @@ export default function MarketScreen() {
     [],
   );
 
+  // Na desktopie kliknięcie wybiera instrument do prawego panelu, na mobile otwiera modal
+  const pressInstrument = (item: MarketInstrument) => {
+    if (!isDesktop) {
+      openStockModal(item);
+      return;
+    }
+    setSelectedStock({ ...item, currency: item.currency || resolveCurrency(item) });
+  };
+
   // Funckja zamykająca modal z wykresem i resetująca stan modalu
   const closeModal = useCallback(() => {
     setModalVisible(false);
@@ -234,6 +258,28 @@ export default function MarketScreen() {
     setSearchOpen(false);
   }, []);
 
+  // Skróty na webie działają tylko na widocznej zakładce (pozostałe zostają zamontowane w tle)
+  const isFocused = useIsFocused();
+  const openSearchShortcut = useCallback((event: KeyboardEvent) => {
+    event.preventDefault();
+    setSearchOpen(true);
+  }, []);
+  useKeyboardShortcut('/', openSearchShortcut, isFocused && !modalVisible);
+  useKeyboardShortcut('Escape', closeSearch, isFocused && searchOpen && !modalVisible);
+
+  // Strzałki góra/dół przełączają instrument w prawym panelu (desktop), lista przewija się do zaznaczenia
+  const selectByOffset = (offset: number) => (event: KeyboardEvent) => {
+    event.preventDefault();
+    if (filteredStocks.length === 0) return;
+    const current = filteredStocks.findIndex((stock) => stock.symbol === selectedStock.symbol);
+    const next = filteredStocks[Math.min(Math.max(current + offset, 0), filteredStocks.length - 1)];
+    setSelectedStock(next);
+    document.getElementById(`market-row-${next.symbol}`)?.scrollIntoView({ block: 'nearest' });
+  };
+  const arrowsEnabled = isFocused && isDesktop && !isSearching && !modalVisible;
+  useKeyboardShortcut('ArrowDown', selectByOffset(1), arrowsEnabled);
+  useKeyboardShortcut('ArrowUp', selectByOffset(-1), arrowsEnabled);
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
@@ -265,10 +311,12 @@ export default function MarketScreen() {
           placeholder: 'Nazwa lub ticker, np. Apple',
         }}
       />
-      <BlurTargetView ref={blurTargetRef} style={styles.blurTarget}>
+      {/* Na desktopie lista i wykres to dwa panele obok siebie, każdy przewijany osobno (jak w xStation) */}
+      <BlurTargetView ref={blurTargetRef} style={[styles.blurTarget, isDesktop && styles.split]}>
         <ScrollView
+          style={isDesktop ? [styles.listPanel, { width: listPanelWidth, borderRightColor: colors.border }] : undefined}
           contentContainerStyle={[styles.content, { paddingTop: top + PANEL_HEADER_HEIGHT + 8, paddingBottom: 38 + bottom }]}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={Platform.OS === 'web'}
           keyboardShouldPersistTaps="handled"
           {...scrollNav}
         >
@@ -345,7 +393,7 @@ export default function MarketScreen() {
                         },
                       ]}
                       onPress={() =>
-                        openStockModal({
+                        pressInstrument({
                           symbol: item.symbol,
                           name: item.name,
                           exchange: item.exchange,
@@ -379,14 +427,17 @@ export default function MarketScreen() {
                   return (
                     <TouchableOpacity
                       key={stock.symbol}
+                      nativeID={`market-row-${stock.symbol}`}
                       style={[
                         styles.stockRow,
+                        isDesktop && styles.stockRowDesktop,
                         index < filteredStocks.length - 1 && {
                           borderBottomWidth: StyleSheet.hairlineWidth,
                           borderBottomColor: colors.borderGlass,
                         },
+                        isDesktop && stock.symbol === selectedStock.symbol && { backgroundColor: colors.accentGlass },
                       ]}
-                      onPress={() => openStockModal(stock)}
+                      onPress={() => pressInstrument(stock)}
                       activeOpacity={0.6}
                     >
                       <View style={styles.stockMeta}>
@@ -435,6 +486,8 @@ export default function MarketScreen() {
             )}
           </Section>
         </ScrollView>
+
+        {isDesktop && <InstrumentPanel instrument={selectedStock} paddingTop={top + PANEL_HEADER_HEIGHT + 8} />}
       </BlurTargetView>
 
       {modalVisible && modalInstrument && (
@@ -448,9 +501,41 @@ export default function MarketScreen() {
   );
 }
 
+// Prawy panel na desktopie: wykres i szczegóły finansowe wybranego instrumentu (na mobile to samo jest w modalu)
+function InstrumentPanel({ instrument, paddingTop }: { instrument: MarketInstrument & { currency: string }; paddingTop: number }) {
+  const { financialData, loading } = useInstrumentFinancialData({
+    stock: instrument.symbol,
+    exchange: instrument.exchange,
+    currency: instrument.currency,
+  });
+
+  return (
+    <ScrollView style={styles.detailPanel} contentContainerStyle={[styles.detailContent, { paddingTop }]} showsVerticalScrollIndicator>
+      <StockCandleChart
+        stock={instrument.symbol}
+        title={instrument.name.toUpperCase()}
+        currency={financialData?.currency ?? instrument.currency}
+        exchange={instrument.exchange}
+      />
+      <InstrumentDetails financialData={financialData} loading={loading} grid />
+    </ScrollView>
+  );
+}
+
 // Stylesheet dla komponentu MarketScreen (ekran "Rynek")
 const styles = StyleSheet.create({
   blurTarget: { flex: 1 },
+  split: { flexDirection: 'row' },
+  listPanel: { flexGrow: 0, borderRightWidth: 1 },
+  stockRowDesktop: { paddingHorizontal: 10, borderRadius: 8 },
+  detailPanel: { flex: 1 },
+  detailContent: {
+    width: '100%',
+    maxWidth: 1000,
+    alignSelf: 'center',
+    paddingHorizontal: 32,
+    paddingBottom: 38,
+  },
   root: {
     flex: 1,
   },

@@ -21,12 +21,26 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SidebarTabBar } from '../../components/SidebarTabBar';
 import { useInteractionLock } from '../../interactionLock';
 import { useNavigationVisibility } from '../../navigationVisibility';
 import { useTheme } from '../../theme';
+import { useLayoutMode } from '../../useLayoutMode';
 
 // Stałe określające dostępne zakładki w aplikacji
 const TAB_ROUTES = ['index', 'market', 'portfolio', 'about', 'settings'] as const;
+
+// Ikony zakładek wspólne dla dolnego paska (mobile) i bocznego (web)
+function tabIcon(routeName: string, focused: boolean): keyof typeof Ionicons.glyphMap {
+  const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
+    index: focused ? 'home' : 'home-outline',
+    market: focused ? 'trending-up' : 'trending-up-outline',
+    portfolio: focused ? 'wallet' : 'wallet-outline',
+    about: focused ? 'newspaper' : 'newspaper-outline',
+    settings: focused ? 'settings' : 'settings-outline',
+  };
+  return icons[routeName] || 'ellipse-outline';
+}
 
 // Komponent obsługujący układ zakładek w aplikacji, z możliwością przełączania między nimi gestami przesuwania
 export default function TabLayout() {
@@ -36,6 +50,7 @@ export default function TabLayout() {
   const { width } = useWindowDimensions();
   const { setVisible } = useNavigationVisibility();
   const { locked } = useInteractionLock();
+  const { isWeb, isMobile, isTablet } = useLayoutMode();
 
   const currentTab = useMemo(() => {
     if (pathname === '/' || pathname === '/index') return 'index';
@@ -108,19 +123,22 @@ export default function TabLayout() {
   return (
     // Gdy otwarte jest okno modalne, nie podpinamy gestów przełączania zakładek,
     // aby gesty wykonane na modalu nie były przechwytywane przez ekran pod spodem.
-    <View style={styles.tabLayoutRoot} {...(locked ? {} : panResponder.panHandlers)}>
+    // Na webie zakładki zmienia się kliknięciem, nie przeciąganiem myszą.
+    <View style={styles.tabLayoutRoot} {...(locked || isWeb ? {} : panResponder.panHandlers)}>
       <Tabs
         backBehavior="history"
-        tabBar={(props) => <FloatingTabBar {...props} />}
+        tabBar={(props) =>
+          isMobile ? <FloatingTabBar {...props} /> : <SidebarTabBar {...props} compact={isTablet} tabIcon={tabIcon} />
+        }
         screenOptions={{
           headerShown: false,
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
           headerTitleStyle: { fontWeight: '700' },
           sceneStyle: { backgroundColor: colors.background },
-          animation: 'shift',
-          sceneStyleInterpolator,
-          transitionSpec,
+          tabBarPosition: isMobile ? 'bottom' : 'left',
+          // Przesuwanie ekranów pasuje do dolnego paska; przy sidebarze ekran zmienia się od razu
+          ...(isMobile ? { animation: 'shift' as const, sceneStyleInterpolator, transitionSpec } : { animation: 'none' as const }),
         }}
       >
         <Tabs.Screen
@@ -187,7 +205,9 @@ type FloatingTabBarProps = Pick<BottomTabBarProps, 'state' | 'navigateToTab'>;
 function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
   const { colors } = useTheme();
   const { bottom } = useSafeAreaInsets();
-  const { visible } = useNavigationVisibility();
+  const { isWeb } = useLayoutMode();
+  // Chowanie paska przy przewijaniu to zachowanie mobilne — na webie pasek zostaje na miejscu
+  const visible = useNavigationVisibility().visible || isWeb;
   const [barWidth, setBarWidth] = useState(0);
 
   // Animacje Reanimated: chowanie paska, pozycja bąbelka i skala podczas przeciągania.
@@ -316,13 +336,6 @@ function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
 
           {state.routes.map((route, index) => {
             const focused = state.index === index;
-            const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
-              index: focused ? 'home' : 'home-outline',
-              market: focused ? 'trending-up' : 'trending-up-outline',
-              portfolio: focused ? 'wallet' : 'wallet-outline',
-              about: focused ? 'newspaper' : 'newspaper-outline',
-              settings: focused ? 'settings' : 'settings-outline',
-            };
 
             return (
               <Pressable
@@ -333,7 +346,7 @@ function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
                 style={styles.item}
               >
                 <Ionicons
-                  name={icons[route.name] || 'ellipse-outline'}
+                  name={tabIcon(route.name, focused)}
                   size={22}
                   color={focused ? colors.accent : colors.textMuted}
                 />

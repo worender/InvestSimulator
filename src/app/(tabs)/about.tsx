@@ -23,6 +23,7 @@ import {
 } from "../../database/educationalArticles";
 import { notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
+import { useLayoutMode } from "../../useLayoutMode";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 // Ikona nagłówka dla każdej kategorii newsów
@@ -56,6 +57,7 @@ export default function AboutScreen() {
   const { bottom, top } = useSafeAreaInsets();
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
+  const { isDesktop, isWeb } = useLayoutMode();
 
   const [newsByTopic, setNewsByTopic] = useState<
     Record<NewsTopic, YahooNewsItem[]>
@@ -160,12 +162,13 @@ export default function AboutScreen() {
           style={{ backgroundColor: colors.background }}
           contentContainerStyle={[
             styles.content,
+            isDesktop && styles.contentDesktop,
             {
               paddingBottom: 38 + bottom,
               paddingTop: top + PANEL_HEADER_HEIGHT + 8,
             },
           ]}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={isWeb}
           {...scrollNav}
         >
           <Text style={[styles.title, { color: colors.text }]}>
@@ -284,6 +287,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
+  // Na desktopie treść w wyśrodkowanej kolumnie o ograniczonej szerokości
+  contentDesktop: { width: "100%", maxWidth: 760, alignSelf: "center", paddingHorizontal: 32 },
   title: {
     fontSize: 25,
     fontWeight: "700",

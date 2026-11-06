@@ -37,6 +37,7 @@ import {
 } from "../../database/mockPortfolioData";
 import { notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
+import { useLayoutMode } from "../../useLayoutMode";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 export default function PortfolioScreen() {
@@ -45,6 +46,7 @@ export default function PortfolioScreen() {
   // Widok treści rozmywanej pod nagłówkiem
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
+  const { isDesktop, isWeb } = useLayoutMode();
 
   // Stan portfeli użytkownika
   const [portfolios, setPortfolios] =
@@ -380,12 +382,13 @@ export default function PortfolioScreen() {
           style={{ backgroundColor: colors.background }}
           contentContainerStyle={[
             styles.content,
+            isDesktop && styles.contentDesktop,
             {
               paddingBottom: 38 + bottom,
               paddingTop: top + PANEL_HEADER_HEIGHT + 8,
             },
           ]}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={isWeb}
           {...scrollNav}
         >
           <SinglePortfolioCard portfolio={currentPortfolio} />
@@ -472,6 +475,8 @@ const styles = StyleSheet.create({
   blurTarget: { flex: 1 },
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
+  // Na desktopie treść w wyśrodkowanej kolumnie o ograniczonej szerokości
+  contentDesktop: { width: "100%", maxWidth: 1280, alignSelf: "center", paddingHorizontal: 32 },
   intro: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
   headerButtons: {
     flexDirection: "row",

@@ -236,6 +236,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   card: {
+    // Na dużym ekranie okno nie rozciąga się na całą szerokość; telefon jest węższy niż limit
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 16,

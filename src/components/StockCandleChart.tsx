@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { CandlestickChart } from 'react-native-wagmi-charts';
 import { CandleData, getStockCandles } from '../api/marketService';
 import {
@@ -8,6 +8,8 @@ import {
   displaySymbol,
 } from '../displayCurrency';
 import { useTheme } from '../theme';
+import { useContainerWidth } from '../useContainerWidth';
+import { ChartCrosshair, renderCandleLine, renderCandleRect } from './CandleHoverCrosshair';
 import {
   CHART_INTERVALS,
   CHART_RANGES,
@@ -41,6 +43,9 @@ export function StockCandleChart({
   initialInterval = DEFAULT_CHART_INTERVAL,
 }: StockCandleChartProps) {
   const { colors, mode } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  // Domyślnie wagmi bierze szerokość okna, przez co ostatnie świece były ucinane przez kontener
+  const [chartWidth, onChartLayout] = useContainerWidth(windowWidth - 40);
   const isDark = mode === 'dark';
   const [candles, setCandles] = useState<CandleData[]>([]);
   const [rangeIndex, setRangeIndex] = useState(() =>
@@ -140,7 +145,7 @@ export function StockCandleChart({
             disabled={intradayDisabled && isIntradayInterval(item.value)} onPress={() => setInterval(item.value)} colors={colors} />
         ))}
       </ScrollView>
-      <View style={styles.chart}>
+      <View style={styles.chart} onLayout={onChartLayout}>
         {loading ? <View style={styles.skeletonChart}>
           <View style={styles.skeletonHeader}><Skeleton width="42%" height={16} /><Skeleton width={72} height={16} /></View>
           <Skeleton width="100%" height={1} radius={0} style={styles.skeletonLine} />
@@ -151,9 +156,9 @@ export function StockCandleChart({
         </View>
           : candles.length === 0 ? <View style={styles.placeholder}><Ionicons name="calendar-outline" size={40} color={colors.textMuted} /><Text style={[styles.muted, { color: colors.textMuted }]}>Brak notowań dla tego zakresu.</Text></View>
             : <CandlestickChart.Provider data={candles}>
-              <CandlestickChart height={280}>
-                <CandlestickChart.Candles useAnimations={false} />
-                <CandlestickChart.Crosshair color={colors.textMuted} minDurationMs={320}>
+              <CandlestickChart height={280} width={chartWidth}>
+                <CandlestickChart.Candles useAnimations={false} renderLine={renderCandleLine} renderRect={renderCandleRect} />
+                <ChartCrosshair color={colors.textMuted} minDurationMs={320}>
                   {/* Tooltip spójny z wykresem w ModalChartView / ChartFullscreenModal. */}
                   <CandlestickChart.Tooltip
                     style={[
@@ -170,7 +175,7 @@ export function StockCandleChart({
                       style: { color: colors.text, fontSize: 12, fontWeight: '700' },
                     }}
                   />
-                </CandlestickChart.Crosshair>
+                </ChartCrosshair>
               </CandlestickChart>
               <View style={styles.crosshair}><CandlestickChart.DatetimeText locale="pl-PL" style={{ color: colors.textMuted, fontSize: 11 }} /></View>
             </CandlestickChart.Provider>}

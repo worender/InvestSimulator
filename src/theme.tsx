@@ -255,8 +255,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setRatesLoading(true);
 
     try {
+      // Stary adres api.frankfurter.app przekierowuje tutaj (301) bez nagłówków CORS, przez co na webie fetch był blokowany
       const response = await fetch(
-        "https://api.frankfurter.app/latest?from=PLN&to=EUR,USD",
+        "https://api.frankfurter.dev/v1/latest?from=PLN&to=EUR,USD",
       );
       if (!response.ok) throw new Error("Nie udało się pobrać kursów");
 

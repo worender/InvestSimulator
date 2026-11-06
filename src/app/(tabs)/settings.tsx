@@ -43,6 +43,7 @@ import {
   type FontSizePreference,
   type ThemeMode,
 } from "../../theme";
+import { useLayoutMode } from "../../useLayoutMode";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 const THEME_OPTIONS: ChoiceOption<ThemeMode>[] = [
@@ -102,6 +103,7 @@ export default function SettingsScreen() {
   const { bottom, top } = useSafeAreaInsets();
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
+  const { isDesktop, isWeb } = useLayoutMode();
   const scrollRef = useRef<ScrollViewInstance>(null);
   const isDark = mode === "dark";
   const appName = Constants.expoConfig?.name ?? "InvestSimulator";
@@ -293,13 +295,14 @@ export default function SettingsScreen() {
           style={{ backgroundColor: colors.background }}
           contentContainerStyle={[
             styles.content,
+            isDesktop && styles.contentDesktop,
             {
               paddingBottom: 38 + bottom,
               paddingTop: top + PANEL_HEADER_HEIGHT + 8,
             },
           ]}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={isWeb}
           {...scrollNav}
         >
           <AccountSwitcher
@@ -782,6 +785,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   blurTarget: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
+  // Na desktopie treść w wyśrodkowanej kolumnie o ograniczonej szerokości
+  contentDesktop: { width: "100%", maxWidth: 760, alignSelf: "center", paddingHorizontal: 32 },
   swatchArea: {
     paddingHorizontal: 14,
     paddingTop: 12,

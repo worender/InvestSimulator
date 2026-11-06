@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
-import { useRouter } from "expo-router";
+import { useIsFocused, useRouter } from "expo-router";
 import {
   useCallback,
   useEffect,
@@ -8,7 +8,7 @@ import {
   useState,
   type ComponentRef,
 } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getStockData,
@@ -26,6 +26,8 @@ import { TrendCards } from "../../components/TrendCards";
 import { resolveCurrency } from "../../currency";
 import { notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
+import { useKeyboardShortcut } from "../../useKeyboardShortcut";
+import { useLayoutMode } from "../../useLayoutMode";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 // Przykładowe spółki w portfelu, które są wyświetlane na ekranie głównym aplikacji
@@ -69,6 +71,7 @@ export default function Index() {
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const router = useRouter();
   const scrollNav = useScrollAwareNavigation();
+  const { isDesktop } = useLayoutMode();
   const [portfolioStock, setPortfolioStock] = useState(
     () => portfolioStocks[defaultCurrency],
   );
@@ -182,6 +185,15 @@ export default function Index() {
     searchTerm.length >= 2 &&
     (searchLoading || completedQuery !== "");
 
+  // Skróty na webie działają tylko na widocznej zakładce (pozostałe zostają zamontowane w tle)
+  const isFocused = useIsFocused();
+  const openSearchShortcut = useCallback((event: KeyboardEvent) => {
+    event.preventDefault();
+    setSearchOpen(true);
+  }, []);
+  useKeyboardShortcut("/", openSearchShortcut, isFocused && !modalVisible);
+  useKeyboardShortcut("Escape", closeSearch, isFocused && searchOpen && !modalVisible);
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
@@ -222,13 +234,14 @@ export default function Index() {
           style={{ backgroundColor: colors.background }}
           contentContainerStyle={[
             styles.content,
+            isDesktop && styles.contentDesktop,
             {
               paddingBottom: 38 + bottom,
               paddingTop: top + PANEL_HEADER_HEIGHT + 8,
             },
           ]}
           keyboardShouldPersistTaps="always"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={Platform.OS === "web"}
           {...scrollNav}
         >
           {isSearching ? (
@@ -329,18 +342,25 @@ export default function Index() {
                 />
               </Section>
 
-              <Section>
-                <StockCandleChart
-                  stock={chartStock.stock}
-                  title={chartStock.title}
-                  currency={chartStock.symbol}
-                  exchange={chartStock.exchange}
-                />
-              </Section>
+              {/* Na desktopie wykres i trendy stoją obok siebie, na mobile jedno pod drugim */}
+              <View style={isDesktop && styles.columns}>
+                <View style={isDesktop && styles.mainColumn}>
+                  <Section>
+                    <StockCandleChart
+                      stock={chartStock.stock}
+                      title={chartStock.title}
+                      currency={chartStock.symbol}
+                      exchange={chartStock.exchange}
+                    />
+                  </Section>
+                </View>
 
-              <Section>
-                <TrendCards />
-              </Section>
+                <View style={isDesktop && styles.sideColumn}>
+                  <Section>
+                    <TrendCards />
+                  </Section>
+                </View>
+              </View>
             </>
           )}
         </ScrollView>
@@ -363,6 +383,10 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
+  contentDesktop: { width: "100%", maxWidth: 1280, alignSelf: "center", paddingHorizontal: 32 },
+  columns: { flexDirection: "row", alignItems: "flex-start", gap: 32 },
+  mainColumn: { flex: 3, minWidth: 0 },
+  sideColumn: { flex: 2, minWidth: 0 },
   eyebrow: {
     fontSize: 11,
     fontWeight: "700",
