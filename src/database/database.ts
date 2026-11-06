@@ -1,12 +1,8 @@
 import * as SQLite from "expo-sqlite";
-import { normalizeAndValidateSymbol,
-  ValidateUserName, ValidateAvatarUrl
- } from "./checkSecurityParam";
-
+import { ValidateAvatarUrl, ValidateUserName } from "./checkSecurityParam";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initializationPromise: Promise<void> | null = null;
-
 
 function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   databasePromise ??= SQLite.openDatabaseAsync("invest-simulator.db");
@@ -14,7 +10,6 @@ function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 }
 
 export type TransactionType = "BUY" | "SELL";
-
 
 export interface UserProfile {
   id: number;
@@ -200,15 +195,13 @@ export async function initializeDatabase(): Promise<void> {
           FOREIGN KEY (saved_article_id) REFERENCES article (id)
         );
   `);
-        await seedDefaultData(database);
+    await seedDefaultData(database);
   })();
 
   return initializationPromise;
 }
 
-async function seedDefaultData(
-  database: SQLite.SQLiteDatabase,
-): Promise<void> {
+async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
   await database.runAsync(
     `INSERT OR IGNORE INTO users
       (id, username, pass_hash, avatar_uri, active, created_at)
@@ -242,18 +235,18 @@ async function getReadyDatabase(): Promise<SQLite.SQLiteDatabase> {
   return getDatabase();
 }
 
-const requirePositive = (value: number, fieldName: string): void => {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${fieldName} musi być większe od zera`);
-  }
-};
+// // TO IMPLEMENT
+// const requirePositive = (value: number, fieldName: string): void => {
+//   if (!Number.isFinite(value) || value <= 0) {
+//     throw new Error(`${fieldName} musi być większe od zera`);
+//   }
+// };
 
-const requireNonNegative = (value: number, fieldName: string): void => {
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error(`${fieldName} nie może być ujemne`);
-  }
-};
-
+// const requireNonNegative = (value: number, fieldName: string): void => {
+//   if (!Number.isFinite(value) || value < 0) {
+//     throw new Error(`${fieldName} nie może być ujemne`);
+//   }
+// };
 
 ///Get user profile by userId, returns null if not found. Default userId is 1.
 export async function getUserProfile(userId = 1): Promise<UserProfile | null> {
@@ -264,15 +257,14 @@ export async function getUserProfile(userId = 1): Promise<UserProfile | null> {
   const database = await getReadyDatabase();
 
   return (
-    await database.getFirstAsync<UserProfile>(
+    (await database.getFirstAsync<UserProfile>(
       `SELECT id, username, pass_hash, avatar_uri, active, created_at
      FROM users
      WHERE id = ?`,
       userId,
-    ) ?? null
+    )) ?? null
   );
 }
-
 
 export async function getUserProfiles(): Promise<UserProfile[]> {
   const database = await getReadyDatabase();
@@ -289,10 +281,12 @@ export async function createUserProfile(input: {
   username: string;
   avatar_uri?: string | null;
 }): Promise<UserProfile> {
-  if (!input.username) throw new Error("Nazwa konta jest wymagana");  
+  if (!input.username) throw new Error("Nazwa konta jest wymagana");
 
   const username = ValidateUserName(input.username);
-  const avatar_uri = input.avatar_uri ? ValidateAvatarUrl(input.avatar_uri) : null;
+  const avatar_uri = input.avatar_uri
+    ? ValidateAvatarUrl(input.avatar_uri)
+    : null;
   const database = await getReadyDatabase();
   console.log("Tworzenie profilu użytkownika:", username, avatar_uri);
 
@@ -313,8 +307,6 @@ export async function createUserProfile(input: {
     "PLN",
   );
 
-
-
   const profile = await getUserProfile(userId);
   if (!profile) throw new Error("Nie udało się utworzyć konta");
   return profile;
@@ -329,10 +321,14 @@ export async function updateUserProfile(
   const current = await getUserProfile(userId);
   if (!current) throw new Error("Nie znaleziono profilu użytkownika");
 
-  const validateUserName = changes.username !== undefined ? ValidateUserName(changes.username) : current.username;
-  const validateAvatarUrl = changes.avatar_uri !== undefined && changes.avatar_uri !== null ? 
-  ValidateAvatarUrl(changes.avatar_uri) : current.avatar_uri;
-
+  const validateUserName =
+    changes.username !== undefined
+      ? ValidateUserName(changes.username)
+      : current.username;
+  const validateAvatarUrl =
+    changes.avatar_uri !== undefined && changes.avatar_uri !== null
+      ? ValidateAvatarUrl(changes.avatar_uri)
+      : current.avatar_uri;
 
   const next = {
     username: validateUserName,
@@ -358,7 +354,7 @@ export async function updateUserProfile(
 }
 
 export async function updateSettings(
-  settings: Partial<Settings>
+  settings: Partial<Settings>,
 ): Promise<void> {
   const database = await getReadyDatabase();
 
@@ -368,15 +364,17 @@ export async function updateSettings(
 
   const currentSettings = await database.getFirstAsync<Settings>(
     `SELECT * FROM settings WHERE user_id = ?`,
-    settings.user_id
+    settings.user_id,
   );
 
   const nextSettings = {
     dark_mode: settings.dark_mode ?? currentSettings?.dark_mode ?? 1,
-    color_mode: settings.color_mode ?? currentSettings?.color_mode ?? 'default',
-    multi_currency: settings.multi_currency ?? currentSettings?.multi_currency ?? 0,
-    font_size: settings.font_size ?? currentSettings?.font_size ?? 'medium',
-    biometric_enabled: settings.biometric_enabled ?? currentSettings?.biometric_enabled ?? 0,
+    color_mode: settings.color_mode ?? currentSettings?.color_mode ?? "default",
+    multi_currency:
+      settings.multi_currency ?? currentSettings?.multi_currency ?? 0,
+    font_size: settings.font_size ?? currentSettings?.font_size ?? "medium",
+    biometric_enabled:
+      settings.biometric_enabled ?? currentSettings?.biometric_enabled ?? 0,
     currency: settings.currency ?? currentSettings?.currency ?? "PLN",
   };
 
@@ -390,18 +388,17 @@ export async function updateSettings(
     nextSettings.font_size,
     nextSettings.biometric_enabled,
     nextSettings.currency,
-    settings.user_id
+    settings.user_id,
   );
 
   const updatedSettings = await database.getFirstAsync<Settings>(
     `SELECT * FROM settings WHERE user_id = ?`,
-    settings.user_id
+    settings.user_id,
   );
 
   if (!updatedSettings) {
     throw new Error("Nie udało się odczytać zaktualizowanych ustawień");
   }
-
 }
 
 export async function getSettings(userId = 1): Promise<Settings | null> {
@@ -412,15 +409,15 @@ export async function getSettings(userId = 1): Promise<Settings | null> {
   const database = await getReadyDatabase();
 
   return (
-    await database.getFirstAsync<Settings>(
+    (await database.getFirstAsync<Settings>(
       `SELECT * FROM settings WHERE user_id = ?`,
       userId,
-    ) ?? null
+    )) ?? null
   );
 }
 
 export async function updateNotificationSettings(
-  settings: Partial<NotificationSettings>
+  settings: Partial<NotificationSettings>,
 ): Promise<void> {
   const database = await getReadyDatabase();
 
@@ -430,17 +427,23 @@ export async function updateNotificationSettings(
 
   const currentSettings = await database.getFirstAsync<NotificationSettings>(
     `SELECT * FROM notification_settings WHERE user_id = ?`,
-    settings.user_id
+    settings.user_id,
   );
 
   const nextSettings = {
-    notifications_enabled: settings.notifications_enabled ?? currentSettings?.notifications_enabled ?? 0,
-    push_notifications_enabled: settings.push_notifications_enabled ?? currentSettings?.push_notifications_enabled ?? 0,
+    notifications_enabled:
+      settings.notifications_enabled ??
+      currentSettings?.notifications_enabled ??
+      0,
+    push_notifications_enabled:
+      settings.push_notifications_enabled ??
+      currentSettings?.push_notifications_enabled ??
+      0,
     portfolio: settings.portfolio ?? currentSettings?.portfolio ?? 0,
     market: settings.market ?? currentSettings?.market ?? 0,
     news: settings.news ?? currentSettings?.news ?? 0,
     transactions: settings.transactions ?? currentSettings?.transactions ?? 0,
-    reminders: settings.reminders ?? currentSettings?.reminders ?? 0
+    reminders: settings.reminders ?? currentSettings?.reminders ?? 0,
   };
 
   await database.runAsync(
@@ -454,20 +457,24 @@ export async function updateNotificationSettings(
     nextSettings.news,
     nextSettings.transactions,
     nextSettings.reminders,
-    settings.user_id
+    settings.user_id,
   );
 
   const updatedSettings = await database.getFirstAsync<NotificationSettings>(
     `SELECT * FROM notification_settings WHERE user_id = ?`,
-    settings.user_id
+    settings.user_id,
   );
 
   if (!updatedSettings) {
-    throw new Error("Nie udało się odczytać zaktualizowanych ustawień powiadomień");
+    throw new Error(
+      "Nie udało się odczytać zaktualizowanych ustawień powiadomień",
+    );
   }
 }
 
-export async function getNotificationSettings(userId = 1): Promise<NotificationSettings | null> {
+export async function getNotificationSettings(
+  userId = 1,
+): Promise<NotificationSettings | null> {
   if (userId <= 0 || !Number.isInteger(userId)) {
     throw new Error("Nieprawidłowy identyfikator użytkownika");
   }
@@ -475,122 +482,12 @@ export async function getNotificationSettings(userId = 1): Promise<NotificationS
   const database = await getReadyDatabase();
 
   return (
-    await database.getFirstAsync<NotificationSettings>(
+    (await database.getFirstAsync<NotificationSettings>(
       `SELECT * FROM notification_settings WHERE user_id = ?`,
       userId,
-    ) ?? null
+    )) ?? null
   );
 }
-
-///Chyba do usuniecia
-// export async function getWallet(userId = 1): Promise<Wallet | null> {
-//   if (userId <= 0 || !Number.isInteger(userId)) {
-//     return null;
-//   }
-
-//   const database = await getReadyDatabase();
-
-//   return (
-//     (await database.getFirstAsync<Wallet>(
-//       "SELECT id, balance, currency, id_user FROM wallet WHERE id_user = ?",
-//       userId,
-//     )) ?? null
-//   );
-// }
-
-
-
-///Get all transactions, optionally filtered by symbol. Returns an array of Transaction objects.
-// export async function getTransactions(symbol?: string): Promise<Transaction[]> {
-//   const validSymbol = symbol ? normalizeAndValidateSymbol(symbol) : undefined;
-//   const database = await getReadyDatabase();
-
-//   if (validSymbol) {
-//     return database.getAllAsync<Transaction>(
-//       `SELECT id, symbol, type, quantity, price, created_at
-//        FROM transactions
-//        WHERE symbol = ?
-//        ORDER BY created_at DESC, id DESC`,
-//       validSymbol,
-//     );
-//   }
-
-//   return await database.getAllAsync<Transaction>(
-//     `SELECT id, symbol, type, quantity, price, created_at
-//      FROM transactions
-//      ORDER BY created_at DESC, id DESC`,
-//   );
-// }
-
-///Add a new transaction and update the portfolio accordingly. Returns the created Transaction object.
-// export async function addTransaction(
-//   input: CreateTransactionInput,
-// ): Promise<Transaction> {
-//   const database = await getReadyDatabase();
-//   const validSymbol = normalizeAndValidateSymbol(input.symbol);
-//   const symbol = validSymbol;
-//   if (!symbol) throw new Error("Symbol instrumentu jest wymagany");
-//   requirePositive(input.quantity, "Liczba jednostek");
-//   requireNonNegative(input.price, "Cena");
-
-//   const createdAt = input.createdAt ?? Date.now();
-//   let transactionId = 0;
-
-//   await database.withTransactionAsync(async () => {
-//     const existing = await getPortfolioItem(symbol);
-
-//     if (input.type === "BUY") {
-//       const oldQuantity = existing?.quantity ?? 0;
-//       const newQuantity = oldQuantity + input.quantity;
-//       const newAveragePrice = existing
-//         ? (oldQuantity * existing.average_price +
-//             input.quantity * input.price) /
-//           newQuantity
-//         : input.price;
-
-//       await database.runAsync(
-//         `INSERT INTO portfolio (symbol, quantity, average_price)
-//          VALUES (?, ?, ?)
-//          ON CONFLICT(symbol) DO UPDATE SET
-//            quantity = excluded.quantity,
-//            average_price = excluded.average_price`,
-//         symbol,
-//         newQuantity,
-//         newAveragePrice,
-//       );
-//     } else {
-//       if (!existing || existing.quantity < input.quantity) {
-//         throw new Error("Niewystarczająca liczba jednostek aktywa");
-//       }
-
-//       await database.runAsync(
-//         "UPDATE portfolio SET quantity = quantity - ? WHERE symbol = ?",
-//         input.quantity,
-//         symbol,
-//       );
-//     }
-
-//     const result = await database.runAsync(
-//       `INSERT INTO transactions (symbol, type, quantity, price, created_at)
-//        VALUES (?, ?, ?, ?, ?)`,
-//       symbol,
-//       input.type,
-//       input.quantity,
-//       input.price,
-//       createdAt,
-//     );
-//     transactionId = result.lastInsertRowId;
-//   });
-
-//   const transaction = await database.getFirstAsync<Transaction>(
-//     `SELECT id, symbol, type, quantity, price, created_at
-//      FROM transactions
-//      WHERE id = ?`,
-//     transactionId,
-//   );
-//   if (!transaction) throw new Error("Nie udało się zapisać transakcji");
-//   return transaction;
-// }
 
 export async function clearLocalDatabase(): Promise<void> {
   const database = await getReadyDatabase();
@@ -612,10 +509,10 @@ export async function clearLocalDatabase(): Promise<void> {
   });
 }
 
-///Uwaga: Funkcja clearLocalDatabase() usuwa wszystkie 
-// dane z lokalnej bazy danych, w tym transakcje, portfel i profil użytkownika. 
-// Po jej wywołaniu baza danych zostanie zresetowana do stanu początkowego, 
-// a saldo portfela zostanie ustawione na 10000. Używaj tej funkcji ostrożnie, 
+///Uwaga: Funkcja clearLocalDatabase() usuwa wszystkie
+// dane z lokalnej bazy danych, w tym transakcje, portfel i profil użytkownika.
+// Po jej wywołaniu baza danych zostanie zresetowana do stanu początkowego,
+// a saldo portfela zostanie ustawione na 10000. Używaj tej funkcji ostrożnie,
 // ponieważ spowoduje to utratę wszystkich danych użytkownika.
 // void clearLocalDatabase();
 
@@ -628,4 +525,3 @@ export async function deleteLocalDatabase(): Promise<void> {
   databasePromise = null;
   initializationPromise = null;
 }
-
