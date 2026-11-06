@@ -1,7 +1,7 @@
 import { useContext, type ComponentProps, type ReactNode } from 'react';
 import { Platform, StyleSheet, type GestureResponderEvent, type PointerEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import { Line, Rect } from 'react-native-svg';
+import Svg, { Line, Rect } from 'react-native-svg';
 import {
   CandlestickChart,
   CandlestickChartCrosshairTooltipContext,
@@ -17,7 +17,18 @@ type CandlesProps = ComponentProps<typeof CandlestickChart.Candles>;
 export const renderCandleLine: NonNullable<CandlesProps['renderLine']> = ({ useAnimations, candle, ...props }) => <Line {...props} />;
 export const renderCandleRect: NonNullable<CandlesProps['renderRect']> = ({ useAnimations, candle, ...props }) => <Rect {...props} />;
 
-type CrosshairProps = { color?: string; minDurationMs?: number; children?: ReactNode };
+// CandlestickChart.Line z wagmi nadaje <Svg> tylko styl absoluteFill. Na webie to nie rozciąga elementu SVG,
+// który dostaje domyślne 300×150 px, więc kreski kursora były ucinane i się nie przecinały. Tu wymiary są jawne.
+type DashedLineProps = { color?: string; width: number; height: number; x2: number; y2: number };
+function DashedLine({ color = 'gray', width, height, x2, y2 }: DashedLineProps) {
+  return (
+    <Svg width={width} height={height} style={styles.line}>
+      <Line x1={0} y1={0} x2={x2} y2={y2} strokeWidth={2} stroke={color} strokeDasharray="6 6" />
+    </Svg>
+  );
+}
+
+type CrosshairProps ={ color?: string; minDurationMs?: number; children?: ReactNode };
 
 /**
  * Kursor wykresu świecowego dla webu: pokazuje się po najechaniu myszą, a nie po przytrzymaniu
@@ -65,10 +76,10 @@ export function CandleHoverCrosshair({ color, children }: CrosshairProps) {
   return (
     <Animated.View style={StyleSheet.absoluteFill} onPointerMove={show} onPointerLeave={hide}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, vertical]}>
-        <CandlestickChart.Line color={color} x={0} y={height} />
+        <DashedLine color={color} width={width} height={height} x2={0} y2={height} />
       </Animated.View>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, horizontal]}>
-        <CandlestickChart.Line color={color} x={width} y={0} />
+        <DashedLine color={color} width={width} height={height} x2={width} y2={0} />
         <CandlestickChartCrosshairTooltipContext.Provider value={{ position: tooltipPosition }}>
           {children}
         </CandlestickChartCrosshairTooltipContext.Provider>
@@ -80,3 +91,8 @@ export function CandleHoverCrosshair({ color, children }: CrosshairProps) {
 // Kursor odpowiedni dla platformy: najechanie myszą na webie, przytrzymanie palcem na mobile
 export const ChartCrosshair: (props: CrosshairProps) => ReactNode =
   Platform.OS === 'web' ? CandleHoverCrosshair : CandlestickChart.Crosshair;
+
+const styles = StyleSheet.create({
+  // overflow: visible, żeby kreska przy samej krawędzi (x = 0 / y = 0) nie była przycięta do połowy grubości
+  line: { position: 'absolute', top: 0, left: 0, overflow: 'visible' },
+});
