@@ -1,6 +1,7 @@
-import { useContext, type ReactNode } from 'react';
-import { StyleSheet, type GestureResponderEvent, type PointerEvent } from 'react-native';
+import { useContext, type ComponentProps, type ReactNode } from 'react';
+import { Platform, StyleSheet, type GestureResponderEvent, type PointerEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { Line, Rect } from 'react-native-svg';
 import {
   CandlestickChart,
   CandlestickChartCrosshairTooltipContext,
@@ -10,12 +11,21 @@ import {
 // Jak w wagmi: przy lewej krawędzi dymek z ceną przeskakuje na prawą stronę kursora
 const TOOLTIP_POSITION_THRESHOLD = 100;
 
+// wagmi przekazuje do elementów SVG swoje pomocnicze propsy (useAnimations, candle), które na webie trafiają do DOM
+// i wywołują błąd Reacta. Animacji świec i tak nie używamy, więc rysujemy zwykłe Line/Rect bez tych propsów.
+type CandlesProps = ComponentProps<typeof CandlestickChart.Candles>;
+export const renderCandleLine: NonNullable<CandlesProps['renderLine']> = ({ useAnimations, candle, ...props }) => <Line {...props} />;
+export const renderCandleRect: NonNullable<CandlesProps['renderRect']> = ({ useAnimations, candle, ...props }) => <Rect {...props} />;
+
+type CrosshairProps = { color?: string; minDurationMs?: number; children?: ReactNode };
+
 /**
  * Kursor wykresu świecowego dla webu: pokazuje się po najechaniu myszą, a nie po przytrzymaniu
  * (wbudowany Crosshair z wagmi reaguje tylko na long press). Zasila ten sam stan wykresu,
  * więc dymek z ceną (Tooltip) i data pod wykresem (DatetimeText) działają bez zmian.
+ * `minDurationMs` jest ignorowane — prop zostaje dla zgodności z Crosshair z wagmi.
  */
-export function CandleHoverCrosshair({ color, children }: { color?: string; children?: ReactNode }) {
+export function CandleHoverCrosshair({ color, children }: CrosshairProps) {
   const { width, height } = useContext(CandlestickChartDimensionsContext);
   const { currentX, currentY, currentIndex, step } = CandlestickChart.useChart();
   const tooltipPosition = useSharedValue<'left' | 'right'>('left');
@@ -66,3 +76,7 @@ export function CandleHoverCrosshair({ color, children }: { color?: string; chil
     </Animated.View>
   );
 }
+
+// Kursor odpowiedni dla platformy: najechanie myszą na webie, przytrzymanie palcem na mobile
+export const ChartCrosshair: (props: CrosshairProps) => ReactNode =
+  Platform.OS === 'web' ? CandleHoverCrosshair : CandlestickChart.Crosshair;

@@ -6,17 +6,18 @@ import {
   getStockData,
   StockFinancialData,
 } from '../api/marketService';
-import { currencySymbol } from '../currency';
+import { convertForDisplay, displaySymbol } from '../displayCurrency';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
 import { Section } from './Section';
 import { Skeleton } from './Skeleton';
 
-// Funkcja formatująca wartość pieniężną zgodnie z ustawieniami regionalnymi i symbolem waluty
+// Funkcja formatująca wartość pieniężną w walucie wyświetlania wybranej w ustawieniach
 export const formatCurrency = (value?: number, currencyCode?: string): string => {
   if (value === undefined || currencyCode === undefined) return '-';
-  const symbol = currencySymbol(currencyCode);
-  return `${value.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
+  const converted = convertForDisplay(value, currencyCode);
+  const symbol = displaySymbol(currencyCode);
+  return `${converted.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
 };
 
 // Funkcja formatująca wartość procentową z dwoma miejscami po przecinku

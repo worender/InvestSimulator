@@ -25,7 +25,9 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import type { StockFinancialData } from '../api/marketService';
+import { useLockScreenWhileActive } from '../interactionLock';
 import { useTheme } from '../theme';
+import type { ChartInterval } from './ChartFullscreenModal';
 import { InstrumentDetails, useInstrumentFinancialData } from './InstrumentDetails';
 import { StockCandleChart } from './StockCandleChart';
 
@@ -40,11 +42,22 @@ interface ModalChartViewProps {
   };
   financialData?: StockFinancialData;
   onClose: () => void;
+  initialRangeIndex?: number;
+  initialInterval?: ChartInterval;
 }
 
 // Komponent wyświetlający widok wykresu w formie modala
-export function ModalChartView({ instrument, financialData: propFinancialData, onClose }: ModalChartViewProps) {
+export function ModalChartView({
+  instrument,
+  financialData: propFinancialData,
+  onClose,
+  initialRangeIndex,
+  initialInterval,
+}: ModalChartViewProps) {
   const theme = useTheme();
+
+  // Blokuje gesty ekranu pod spodem
+  useLockScreenWhileActive(true);
   const { financialData, loading } = useInstrumentFinancialData(instrument, propFinancialData);
 
   const [isFavorite, setIsFavorite] = useState(false);
@@ -330,11 +343,14 @@ export function ModalChartView({ instrument, financialData: propFinancialData, o
             >
               <View style={styles.chartContainer}>
                 <StockCandleChart
+                  key={`${instrument.stock}-${initialRangeIndex ?? 'default'}-${initialInterval ?? 'default'}`}
                   stock={instrument.stock}
                   title={instrument.title}
                   currency={financialData?.currency ?? instrument.currency}
                   exchange={instrument.exchange}
                   variant="embedded"
+                  initialRangeIndex={initialRangeIndex}
+                  initialInterval={initialInterval}
                 />
               </View>
 

@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { BlurTargetView } from 'expo-blur';
 import { useIsFocused } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
   Platform,
   Pressable,
@@ -21,11 +22,15 @@ import {
 } from '../../api/marketService';
 import { InstrumentDetails, useInstrumentFinancialData } from '../../components/InstrumentDetails';
 import { ModalChartView } from '../../components/ModalChartView';
-import { PanelHeader } from '../../components/PanelHeader';
+import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { Skeleton } from '../../components/Skeleton';
 import { StockCandleChart } from '../../components/StockCandleChart';
-import { currencySymbol, resolveCurrency } from '../../currency';
+import { resolveCurrency } from '../../currency';
+import {
+  convertForDisplay,
+  displaySymbol,
+} from '../../displayCurrency';
 import { notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
 import { useKeyboardShortcut } from '../../useKeyboardShortcut';
@@ -74,7 +79,9 @@ const FILTER_LABELS = {
 // Ekran "Rynek" wyświetlający notowania giełdowe i umożliwiający wyszukiwanie instrumentów 
 export default function MarketScreen() {
   const { colors } = useTheme();
-  const { bottom } = useSafeAreaInsets();
+  const { bottom, top } = useSafeAreaInsets();
+  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
+  const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -221,8 +228,9 @@ export default function MarketScreen() {
   // Weryfikacja znaku waluty i zwracanie odpowiedniego symbolu waluty
   const formatPrice = (val?: number, curr?: string) => {
     if (val === undefined || val === null) return '--';
-    const sym = currencySymbol(curr);
-    return `${val.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${sym}`;
+    const converted = convertForDisplay(val, curr);
+    const sym = displaySymbol(curr);
+    return `${converted.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${sym}`;
   };
 
   // Filtrowanie spółek w zależności od wybranego filtra rynku (ALL, PL, GLOBAL)
@@ -232,7 +240,7 @@ export default function MarketScreen() {
   });
 
   const searchTerm = searchQuery.trim();
-  const isSearching = searchTerm.length >= 2 && (searchLoading || completedQuery !== '');
+  const isSearching = searchOpen && searchTerm.length >= 2 && (searchLoading || completedQuery !== '');
   const stockSectionTitle =
     selectedFilter === 'ALL'
       ? 'Wybrane spółki GPW i światowe'
@@ -244,11 +252,10 @@ export default function MarketScreen() {
     setSelectedFilter((current) => (current === 'ALL' ? 'PL' : current === 'PL' ? 'GLOBAL' : 'ALL'));
   };
 
+  // Funkcja zamykająca wyszukiwanie; zapytanie i wyniki zostają zapamiętane,
+  // dzięki czemu po ponownym otwarciu można je od razu podmienić
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
-    setSearchQuery('');
-    setSearchResults([]);
-    setCompletedQuery('');
   }, []);
 
   // Skróty na webie działają tylko na widocznej zakładce (pozostałe zostają zamontowane w tle)
@@ -276,6 +283,7 @@ export default function MarketScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
+        blurTarget={blurTargetRef}
         title="Rynek"
         left={
           <Pressable
@@ -304,193 +312,183 @@ export default function MarketScreen() {
         }}
       />
       {/* Na desktopie lista i wykres to dwa panele obok siebie, każdy przewijany osobno (jak w xStation) */}
-      <View style={isDesktop ? styles.split : styles.root}>
-      <ScrollView
-        style={isDesktop ? [styles.listPanel, { width: listPanelWidth, borderRightColor: colors.border }] : undefined}
-        contentContainerStyle={[styles.content, { paddingTop: 24, paddingBottom: 38 + bottom }]}
-        showsVerticalScrollIndicator={Platform.OS === 'web'}
-        keyboardShouldPersistTaps="handled"
-        {...scrollNav}
-      >
-        {!isSearching && (
-          <>
-            <Text style={[styles.eyebrow, { color: colors.accent }]}>RYNEK GIEŁDOWY</Text>
-            <Text style={[styles.title, { color: colors.text }]}>Notowania na żywo</Text>
-            <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-              Sprawdź aktualne ceny akcji i indeksów i kryptowalut
-            </Text>
-          </>
-        )}
-
-        <Section
-          first={isSearching}
-          label={
-            isSearching
-              ? searchLoading
-                ? 'Wyszukiwanie...'
-                : `Wyniki dla "${searchQuery}" (${searchResults.length})`
-              : stockSectionTitle
-          }
+      <BlurTargetView ref={blurTargetRef} style={[styles.blurTarget, isDesktop && styles.split]}>
+        <ScrollView
+          style={isDesktop ? [styles.listPanel, { width: listPanelWidth, borderRightColor: colors.border }] : undefined}
+          contentContainerStyle={[styles.content, { paddingTop: top + PANEL_HEADER_HEIGHT + 8, paddingBottom: 38 + bottom }]}
+          showsVerticalScrollIndicator={Platform.OS === 'web'}
+          keyboardShouldPersistTaps="handled"
+          {...scrollNav}
         >
-          {!isSearching && (
-            <View style={styles.filtersRow}>
-              {(['ALL', 'PL', 'GLOBAL'] as const).map((filterKey) => {
-                const active = selectedFilter === filterKey;
-                return (
-                  <Pressable key={filterKey} onPress={() => setSelectedFilter(filterKey)}>
-                    <Text
+          <Section
+            first={isSearching}
+            label={
+              isSearching
+                ? searchLoading
+                  ? 'Wyszukiwanie...'
+                  : `Wyniki dla "${searchQuery}" (${searchResults.length})`
+                : stockSectionTitle
+            }
+          >
+            {!isSearching && (
+              <View style={styles.filtersRow}>
+                {(['ALL', 'PL', 'GLOBAL'] as const).map((filterKey) => {
+                  const active = selectedFilter === filterKey;
+                  return (
+                    <Pressable key={filterKey} onPress={() => setSelectedFilter(filterKey)}>
+                      <Text
+                        style={[
+                          styles.filterText,
+                          {
+                            color: active ? colors.accent : colors.textMuted,
+                            borderBottomColor: active ? colors.accent : 'transparent',
+                          },
+                        ]}
+                      >
+                        {FILTER_LABELS[filterKey]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            {isSearching ? (
+              searchLoading ? (
+                <View>
+                  {[1, 2, 3, 4].map((i) => (
+                    <View
+                      key={i}
                       style={[
-                        styles.filterText,
-                        {
-                          color: active ? colors.accent : colors.textMuted,
-                          borderBottomColor: active ? colors.accent : 'transparent',
-                        },
+                        styles.stockRow,
+                        { borderBottomColor: colors.borderGlass, borderBottomWidth: StyleSheet.hairlineWidth },
                       ]}
                     >
-                      {FILTER_LABELS[filterKey]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-
-          {isSearching ? (
-            searchLoading ? (
-              <View>
-                {[1, 2, 3, 4].map((i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.stockRow,
-                      { borderBottomColor: colors.borderGlass, borderBottomWidth: StyleSheet.hairlineWidth },
-                    ]}
-                  >
-                    <View style={styles.skeletonCopy}>
-                      <Skeleton width="45%" height={14} />
-                      <Skeleton width="30%" height={10} style={styles.skeletonSubline} />
+                      <View style={styles.skeletonCopy}>
+                        <Skeleton width="45%" height={14} />
+                        <Skeleton width="30%" height={10} style={styles.skeletonSubline} />
+                      </View>
+                      <Skeleton width={58} height={14} />
                     </View>
-                    <Skeleton width={58} height={14} />
-                  </View>
-                ))}
-              </View>
-            ) : searchResults.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Ionicons name="search-outline" size={34} color={colors.textMuted} />
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>Nie znaleziono spółek</Text>
-                <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-                  Spróbuj wpisać inny ticker lub nazwę firmy (np. Apple, KGHM, NVDA).
-                </Text>
-              </View>
+                  ))}
+                </View>
+              ) : searchResults.length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Ionicons name="search-outline" size={34} color={colors.textMuted} />
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>Nie znaleziono spółek</Text>
+                  <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
+                    Spróbuj wpisać inny ticker lub nazwę firmy (np. Apple, KGHM, NVDA).
+                  </Text>
+                </View>
+              ) : (
+                <View>
+                  {searchResults.map((item, index) => (
+                    <TouchableOpacity
+                      key={`${item.symbol}-${item.exchange}`}
+                      style={[
+                        styles.stockRow,
+                        index < searchResults.length - 1 && {
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                          borderBottomColor: colors.borderGlass,
+                        },
+                      ]}
+                      onPress={() =>
+                        pressInstrument({
+                          symbol: item.symbol,
+                          name: item.name,
+                          exchange: item.exchange,
+                          exchangeName: item.exchangeName,
+                        })
+                      }
+                      activeOpacity={0.6}
+                    >
+                      <View style={styles.stockMeta}>
+                        <View style={styles.stockSymbolRow}>
+                          <Text style={[styles.stockSymbol, { color: colors.text }]}>{item.symbol.replace(/\.PA$/, '')}</Text>
+                          <Text style={[styles.exchangeTag, { color: colors.textMuted }]}>
+                            · {item.exchangeName || item.exchange}
+                          </Text>
+                        </View>
+                        <Text style={[styles.stockName, { color: colors.textMuted }]} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )
             ) : (
               <View>
-                {searchResults.map((item, index) => (
-                  <TouchableOpacity
-                    key={`${item.symbol}-${item.exchange}`}
-                    style={[
-                      styles.stockRow,
-                      index < searchResults.length - 1 && {
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderBottomColor: colors.borderGlass,
-                      },
-                    ]}
-                    onPress={() =>
-                      pressInstrument({
-                        symbol: item.symbol,
-                        name: item.name,
-                        exchange: item.exchange,
-                        exchangeName: item.exchangeName,
-                      })
-                    }
-                    activeOpacity={0.6}
-                  >
-                    <View style={styles.stockMeta}>
-                      <View style={styles.stockSymbolRow}>
-                        <Text style={[styles.stockSymbol, { color: colors.text }]}>{item.symbol.replace(/\.PA$/, '')}</Text>
-                        <Text style={[styles.exchangeTag, { color: colors.textMuted }]}>
-                          · {item.exchangeName || item.exchange}
-                        </Text>
-                      </View>
-                      <Text style={[styles.stockName, { color: colors.textMuted }]} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )
-          ) : (
-            <View>
-              {filteredStocks.map((stock, index) => {
-                const hasPrice = stock.price !== undefined;
-                const isPositive = (stock.change ?? 0) >= 0;
+                {filteredStocks.map((stock, index) => {
+                  const hasPrice = stock.price !== undefined;
+                  const isPositive = (stock.change ?? 0) >= 0;
 
-                return (
-                  <TouchableOpacity
-                    key={stock.symbol}
-                    nativeID={`market-row-${stock.symbol}`}
-                    style={[
-                      styles.stockRow,
-                      isDesktop && styles.stockRowDesktop,
-                      index < filteredStocks.length - 1 && {
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderBottomColor: colors.borderGlass,
-                      },
-                      isDesktop && stock.symbol === selectedStock.symbol && { backgroundColor: colors.accentGlass },
-                    ]}
-                    onPress={() => pressInstrument(stock)}
-                    activeOpacity={0.6}
-                  >
-                    <View style={styles.stockMeta}>
-                      <View style={styles.stockSymbolRow}>
-                        <Text
-                          style={[
-                            styles.stockSymbol,
-                            { color: colors.text },
-                          ]}
-                        >
-                          {stock.symbol.replace(/\.PA$/, '')}
-                        </Text>
-                        <Text style={[styles.exchangeTag, { color: colors.textMuted }]}>
-                          · {stock.exchangeName}
-                        </Text>
-                      </View>
-                      <Text style={[styles.stockName, { color: colors.textMuted }]} numberOfLines={1}>
-                        {stock.name}
-                      </Text>
-                    </View>
-
-                    <View style={styles.stockRight}>
-                      {hasPrice ? (
-                        <>
-                          <Text style={[styles.priceText, { color: colors.text }]}>
-                            {formatPrice(stock.price, stock.currency)}
-                          </Text>
+                  return (
+                    <TouchableOpacity
+                      key={stock.symbol}
+                      nativeID={`market-row-${stock.symbol}`}
+                      style={[
+                        styles.stockRow,
+                        isDesktop && styles.stockRowDesktop,
+                        index < filteredStocks.length - 1 && {
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                          borderBottomColor: colors.borderGlass,
+                        },
+                        isDesktop && stock.symbol === selectedStock.symbol && { backgroundColor: colors.accentGlass },
+                      ]}
+                      onPress={() => pressInstrument(stock)}
+                      activeOpacity={0.6}
+                    >
+                      <View style={styles.stockMeta}>
+                        <View style={styles.stockSymbolRow}>
                           <Text
                             style={[
-                              styles.changeText,
-                              { color: isPositive ? colors.positive : colors.negative },
+                              styles.stockSymbol,
+                              { color: colors.text },
                             ]}
                           >
-                            {isPositive ? '+' : ''}
-                            {(stock.changePercent ?? 0).toFixed(2)}%
+                            {stock.symbol.replace(/\.PA$/, '')}
                           </Text>
-                        </>
-                      ) : (
-                        <Skeleton width={72} height={16} />
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-        </Section>
-      </ScrollView>
+                          <Text style={[styles.exchangeTag, { color: colors.textMuted }]}>
+                            · {stock.exchangeName}
+                          </Text>
+                        </View>
+                        <Text style={[styles.stockName, { color: colors.textMuted }]} numberOfLines={1}>
+                          {stock.name}
+                        </Text>
+                      </View>
 
-      {isDesktop && <InstrumentPanel instrument={selectedStock} />}
-      </View>
+                      <View style={styles.stockRight}>
+                        {hasPrice ? (
+                          <>
+                            <Text style={[styles.priceText, { color: colors.text }]}>
+                              {formatPrice(stock.price, stock.currency)}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.changeText,
+                                { color: isPositive ? colors.positive : colors.negative },
+                              ]}
+                            >
+                              {isPositive ? '+' : ''}
+                              {(stock.changePercent ?? 0).toFixed(2)}%
+                            </Text>
+                          </>
+                        ) : (
+                          <Skeleton width={72} height={16} />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </Section>
+        </ScrollView>
+
+        {isDesktop && <InstrumentPanel instrument={selectedStock} paddingTop={top + PANEL_HEADER_HEIGHT + 8} />}
+      </BlurTargetView>
 
       {modalVisible && modalInstrument && (
         <ModalChartView
@@ -504,7 +502,7 @@ export default function MarketScreen() {
 }
 
 // Prawy panel na desktopie: wykres i szczegóły finansowe wybranego instrumentu (na mobile to samo jest w modalu)
-function InstrumentPanel({ instrument }: { instrument: MarketInstrument & { currency: string } }) {
+function InstrumentPanel({ instrument, paddingTop }: { instrument: MarketInstrument & { currency: string }; paddingTop: number }) {
   const { financialData, loading } = useInstrumentFinancialData({
     stock: instrument.symbol,
     exchange: instrument.exchange,
@@ -512,7 +510,7 @@ function InstrumentPanel({ instrument }: { instrument: MarketInstrument & { curr
   });
 
   return (
-    <ScrollView style={styles.detailPanel} contentContainerStyle={styles.detailContent} showsVerticalScrollIndicator>
+    <ScrollView style={styles.detailPanel} contentContainerStyle={[styles.detailContent, { paddingTop }]} showsVerticalScrollIndicator>
       <StockCandleChart
         stock={instrument.symbol}
         title={instrument.name.toUpperCase()}
@@ -526,6 +524,18 @@ function InstrumentPanel({ instrument }: { instrument: MarketInstrument & { curr
 
 // Stylesheet dla komponentu MarketScreen (ekran "Rynek")
 const styles = StyleSheet.create({
+  blurTarget: { flex: 1 },
+  split: { flexDirection: 'row' },
+  listPanel: { flexGrow: 0, borderRightWidth: 1 },
+  stockRowDesktop: { paddingHorizontal: 10, borderRadius: 8 },
+  detailPanel: { flex: 1 },
+  detailContent: {
+    width: '100%',
+    maxWidth: 1000,
+    alignSelf: 'center',
+    paddingHorizontal: 32,
+    paddingBottom: 38,
+  },
   root: {
     flex: 1,
   },
@@ -565,29 +575,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 14,
-  },
-  stockRowDesktop: {
-    paddingHorizontal: 10,
-    borderRadius: 8,
-  },
-  split: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  listPanel: {
-    flexGrow: 0,
-    borderRightWidth: 1,
-  },
-  detailPanel: {
-    flex: 1,
-  },
-  detailContent: {
-    width: '100%',
-    maxWidth: 1000,
-    alignSelf: 'center',
-    paddingHorizontal: 32,
-    paddingTop: 24,
-    paddingBottom: 38,
   },
   stockMeta: {
     flex: 1,
