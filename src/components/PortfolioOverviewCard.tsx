@@ -27,8 +27,7 @@ const cards: Record<Currency, Portfolio> = {
 };
 
 const SHUFFLE_MS = 380;
-// Myszką podwójne kliknięcie bywa wolniejsze niż stuknięcie palcem (Windows domyślnie uznaje do 500 ms)
-const DOUBLE_TAP_MS = Platform.OS === 'web' ? 500 : 320;
+const DOUBLE_TAP_MS = 320;
 
 // Funkcje animacji kart portfela w talii: wierzch, środek, spód
 function moveToFront(phase: SharedValue<number>) {
@@ -120,7 +119,7 @@ function PortfolioCard({ data, currency, index, isFront, width, multiCurrency, p
             </View>
             <Text style={[styles.swipeHint, { color: colors.textMuted }]}>
               {multiCurrency
-                ? `${Platform.OS === 'web' ? 'Kliknij kartę dwukrotnie' : 'Dotknij karty dwa razy'}, aby zmienić portfel · ${currency}`
+                ? `${Platform.OS === 'web' ? 'Kliknij kartę' : 'Dotknij karty dwa razy'}, aby zmienić portfel · ${currency}`
                 : `Domyślna waluta portfela · ${currency}`}
             </Text>
             <View style={styles.breakdown}>
@@ -211,8 +210,12 @@ export function PortfolioOverviewCard({ onStockChange }: { onStockChange?: (stoc
     moveToBack(phases[front], () => commitShuffle([middle, back, front], front));
   }, [commitShuffle, deckOrder, multiCurrency, opacities, phases]);
 
-  // Funkcja obsługująca naciśnięcie karty portfela: podwójne dotknięcie zmienia walutę
+  // Funkcja obsługująca naciśnięcie karty portfela: na webie zmienia walutę jedno kliknięcie, na mobile podwójne dotknięcie
   const handleCardPress = () => {
+    if (Platform.OS === 'web') {
+      changeCurrency();
+      return;
+    }
     const now = Date.now();
     if (now - lastTap.current < DOUBLE_TAP_MS) {
       lastTap.current = 0;
