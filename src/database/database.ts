@@ -1,4 +1,10 @@
 import * as SQLite from "expo-sqlite";
+import {
+  EDUCATIONAL_ARTICLE_SEED,
+  estimateReadMinutes,
+  type ArticleSource,
+  type EducationalArticle,
+} from "./educationalArticles";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initializationPromise: Promise<void> | null = null;
@@ -103,6 +109,19 @@ export function initializeDatabase(): Promise<void> {
       FOREIGN KEY (id_user) REFERENCES user_profil (id)
     );
 
+    CREATE TABLE IF NOT EXISTS educational_articles (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      content TEXT NOT NULL,
+      read_minutes INTEGER NOT NULL CHECK (read_minutes > 0),
+      language TEXT NOT NULL DEFAULT 'pl' CHECK (language IN ('pl', 'en')),
+      author TEXT NOT NULL,
+      category TEXT NOT NULL,
+      sources TEXT NOT NULL DEFAULT '[]',
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+
     INSERT OR IGNORE INTO user_profil (id, username)
     VALUES (1, 'Inwestor');
 
@@ -111,6 +130,7 @@ export function initializeDatabase(): Promise<void> {
   `);
 
     await migrateUserProfileColumns(database);
+    await seedEducationalArticles(database);
   })();
 
   return initializationPromise;
@@ -142,6 +162,58 @@ async function migrateUserProfileColumns(
       `ALTER TABLE user_profil ADD COLUMN ${name} ${definition}`,
     );
   }
+}
+
+// Synchronizuje tabelę artykułów edukacyjnych z treściami dostarczanymi
+// razem z aplikacją: dodaje nowe, aktualizuje zmienione i usuwa wycofane.
+async function seedEducationalArticles(
+  database: SQLite.SQLiteDatabase,
+): Promise<void> {
+  const ids = EDUCATIONAL_ARTICLE_SEED.map((article) => article.id);
+
+  await database.withTransactionAsync(async () => {
+    const statement = await database.prepareAsync(
+      `INSERT INTO educational_articles
+         (id, title, summary, content, read_minutes, language, author,
+          category, sources, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         title = excluded.title,
+         summary = excluded.summary,
+         content = excluded.content,
+         read_minutes = excluded.read_minutes,
+         language = excluded.language,
+         author = excluded.author,
+         category = excluded.category,
+         sources = excluded.sources,
+         sort_order = excluded.sort_order`,
+    );
+
+    try {
+      for (const [index, article] of EDUCATIONAL_ARTICLE_SEED.entries()) {
+        await statement.executeAsync(
+          article.id,
+          article.title,
+          article.summary,
+          JSON.stringify(article.content),
+          estimateReadMinutes(article),
+          article.language,
+          article.author,
+          article.category,
+          JSON.stringify(article.sources),
+          index,
+        );
+      }
+    } finally {
+      await statement.finalizeAsync();
+    }
+
+    await database.runAsync(
+      `DELETE FROM educational_articles
+       WHERE id NOT IN (${ids.map(() => "?").join(", ")})`,
+      ...ids,
+    );
+  });
 }
 
 async function getReadyDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -425,4 +497,47 @@ export async function clearLocalDatabase(): Promise<void> {
     await database.runAsync("DELETE FROM portfolio");
     await database.runAsync("UPDATE wallet SET balance = 10000 WHERE id = 1");
   });
+}
+
+interface EducationalArticleRow {
+  id: string;
+  title: string;
+  summary: string;
+  content: string;
+  read_minutes: number;
+  language: "pl" | "en";
+  author: string;
+  category: string;
+  sources: string;
+}
+
+const parseJsonArray = <T>(value: string): T[] => {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+export async function getEducationalArticles(): Promise<EducationalArticle[]> {
+  const database = await getReadyDatabase();
+  const rows = await database.getAllAsync<EducationalArticleRow>(
+    `SELECT id, title, summary, content, read_minutes, language, author,
+            category, sources
+     FROM educational_articles
+     ORDER BY sort_order ASC, id ASC`,
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    content: parseJsonArray<string>(row.content),
+    readMinutes: row.read_minutes,
+    language: row.language,
+    author: row.author,
+    category: row.category,
+    sources: parseJsonArray<ArticleSource>(row.sources),
+  }));
 }
