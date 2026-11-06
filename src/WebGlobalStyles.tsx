@@ -36,6 +36,8 @@ export function WebGlobalStyles() {
       ${interactive}:active { background-image: linear-gradient(${pressed}, ${pressed}); }
       [tabindex]:focus { outline: none; }
       [tabindex]:focus-visible { outline: 2px solid ${colors.accent}; outline-offset: 2px; }
+      /* Pola tekstowe mają własną obwódkę (jak na telefonie); domyślna ramka przeglądarki rysowała się w środku niej */
+      input:focus, textarea:focus { outline: none; }
       * { scrollbar-width: thin; scrollbar-color: ${colors.border} transparent; }
       ::-webkit-scrollbar { width: 8px; height: 8px; }
       ::-webkit-scrollbar-track { background: transparent; }
