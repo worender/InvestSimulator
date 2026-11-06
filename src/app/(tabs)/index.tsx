@@ -70,7 +70,7 @@ export default function Index() {
   const router = useRouter();
   const scrollNav = useScrollAwareNavigation();
   const [portfolioStock, setPortfolioStock] = useState(
-    () => portfolioStocks[defaultCurrency],
+    () => portfolioStocks[defaultCurrency] ?? portfolioStocks.PLN,
   );
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -113,6 +113,12 @@ export default function Index() {
     }, 300);
     return () => clearTimeout(timeout);
   }, [searchQuery]);
+
+    useEffect(() => {
+    setPortfolioStock(
+      (current) => portfolioStocks[defaultCurrency] ?? current,
+    );
+  }, [defaultCurrency]);
 
   // Funkcja zamykająca wyszukiwanie; zapytanie i wyniki zostają zapamiętane,
   // dzięki czemu po ponownym otwarciu można je od razu podmienić

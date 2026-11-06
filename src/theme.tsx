@@ -24,6 +24,12 @@ import {
   createUserProfile,
   getUserProfile,
   getUserProfiles,
+  getSettings,
+  getNotificationSettings,
+  type NotificationSettings,
+  type Settings,
+  updateNotificationSettings,
+  updateSettings,
   updateUserProfile,
   type UserProfile,
 } from "./database/database";
@@ -35,8 +41,6 @@ import {
 import { setGlobalFontScale } from "./fontScale";
 import {
   DEFAULT_NOTIFICATION_CATEGORIES,
-  parseNotificationCategories,
-  serializeNotificationCategories,
   type NotificationCategories,
   type NotificationCategoryKey,
 } from "./settings/notificationSettings";
@@ -189,7 +193,7 @@ type ThemeContextValue = {
   addAccount: (input: {
     username: string;
     avatarUri?: string | null;
-  }) => Promise<UserProfile>;
+  }) => Promise<UserProfile | null>;
   updateAccount: (
     changes: Parameters<typeof updateUserProfile>[0],
   ) => Promise<boolean | undefined>;
@@ -238,17 +242,42 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   const applyProfile = useCallback((profile: UserProfile) => {
     setActiveAccount(profile);
-    setModeState(profile.dark_mode === 1 ? "dark" : "light");
-    setAccentState(resolveThemeAccent(profile.color_mode));
-    setDefaultCurrencyState(profile.currency_default as Currency);
-    setMultiCurrencyState(profile.multi_currency === 1);
-    setFontSizePreferenceState(resolveFontSize(profile.font_size));
-    setNotificationsEnabledState(profile.notifications_enabled === 1);
-    setNotificationCategories(
-      parseNotificationCategories(profile.notification_categories),
-    );
-    setBiometricEnabledState(profile.biometric_enabled === 1);
+    // setModeState(profile.dark_mode === 1 ? "dark" : "light");
+    // setAccentState(resolveThemeAccent(profile.color_mode));
+    // setDefaultCurrencyState(profile.currency_default as Currency);
+    // setMultiCurrencyState(profile.multi_currency === 1);
+    // setFontSizePreferenceState(resolveFontSize(profile.font_size));
+    // setNotificationsEnabledState(profile.notifications_enabled === 1);
+    // setNotificationCategories(
+    //   parseNotificationCategories(profile.notification_categories),
+    // );
+    // setBiometricEnabledState(profile.biometric_enabled === 1);
   }, []);
+
+  const applySettings = useCallback(
+    (settings: Settings) => {
+      setModeState(settings.dark_mode === 1 ? "dark" : "light");
+      setAccentState(resolveThemeAccent(settings.color_mode));
+
+      const currency = isCurrency(settings.currency) ? settings.currency : "PLN";
+
+      setDefaultCurrencyState(currency);
+      setMultiCurrencyState(settings.multi_currency === 1);
+      setFontSizePreferenceState(resolveFontSize(settings.font_size));
+      setBiometricEnabledState(settings.biometric_enabled === 1);
+    }, []);
+
+  const applyNotificationSettings = useCallback(
+    (settings: NotificationSettings) => {
+      setNotificationsEnabledState(settings.notifications_enabled === 1);
+      setNotificationCategories({
+        portfolio: settings.portfolio === 1,
+        market: settings.market === 1,
+        news: settings.news === 1,
+        transactions: settings.transactions === 1,
+        reminders: settings.reminders === 1,
+      });
+    }, []);
 
   const refreshRates = useCallback(async () => {
     const requestId = rateRequest.current + 1;
@@ -294,7 +323,15 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         if (!active) return;
         setAccounts(profiles);
         setLoggedInState(logged);
-        if (profile) applyProfile(profile);
+        if (profile) {
+          applyProfile(profile);
+
+        const settings = await getSettings(profile.id);
+        const notificationSettings = await getNotificationSettings(profile.id);
+
+        if (settings) applySettings(settings);
+        if (notificationSettings) applyNotificationSettings(notificationSettings);
+        }
       } catch (error) {
         console.error("Nie udało się wczytać profilu z SQLite:", error);
       }
@@ -385,10 +422,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const changeMode = useCallback(
     async (nextMode: ThemeMode) => {
       setModeState(nextMode);
-      await updateUserProfile(
-        { dark_mode: nextMode === "dark" ? 1 : 0 },
-        requireAccount(),
-      );
+      await updateSettings({
+        user_id: requireAccount(),
+        dark_mode: nextMode === "dark" ? 1 : 0 
+      });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAccount],
@@ -398,7 +435,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     async (nextAccent: ThemeAccent) => {
       const resolved = resolveThemeAccent(nextAccent);
       setAccentState(resolved);
-      await updateUserProfile({ color_mode: resolved }, requireAccount());
+      await updateSettings({ color_mode: resolved , user_id: requireAccount() });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAccount],
@@ -411,9 +448,11 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       startTransition(() => {
         setDefaultCurrencyState(nextCurrency);
       });
-      await updateUserProfile(
-        { currency_default: nextCurrency },
-        requireAccount(),
+      await updateSettings(
+        { currency: nextCurrency,
+          user_id: requireAccount()
+        }
+        
       );
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -426,12 +465,13 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         setMultiCurrencyState(enabled);
         if (!enabled) setDefaultCurrencyState("PLN");
       });
-      await updateUserProfile(
+      await updateSettings(
         {
           multi_currency: enabled ? 1 : 0,
-          ...(enabled ? {} : { currency_default: "PLN" }),
-        },
-        requireAccount(),
+          ...(enabled ? {} : { currency: "PLN" }),
+          user_id: requireAccount(),
+        }
+        
       );
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -445,7 +485,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       startTransition(() => {
         setFontSizePreferenceState(size);
       });
-      await updateUserProfile({ font_size: size }, requireAccount());
+      await updateSettings({ font_size: size, user_id: requireAccount() });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAccount],
@@ -454,9 +494,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const changeNotificationsEnabled = useCallback(
     async (enabled: boolean) => {
       setNotificationsEnabledState(enabled);
-      await updateUserProfile(
-        { notifications_enabled: enabled ? 1 : 0 },
-        requireAccount(),
+      await updateNotificationSettings(
+        { notifications_enabled: enabled ? 1 : 0, user_id: requireAccount() },
+        
       );
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -465,12 +505,12 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   const changeNotificationCategory = useCallback(
     async (key: NotificationCategoryKey, enabled: boolean) => {
-      const next = { ...notificationCategories, [key]: enabled };
-      setNotificationCategories(next);
-      await updateUserProfile(
-        { notification_categories: serializeNotificationCategories(next) },
-        requireAccount(),
-      );
+      setNotificationCategories((prev) => ({ ...prev, [key]: enabled }));
+      await updateNotificationSettings({
+        [key]: enabled ? 1 : 0,
+        user_id: requireAccount(),
+      }
+       );
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAccount, notificationCategories],
@@ -479,9 +519,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const changeBiometricEnabled = useCallback(
     async (enabled: boolean) => {
       setBiometricEnabledState(enabled);
-      await updateUserProfile(
-        { biometric_enabled: enabled ? 1 : 0 },
-        requireAccount(),
+      await updateSettings(
+        { biometric_enabled: enabled ? 1 : 0, 
+          user_id: requireAccount() },
       );
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -628,4 +668,8 @@ export function useTheme() {
     throw new Error("useTheme must be used inside ThemeProvider");
   }
   return theme;
+}
+
+function isCurrency(value: string): value is Currency {
+  return value === "PLN" || value === "EUR" || value === "USD";
 }
