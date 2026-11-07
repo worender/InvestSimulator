@@ -39,7 +39,8 @@ export type ReadableArticle = YahooNewsItem | EducationalArticle;
 type NewsArticleModalProps = {
   article: ReadableArticle;
   saved: boolean;
-  onToggleSaved: (article: ReadableArticle) => void;
+  // Brak funkcji ukrywa przycisk zakładki (np. dla newsów spoza bazy)
+  onToggleSaved?: (article: ReadableArticle) => void;
   onClose: () => void;
 };
 
@@ -295,20 +296,22 @@ export function NewsArticleModal({
 
               <View style={styles.headerRow}>
                 <View style={styles.side}>
-                  <Pressable
-                    onPress={() => onToggleSaved(article)}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      isSaved ? "Usuń z zapisanych" : "Zapisz artykuł"
-                    }
-                  >
-                    <Ionicons
-                      name={isSaved ? "bookmark" : "bookmark-outline"}
-                      size={22}
-                      color={isSaved ? colors.accent : colors.textMuted}
-                    />
-                  </Pressable>
+                  {onToggleSaved && (
+                    <Pressable
+                      onPress={() => onToggleSaved(article)}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        isSaved ? "Usuń z zapisanych" : "Zapisz artykuł"
+                      }
+                    >
+                      <Ionicons
+                        name={isSaved ? "bookmark" : "bookmark-outline"}
+                        size={22}
+                        color={isSaved ? colors.accent : colors.textMuted}
+                      />
+                    </Pressable>
+                  )}
                 </View>
 
                 <GestureDetector gesture={headerDragGesture}>

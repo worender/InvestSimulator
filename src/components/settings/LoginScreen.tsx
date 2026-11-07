@@ -18,7 +18,14 @@ import { useTheme } from "../../theme";
 import { AccountAvatar } from "./AccountAvatar";
 
 export function LoginScreen() {
-  const { colors, accounts, activeAccount, switchAccount, login } = useTheme();
+  const {
+    colors,
+    accounts,
+    activeAccount,
+    biometricEnabled,
+    switchAccount,
+    login,
+  } = useTheme();
   const { top, bottom } = useSafeAreaInsets();
   const [selectedId, setSelectedId] = useState(
     () => activeAccount?.id ?? accounts[0]?.id ?? 1,
@@ -252,7 +259,7 @@ export function LoginScreen() {
           )}
         </Pressable>
 
-        {selectedAccount.biometric_enabled === 1 ? (
+        {biometricEnabled ? (
           <Pressable
             onPress={signInWithBiometrics}
             disabled={loading}

@@ -1,6 +1,14 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
-import { useEffect, useRef, useState, type ComponentRef } from "react";
+import { useFocusEffect } from "expo-router";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+} from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -17,7 +25,12 @@ import {
 } from "../../components/NewsArticleModal";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import { Skeleton } from "../../components/Skeleton";
-import { getEducationalArticles } from "../../database/database";
+import { getActiveAccountId } from "../../database/activeAccount";
+import {
+  getEducationalArticles,
+  getSavedArticleSlugs,
+  setArticleSaved,
+} from "../../database/database";
 import type { EducationalArticle } from "../../database/educationalArticles";
 import { notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
@@ -38,14 +51,13 @@ const formatNewsMeta = (item: YahooNewsItem): string => {
   return [item.publisher, dateLabel].filter(Boolean).join(" · ");
 };
 
-// Metadane artykułu zapisanego
-const formatSavedMeta = (item: ReadableArticle): string =>
-  "readMinutes" in item
-    ? `Edukacja · ${item.readMinutes} min czytania`
-    : `${formatNewsMeta(item)} · ${item.topic === "poland" ? "Polska" : "Świat"}`;
+// Metadane artykułu edukacyjnego: kategoria i czas czytania
+const formatEducationalMeta = (item: EducationalArticle): string =>
+  `${item.category} · ${item.readMinutes} min czytania`;
 
-// Mock: dwa artykuły startowo obecne w kategorii „Zapisane”
-const MOCK_SAVED_ARTICLE_IDS: readonly string[] = ["edu-01", "edu-04"];
+const isEducationalArticle = (
+  article: ReadableArticle,
+): article is EducationalArticle => "readMinutes" in article;
 
 // Szkielet listy wyświetlany podczas ładowania artykułów
 function ArticleListSkeleton({ borderColor }: { borderColor: string }) {
@@ -94,40 +106,71 @@ export default function AboutScreen() {
   const [selectedArticle, setSelectedArticle] =
     useState<ReadableArticle | null>(null);
 
-  // Artykuły zapisane przez użytkownika tymaczsowo w stanie komponentu (w przyszłości w bazie danych)
-  const [savedArticles, setSavedArticles] = useState<
-    readonly ReadableArticle[]
-  >([]);
-
   // Artykuły edukacyjne odczytywane z lokalnej bazy danych
   const [educationalArticles, setEducationalArticles] = useState<
     EducationalArticle[] | null
   >(null);
+
+  // Artykuły „do przeczytania później” aktywnego konta (tabela saved_article)
+  const [savedSlugs, setSavedSlugs] = useState<readonly string[]>([]);
 
   useEffect(() => {
     let active = true;
 
     getEducationalArticles()
       .then((articles) => {
-        if (!active) return;
-        setEducationalArticles(articles);
-        setSavedArticles((current) =>
-          current.length > 0
-            ? current
-            : articles.filter((article) =>
-                MOCK_SAVED_ARTICLE_IDS.includes(article.id),
-              ),
-        );
+        if (active) setEducationalArticles(articles);
       })
       .catch((error) => {
         console.error("Nie udało się wczytać artykułów edukacyjnych:", error);
-        if (active) setEducationalArticles([]);
+        if (!active) return;
+        setEducationalArticles([]);
+        notify({
+          variant: "error",
+          title: "Nie udało się wczytać artykułów",
+          message: "Spróbuj ponownie uruchomić aplikację.",
+        });
       });
 
     return () => {
       active = false;
     };
   }, []);
+
+  // Zapisane artykuły odświeżane przy każdym wejściu na zakładkę,
+  // bo w międzyczasie użytkownik mógł przełączyć konto w ustawieniach
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      getActiveAccountId()
+        .then(getSavedArticleSlugs)
+        .then((slugs) => {
+          if (active) setSavedSlugs(slugs);
+        })
+        .catch((error) => {
+          console.error("Nie udało się wczytać zapisanych artykułów:", error);
+          if (!active) return;
+          notify({
+            variant: "error",
+            title: "Nie udało się wczytać zapisanych artykułów",
+            message: "Lista „Zapisane” może być niepełna.",
+          });
+        });
+
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+
+  const savedArticles = useMemo(
+    () =>
+      savedSlugs
+        .map((slug) => educationalArticles?.find((item) => item.id === slug))
+        .filter((article): article is EducationalArticle => !!article),
+    [educationalArticles, savedSlugs],
+  );
 
   useEffect(() => {
     let active = true;
@@ -147,17 +190,33 @@ export default function AboutScreen() {
     setExpandedCategory((current) => (current === category ? null : category));
   };
 
-  const toggleSaved = (article: ReadableArticle) => {
-    const exists = savedArticles.some((item) => item.id === article.id);
+  const toggleSaved = async (article: ReadableArticle) => {
+    const previous = savedSlugs;
+    const exists = previous.includes(article.id);
     const next = exists
-      ? savedArticles.filter((item) => item.id !== article.id)
-      : [article, ...savedArticles];
+      ? previous.filter((slug) => slug !== article.id)
+      : [article.id, ...previous];
 
-    setSavedArticles(next);
+    // Natychmiastowa zmiana w UI, cofana, jeśli zapis do bazy się nie uda
+    setSavedSlugs(next);
     if (next.length === 0) {
       setExpandedCategory((category) =>
         category === "saved" ? null : category,
       );
+    }
+
+    try {
+      await setArticleSaved(article.id, !exists, await getActiveAccountId());
+    } catch (error) {
+      console.error("Nie udało się zapisać zakładki:", error);
+      setSavedSlugs(previous);
+      notify({
+        variant: "error",
+        title: exists
+          ? "Nie udało się usunąć z zapisanych"
+          : "Nie udało się zapisać artykułu",
+        message: "Spróbuj ponownie za chwilę.",
+      });
     }
   };
 
@@ -173,7 +232,7 @@ export default function AboutScreen() {
                 variant: "info",
                 title: "Zapisane artykuły",
                 message:
-                  "Otwórz artykuł i dotknij ikony zakładki, aby dodać go do kategorii „Zapisane”.",
+                  "Otwórz artykuł edukacyjny i dotknij ikony zakładki, aby dodać go do kategorii „Zapisane”.",
               })
             }
             accessibilityLabel="Zapisane artykuły"
@@ -250,9 +309,7 @@ export default function AboutScreen() {
               <ArticleList
                 items={educationalArticles}
                 previewCount={3}
-                getMeta={(item) =>
-                  `${item.category} · ${item.readMinutes} min czytania`
-                }
+                getMeta={formatEducationalMeta}
                 onSelect={setSelectedArticle}
               />
             )}
@@ -269,7 +326,7 @@ export default function AboutScreen() {
               <ArticleList
                 items={savedArticles}
                 previewCount={3}
-                getMeta={formatSavedMeta}
+                getMeta={formatEducationalMeta}
                 onSelect={setSelectedArticle}
               />
             </ExpandableCategoryBlock>
@@ -324,8 +381,11 @@ export default function AboutScreen() {
         <NewsArticleModal
           key={selectedArticle.id}
           article={selectedArticle}
-          saved={savedArticles.some((item) => item.id === selectedArticle.id)}
-          onToggleSaved={toggleSaved}
+          saved={savedSlugs.includes(selectedArticle.id)}
+          // Zakładki dotyczą artykułów z bazy; newsy Yahoo nie są w niej zapisywane
+          onToggleSaved={
+            isEducationalArticle(selectedArticle) ? toggleSaved : undefined
+          }
           onClose={() => setSelectedArticle(null)}
         />
       )}
