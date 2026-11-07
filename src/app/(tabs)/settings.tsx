@@ -849,7 +849,6 @@ const styles = StyleSheet.create({
   blurTarget: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
   swatchArea: {
-    paddingHorizontal: 14,
     paddingTop: 12,
     paddingBottom: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -859,8 +858,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rateCopy: { flex: 1, minWidth: 0 },
@@ -870,8 +868,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   rateName: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 12,
+    marginTop: 3,
   },
   rateValue: {
     fontSize: 15,
@@ -882,18 +880,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   rateRefreshCopy: { flex: 1, minWidth: 0 },
   rateRefreshTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
   rateRefreshMeta: {
-    fontSize: 11,
-    marginTop: 2,
-    lineHeight: 15,
+    fontSize: 12,
+    marginTop: 3,
+    lineHeight: 17,
   },
   accountActions: {
     marginTop: 48,

@@ -137,9 +137,9 @@ export default function AboutScreen() {
             onPress={() =>
               notify({
                 variant: "info",
-                title: "Centrum wiedzy",
+                title: "Kategorie artykułów",
                 message:
-                  "Rozwiń blok kategorii, aby zobaczyć artykuły i najnowsze newsy rynkowe.",
+                  "Rozwiń kategorię, aby zobaczyć artykuły i najnowsze newsy rynkowe.",
               })
             }
             accessibilityLabel="Pomoc"
@@ -168,13 +168,8 @@ export default function AboutScreen() {
           showsVerticalScrollIndicator={false}
           {...scrollNav}
         >
-          <Text style={[styles.title, { color: colors.text }]}>
-            Centrum wiedzy
-          </Text>
-
           <ExpandableCategoryBlock
             title="Artykuły edukacyjne"
-            icon="school-outline"
             count={EDUCATIONAL_ARTICLES.length}
             expanded={expandedCategory === "educational"}
             onToggle={() => toggleCategory("educational")}
@@ -190,7 +185,6 @@ export default function AboutScreen() {
           {savedArticles.length > 0 && (
             <ExpandableCategoryBlock
               title="Zapisane"
-              icon="bookmark-outline"
               count={savedArticles.length}
               expanded={expandedCategory === "saved"}
               onToggle={() => toggleCategory("saved")}
@@ -211,7 +205,6 @@ export default function AboutScreen() {
               <ExpandableCategoryBlock
                 key={topic.id}
                 title={topic.label}
-                icon={TOPIC_ICONS[topic.id]}
                 count={loadingNews ? undefined : topicArticles.length}
                 expanded={expandedCategory === topic.id}
                 onToggle={() => toggleCategory(topic.id)}
@@ -284,13 +277,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
-  title: {
-    fontSize: 25,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-    marginTop: 8,
-    marginBottom: 20,
-  },
   skeletonRow: {
     paddingVertical: 14,
     gap: 8,
