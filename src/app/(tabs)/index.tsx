@@ -72,9 +72,13 @@ export default function Index() {
   const router = useRouter();
   const scrollNav = useScrollAwareNavigation();
   const { isDesktop } = useLayoutMode();
-  const [portfolioStock, setPortfolioStock] = useState(
-    () => portfolioStocks[defaultCurrency],
+  const [selectedPortfolioStock, setSelectedPortfolioStock] = useState(
+    () => portfolioStocks[defaultCurrency] ?? portfolioStocks.PLN,
   );
+  const portfolioStock =
+    selectedPortfolioStock.currency === defaultCurrency
+      ? selectedPortfolioStock
+      : portfolioStocks[defaultCurrency] ?? portfolioStocks.PLN;
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<InstrumentSearchResult[]>(
@@ -96,7 +100,7 @@ export default function Index() {
   // Funkcja obsługująca zmianę spółki w portfelu, aktualizująca stan portfolioStock
   const handleStockChange = useCallback(
     (stock: string, title: string, currency: string) => {
-      setPortfolioStock({ ...portfolioStocks[currency], stock, title });
+      setSelectedPortfolioStock({ ...portfolioStocks[currency], stock, title });
     },
     [],
   );
