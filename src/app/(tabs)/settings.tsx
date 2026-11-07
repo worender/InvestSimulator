@@ -33,6 +33,7 @@ import {
   SettingsRow,
 } from "../../components/settings/SettingsPrimitives";
 import { SettingsToggle } from "../../components/settings/SettingsToggle";
+import { deleteLocalDatabase } from "../../database/database";
 import { hasPassword } from "../../database/passwords";
 import { FALLBACK_RATES } from "../../displayCurrency";
 import { notify } from "../../notificationBus";
@@ -130,6 +131,7 @@ export default function SettingsScreen() {
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [resetDatabaseOpen, setResetDatabaseOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -259,6 +261,28 @@ export default function SettingsScreen() {
       title: "Do zobaczenia!",
       message: `Możesz teraz zamknąć ${appName}.`,
     });
+  };
+
+  const resetDatabase = async () => {
+    try {
+      await deleteLocalDatabase();
+      setResetDatabaseOpen(false);
+
+      notify({
+        variant: "success",
+        title: "Baza została usunięta",
+        message: "Uruchom aplikację ponownie, aby utworzyć bazę od początku.",
+      });
+    } catch (error) {
+      notify({
+        variant: "error",
+        title: "Nie udało się usunąć bazy",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Spróbuj ponownie za chwilę.",
+      });
+    }
   };
 
   const customAccent = /^#[0-9a-f]{6}$/i.test(accent)
@@ -710,6 +734,30 @@ export default function SettingsScreen() {
               <Ionicons name="exit-outline" size={20} color="#ffffff" />
               <Text style={styles.leaveText}>Opuść {appName}</Text>
             </Pressable>
+
+            <Pressable
+              onPress={() => setResetDatabaseOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Usuń lokalną bazę danych"
+              style={({ pressed }) => [
+                styles.logoutButton,
+                {
+                  borderColor: colors.negative,
+                  backgroundColor: pressed
+                    ? colors.negativeGlass
+                    : "transparent",
+                },
+              ]}
+            >
+              <Ionicons
+                name="trash-outline"
+                size={19}
+                color={colors.negative}
+              />
+              <Text style={[styles.logoutText, { color: colors.negative }]}>
+                Usuń lokalną bazę danych
+              </Text>
+            </Pressable>
           </View>
 
           <View>
@@ -736,7 +784,10 @@ export default function SettingsScreen() {
           onSaved={async ({ name, avatarUri }) => {
             setFontSizeDraft(null);
             setCurrencyDraft(null);
-            await addAccount({ username: name, avatarUri });
+            const profile = await addAccount({ username: name, avatarUri });
+
+            if (!profile) return;
+            
             notify({
               variant: "success",
               title: "Konto utworzone",
@@ -755,7 +806,10 @@ export default function SettingsScreen() {
           initialAvatar={activeAccount?.avatar_uri ?? null}
           onClose={() => setEditAccountOpen(false)}
           onSaved={async ({ name, avatarUri }) => {
-            await updateAccount({ username: name, avatar_uri: avatarUri });
+            const success = await updateAccount({ username: name, avatar_uri: avatarUri });
+
+            if (!success) return;
+
             notify({
               variant: "success",
               title: "Profil zaktualizowany",
@@ -808,6 +862,18 @@ export default function SettingsScreen() {
           destructive
           onConfirm={confirmLeave}
           onClose={() => setLeaveOpen(false)}
+        />
+      ) : null}
+
+      {resetDatabaseOpen ? (
+        <ConfirmDialog
+          title="Usunąć lokalną bazę danych?"
+          message="Wszystkie dane zostaną usunięte, a aplikacja uruchomi się z pustą bazą."
+          confirmLabel="Usuń bazę"
+          icon="trash-outline"
+          destructive
+          onConfirm={resetDatabase}
+          onClose={() => setResetDatabaseOpen(false)}
         />
       ) : null}
     </View>
