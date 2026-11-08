@@ -313,25 +313,53 @@ export async function createUserProfile(input: {
   const database = await getReadyDatabase();
   console.log("Tworzenie profilu użytkownika:", username, avatar_uri);
 
-  const result = await database.runAsync(
-    `INSERT INTO users (username, avatar_uri, created_at)
-     VALUES (?, ?, ?)`,
-    username,
-    avatar_uri ?? null,
-    Date.now(),
-  );
+  let userId: number = 0;
 
-  const userId = result.lastInsertRowId;
-  await database.runAsync(
-    "INSERT OR IGNORE INTO wallet (id_user, balance, name, currency) VALUES (?, ?, ?, ?)",
-    userId,
-    10000,
-    "Główny portfel",
-    "PLN",
-  );
-
+  await database.withTransactionAsync(async () => {
+    const result = await database.runAsync(
+      `INSERT INTO users (username, avatar_uri, created_at)
+       VALUES (?, ?, ?)`,
+      username,
+      avatar_uri ?? null,
+      Date.now(),
+    );
+  
+    userId = result.lastInsertRowId;
+  
+    await database.runAsync(
+      `INSERT INTO wallet (id_user, balance, name, currency)
+       VALUES (?, ?, ?, ?)`,
+      userId,
+      10000,
+      "Główny portfel",
+      "PLN",
+    );
+  
+    await database.runAsync(
+      `INSERT INTO settings
+       (user_id, dark_mode, color_mode, multi_currency, font_size,
+        biometric_enabled, currency)
+       VALUES (?, 1, 'default', 0, 'medium', 0, 'PLN')`,
+      userId,
+    );
+  
+    await database.runAsync(
+      `INSERT INTO notification_settings
+       (user_id, notifications_enabled, push_notifications_enabled,
+        portfolio, market, news, transactions, reminders)
+       VALUES (?, 0, 0, 0, 0, 0, 0, 0)`,
+      userId,
+    );
+  
+    // return userId;
+  });
+  
   const profile = await getUserProfile(userId);
-  if (!profile) throw new Error("Nie udało się utworzyć konta");
+  
+  if (!profile) {
+    throw new Error("Nie udało się utworzyć konta");
+  }
+  
   return profile;
 }
 
