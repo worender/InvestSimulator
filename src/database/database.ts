@@ -299,6 +299,10 @@ export async function createUserProfile(input: {
   );
 
   const userId = result.lastInsertRowId;
+  console.log("Utworzony identyfikator użytkownika:", userId);
+  const profile = await getUserProfile(userId);
+  if (!profile) throw new Error("Nie udało się utworzyć konta");
+
   await database.runAsync(
     "INSERT OR IGNORE INTO wallet (id_user, balance, name, currency) VALUES (?, ?, ?, ?)",
     userId,
@@ -307,8 +311,23 @@ export async function createUserProfile(input: {
     "PLN",
   );
 
-  const profile = await getUserProfile(userId);
-  if (!profile) throw new Error("Nie udało się utworzyć konta");
+    await database.runAsync(
+    `INSERT OR IGNORE INTO settings
+     (user_id, dark_mode, color_mode, multi_currency, font_size,
+      biometric_enabled, currency)
+     VALUES (?, 1, 'default', 0, 'medium', 0, 'PLN')`,
+    userId,
+  );
+  
+  await database.runAsync(
+    `INSERT OR IGNORE INTO notification_settings
+     (user_id, notifications_enabled, push_notifications_enabled,
+      portfolio, market, news, transactions, reminders)
+     VALUES (?, 0, 0, 0, 0, 0, 0, 0)`,
+    userId,
+  );
+
+  
   return profile;
 }
 
