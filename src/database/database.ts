@@ -8,17 +8,11 @@ import {
   type EducationalArticle,
 } from "./educationalArticles";
 
-// Nowa nazwa pliku po zmianie struktury bazy (PR #83 database-fix).
-// Stary plik "invest-simulator.db" miał tabele bez nowych kolumn
-// (np. wallet.name), a CREATE TABLE IF NOT EXISTS ich nie dodaje.
-// Przy kolejnej niezgodnej zmianie struktury należy podnieść wersję.
-const DATABASE_NAME = "invest-simulator-v2.db";
-
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initializationPromise: Promise<void> | null = null;
 
 function getDatabase(): Promise<SQLite.SQLiteDatabase> {
-  databasePromise ??= SQLite.openDatabaseAsync(DATABASE_NAME);
+  databasePromise ??= SQLite.openDatabaseAsync("invest-simulator.db");
   return databasePromise;
 }
 
@@ -672,7 +666,7 @@ export async function deleteLocalDatabase(): Promise<void> {
   const database = await getDatabase();
 
   await database.closeAsync();
-  await SQLite.deleteDatabaseAsync(DATABASE_NAME);
+  await SQLite.deleteDatabaseAsync("invest-simulator.db");
 
   databasePromise = null;
   initializationPromise = null;
