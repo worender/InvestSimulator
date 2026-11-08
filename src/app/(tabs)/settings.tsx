@@ -2,6 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
 import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState, type ComponentRef } from "react";
 import {
   ActivityIndicator,
@@ -104,10 +105,16 @@ export default function SettingsScreen() {
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    section?: string;
+    openAccounts?: string;
+  }>();
   const isDark = mode === "dark";
   const appName = Constants.expoConfig?.name ?? "InvestSimulator";
 
   const [accountListOpen, setAccountListOpen] = useState(false);
+  const [accountSectionY, setAccountSectionY] = useState(0);
   const [ratesOpen, setRatesOpen] = useState(false);
   const [fontSizeDraft, setFontSizeDraft] = useState<FontSizePreference | null>(
     null,
@@ -138,6 +145,31 @@ export default function SettingsScreen() {
       active = false;
     };
   }, [activeAccount]);
+
+  useEffect(() => {
+    if (params.openAccounts !== "1") return;
+
+    const timeout = setTimeout(() => {
+      setAccountListOpen(true);
+      router.setParams({ openAccounts: undefined });
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, [params.openAccounts, router]);
+
+  useEffect(() => {
+    if (params.section !== "account" || accountSectionY <= 0) return;
+
+    const timeout = setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(accountSectionY - PANEL_HEADER_HEIGHT - top - 8, 0),
+        animated: true,
+      });
+      router.setParams({ section: undefined });
+    }, 160);
+
+    return () => clearTimeout(timeout);
+  }, [accountSectionY, params.section, router, top]);
 
   // Animacja przełączenia ustawień aplikacji, jest niezależna od
   // renderowania. Renderowanie zmian ustawień odbywa się z opóźnieniem.
@@ -404,79 +436,83 @@ export default function SettingsScreen() {
             </View>
           </SettingsCategory>
 
-          <SettingsCategory title="Autoryzacja">
-            <SettingsRow
-              icon="person-outline"
-              title="Nazwa konta"
-              subtitle={activeAccount?.username}
-              right={
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={colors.textMuted}
-                />
-              }
-              onPress={() => setEditAccountOpen(true)}
-            />
+          <View
+            onLayout={(event) => setAccountSectionY(event.nativeEvent.layout.y)}
+          >
+            <SettingsCategory title="Autoryzacja">
+              <SettingsRow
+                icon="person-outline"
+                title="Nazwa konta"
+                subtitle={activeAccount?.username}
+                right={
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={colors.textMuted}
+                  />
+                }
+                onPress={() => setEditAccountOpen(true)}
+              />
 
-            <SettingsRow
-              icon="lock-closed-outline"
-              title="Hasło"
-              subtitle={
-                passwordConfigured
-                  ? "Zmień hasło do swojego konta"
-                  : "Ustaw hasło, aby zabezpieczyć konto"
-              }
-              right={
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={colors.textMuted}
-                />
-              }
-              onPress={() => setPasswordOpen(true)}
-            />
+              <SettingsRow
+                icon="lock-closed-outline"
+                title="Hasło"
+                subtitle={
+                  passwordConfigured
+                    ? "Zmień hasło do swojego konta"
+                    : "Ustaw hasło, aby zabezpieczyć konto"
+                }
+                right={
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={colors.textMuted}
+                  />
+                }
+                onPress={() => setPasswordOpen(true)}
+              />
 
-            <SettingsRow
-              icon="image-outline"
-              title="Zdjęcie profilowe"
-              subtitle={
-                activeAccount?.avatar_uri
-                  ? "Zmień lub usuń obecne zdjęcie"
-                  : "Dodaj zdjęcie do swojego konta"
-              }
-              right={
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={colors.textMuted}
-                />
-              }
-              onPress={() => {
-                void changeAvatar();
-              }}
-            />
+              <SettingsRow
+                icon="image-outline"
+                title="Zdjęcie profilowe"
+                subtitle={
+                  activeAccount?.avatar_uri
+                    ? "Zmień lub usuń obecne zdjęcie"
+                    : "Dodaj zdjęcie do swojego konta"
+                }
+                right={
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={colors.textMuted}
+                  />
+                }
+                onPress={() => {
+                  void changeAvatar();
+                }}
+              />
 
-            <SettingsRow
-              icon="finger-print-outline"
-              title="Logowanie biometrią"
-              subtitle={
-                biometricEnabled
-                  ? "Odcisk palca lub rozpoznawanie twarzy"
-                  : "Włącz szybsze logowanie bez hasła"
-              }
-              right={
-                <SettingsToggle
-                  value={biometricEnabled}
-                  onChange={(value) => {
-                    void toggleBiometrics(value);
-                  }}
-                  accessibilityLabel="Logowanie biometrią"
-                />
-              }
-              last
-            />
-          </SettingsCategory>
+              <SettingsRow
+                icon="finger-print-outline"
+                title="Logowanie biometrią"
+                subtitle={
+                  biometricEnabled
+                    ? "Odcisk palca lub rozpoznawanie twarzy"
+                    : "Włącz szybsze logowanie bez hasła"
+                }
+                right={
+                  <SettingsToggle
+                    value={biometricEnabled}
+                    onChange={(value) => {
+                      void toggleBiometrics(value);
+                    }}
+                    accessibilityLabel="Logowanie biometrią"
+                  />
+                }
+                last
+              />
+            </SettingsCategory>
+          </View>
 
           <SettingsCategory title="Powiadomienia">
             <SettingsRow

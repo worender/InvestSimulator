@@ -1,14 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
-import { useFocusEffect } from "expo-router";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentRef,
-} from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -25,14 +18,9 @@ import {
 } from "../../components/NewsArticleModal";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import { Skeleton } from "../../components/Skeleton";
-import { getActiveAccountId } from "../../database/activeAccount";
-import {
-  getEducationalArticles,
-  getSavedArticleSlugs,
-  setArticleSaved,
-} from "../../database/database";
 import type { EducationalArticle } from "../../database/educationalArticles";
 import { notify } from "../../notificationBus";
+import { useSavedArticles } from "../../savedArticles";
 import { useTheme } from "../../theme";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
@@ -106,71 +94,14 @@ export default function AboutScreen() {
   const [selectedArticle, setSelectedArticle] =
     useState<ReadableArticle | null>(null);
 
-  // Artykuły edukacyjne odczytywane z lokalnej bazy danych
-  const [educationalArticles, setEducationalArticles] = useState<
-    EducationalArticle[] | null
-  >(null);
-
-  // Artykuły „do przeczytania później” aktywnego konta (tabela saved_article)
-  const [savedSlugs, setSavedSlugs] = useState<readonly string[]>([]);
-
-  useEffect(() => {
-    let active = true;
-
-    getEducationalArticles()
-      .then((articles) => {
-        if (active) setEducationalArticles(articles);
-      })
-      .catch((error) => {
-        console.error("Nie udało się wczytać artykułów edukacyjnych:", error);
-        if (!active) return;
-        setEducationalArticles([]);
-        notify({
-          variant: "error",
-          title: "Nie udało się wczytać artykułów",
-          message: "Spróbuj ponownie uruchomić aplikację.",
-        });
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  // Zapisane artykuły odświeżane przy każdym wejściu na zakładkę,
-  // bo w międzyczasie użytkownik mógł przełączyć konto w ustawieniach
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-
-      getActiveAccountId()
-        .then(getSavedArticleSlugs)
-        .then((slugs) => {
-          if (active) setSavedSlugs(slugs);
-        })
-        .catch((error) => {
-          console.error("Nie udało się wczytać zapisanych artykułów:", error);
-          if (!active) return;
-          notify({
-            variant: "error",
-            title: "Nie udało się wczytać zapisanych artykułów",
-            message: "Lista „Zapisane” może być niepełna.",
-          });
-        });
-
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
-
-  const savedArticles = useMemo(
-    () =>
-      savedSlugs
-        .map((slug) => educationalArticles?.find((item) => item.id === slug))
-        .filter((article): article is EducationalArticle => !!article),
-    [educationalArticles, savedSlugs],
-  );
+  const {
+    educationalArticles,
+    articles: savedArticles,
+    isSaved,
+    toggle: toggleSaved,
+  } = useSavedArticles();
+  const router = useRouter();
+  const { articleId } = useLocalSearchParams<{ articleId?: string }>();
 
   useEffect(() => {
     let active = true;
@@ -186,38 +117,30 @@ export default function AboutScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    // Czeka na artykuły z bazy, aby nie zgubić parametru podczas ładowania
+    if (!articleId || educationalArticles === null) return;
+
+    const article =
+      educationalArticles.find((item) => item.id === articleId) ?? null;
+
+    const timeout = setTimeout(() => {
+      if (article) {
+        setSelectedArticle(article);
+        setExpandedCategory(
+          savedArticles.some((item) => item.id === article.id)
+            ? "saved"
+            : "educational",
+        );
+      }
+      router.setParams({ articleId: undefined });
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, [articleId, educationalArticles, router, savedArticles]);
+
   const toggleCategory = (category: string) => {
     setExpandedCategory((current) => (current === category ? null : category));
-  };
-
-  const toggleSaved = async (article: ReadableArticle) => {
-    const previous = savedSlugs;
-    const exists = previous.includes(article.id);
-    const next = exists
-      ? previous.filter((slug) => slug !== article.id)
-      : [article.id, ...previous];
-
-    // Natychmiastowa zmiana w UI, cofana, jeśli zapis do bazy się nie uda
-    setSavedSlugs(next);
-    if (next.length === 0) {
-      setExpandedCategory((category) =>
-        category === "saved" ? null : category,
-      );
-    }
-
-    try {
-      await setArticleSaved(article.id, !exists, await getActiveAccountId());
-    } catch (error) {
-      console.error("Nie udało się zapisać zakładki:", error);
-      setSavedSlugs(previous);
-      notify({
-        variant: "error",
-        title: exists
-          ? "Nie udało się usunąć z zapisanych"
-          : "Nie udało się zapisać artykułu",
-        message: "Spróbuj ponownie za chwilę.",
-      });
-    }
   };
 
   return (
@@ -284,7 +207,6 @@ export default function AboutScreen() {
 
           <ExpandableCategoryBlock
             title="Artykuły edukacyjne"
-            icon="school-outline"
             count={educationalArticles?.length}
             expanded={expandedCategory === "educational"}
             onToggle={() => toggleCategory("educational")}
@@ -318,7 +240,6 @@ export default function AboutScreen() {
           {savedArticles.length > 0 && (
             <ExpandableCategoryBlock
               title="Zapisane"
-              icon="bookmark-outline"
               count={savedArticles.length}
               expanded={expandedCategory === "saved"}
               onToggle={() => toggleCategory("saved")}
@@ -339,7 +260,6 @@ export default function AboutScreen() {
               <ExpandableCategoryBlock
                 key={topic.id}
                 title={topic.label}
-                icon={TOPIC_ICONS[topic.id]}
                 count={loadingNews ? undefined : topicArticles.length}
                 expanded={expandedCategory === topic.id}
                 onToggle={() => toggleCategory(topic.id)}
@@ -381,7 +301,7 @@ export default function AboutScreen() {
         <NewsArticleModal
           key={selectedArticle.id}
           article={selectedArticle}
-          saved={savedSlugs.includes(selectedArticle.id)}
+          saved={isSaved(selectedArticle.id)}
           // Zakładki dotyczą artykułów z bazy; newsy Yahoo nie są w niej zapisywane
           onToggleSaved={
             isEducationalArticle(selectedArticle) ? toggleSaved : undefined

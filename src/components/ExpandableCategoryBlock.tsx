@@ -18,7 +18,6 @@ import { useTheme } from "../theme";
 
 type ExpandableCategoryBlockProps = PropsWithChildren<{
   title: string;
-  icon?: keyof typeof Ionicons.glyphMap;
   count?: number;
   expanded: boolean;
   onToggle: () => void;
@@ -29,7 +28,6 @@ type ExpandableCategoryBlockProps = PropsWithChildren<{
  */
 export function ExpandableCategoryBlock({
   title,
-  icon = "newspaper-outline",
   count,
   expanded,
   onToggle,
@@ -89,7 +87,6 @@ export function ExpandableCategoryBlock({
           },
         ]}
       >
-        <Ionicons name={icon} size={18} color={colors.accent} />
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
           {title}
         </Text>
