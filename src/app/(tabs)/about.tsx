@@ -1,5 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,11 +18,9 @@ import {
 } from "../../components/NewsArticleModal";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import { Skeleton } from "../../components/Skeleton";
-import {
-  EDUCATIONAL_ARTICLES,
-  type EducationalArticle,
-} from "../../database/educationalArticles";
+import { EDUCATIONAL_ARTICLES } from "../../database/educationalArticles";
 import { notify } from "../../notificationBus";
+import { useSavedArticles } from "../../savedArticles";
 import { useTheme } from "../../theme";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
@@ -46,11 +45,6 @@ const formatSavedMeta = (item: ReadableArticle): string =>
     ? `Edukacja · ${item.readMinutes} min czytania`
     : `${formatNewsMeta(item)} · ${item.topic === "poland" ? "Polska" : "Świat"}`;
 
-// Mock: dwa istniejące artykuły startowo obecne w kategorii „Zapisane”
-const MOCK_SAVED_ARTICLES: readonly ReadableArticle[] = ["edu-01", "edu-04"]
-  .map((id) => EDUCATIONAL_ARTICLES.find((article) => article.id === id))
-  .filter((article): article is EducationalArticle => article !== undefined);
-
 export default function AboutScreen() {
   const { colors } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
@@ -74,9 +68,13 @@ export default function AboutScreen() {
   const [selectedArticle, setSelectedArticle] =
     useState<ReadableArticle | null>(null);
 
-  // Artykuły zapisane przez użytkownika tymaczsowo w stanie komponentu (w przyszłości w bazie danych)
-  const [savedArticles, setSavedArticles] =
-    useState<readonly ReadableArticle[]>(MOCK_SAVED_ARTICLES);
+  const {
+    articles: savedArticles,
+    isSaved,
+    toggle: toggleSaved,
+  } = useSavedArticles();
+  const router = useRouter();
+  const { articleId } = useLocalSearchParams<{ articleId?: string }>();
 
   useEffect(() => {
     let active = true;
@@ -92,22 +90,31 @@ export default function AboutScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!articleId) return;
+
+    const article =
+      savedArticles.find((item) => item.id === articleId) ??
+      EDUCATIONAL_ARTICLES.find((item) => item.id === articleId) ??
+      null;
+
+    const timeout = setTimeout(() => {
+      if (article) {
+        setSelectedArticle(article);
+        setExpandedCategory(
+          savedArticles.some((item) => item.id === article.id)
+            ? "saved"
+            : "educational",
+        );
+      }
+      router.setParams({ articleId: undefined });
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, [articleId, router, savedArticles]);
+
   const toggleCategory = (category: string) => {
     setExpandedCategory((current) => (current === category ? null : category));
-  };
-
-  const toggleSaved = (article: ReadableArticle) => {
-    const exists = savedArticles.some((item) => item.id === article.id);
-    const next = exists
-      ? savedArticles.filter((item) => item.id !== article.id)
-      : [article, ...savedArticles];
-
-    setSavedArticles(next);
-    if (next.length === 0) {
-      setExpandedCategory((category) =>
-        category === "saved" ? null : category,
-      );
-    }
   };
 
   return (
@@ -174,7 +181,6 @@ export default function AboutScreen() {
 
           <ExpandableCategoryBlock
             title="Artykuły edukacyjne"
-            icon="school-outline"
             count={EDUCATIONAL_ARTICLES.length}
             expanded={expandedCategory === "educational"}
             onToggle={() => toggleCategory("educational")}
@@ -190,7 +196,6 @@ export default function AboutScreen() {
           {savedArticles.length > 0 && (
             <ExpandableCategoryBlock
               title="Zapisane"
-              icon="bookmark-outline"
               count={savedArticles.length}
               expanded={expandedCategory === "saved"}
               onToggle={() => toggleCategory("saved")}
@@ -211,7 +216,6 @@ export default function AboutScreen() {
               <ExpandableCategoryBlock
                 key={topic.id}
                 title={topic.label}
-                icon={TOPIC_ICONS[topic.id]}
                 count={loadingNews ? undefined : topicArticles.length}
                 expanded={expandedCategory === topic.id}
                 onToggle={() => toggleCategory(topic.id)}
@@ -270,7 +274,7 @@ export default function AboutScreen() {
         <NewsArticleModal
           key={selectedArticle.id}
           article={selectedArticle}
-          saved={savedArticles.some((item) => item.id === selectedArticle.id)}
+          saved={isSaved(selectedArticle.id)}
           onToggleSaved={toggleSaved}
           onClose={() => setSelectedArticle(null)}
         />

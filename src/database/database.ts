@@ -30,6 +30,12 @@ export interface Transaction {
   id_wallet: number;
 }
 
+export interface PortfolioItem {
+  symbol: string;
+  quantity: number;
+  average_price: number;
+}
+
 export interface Wallet {
   id: number;
   balance: number;
@@ -233,6 +239,23 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
 async function getReadyDatabase(): Promise<SQLite.SQLiteDatabase> {
   await initializeDatabase();
   return getDatabase();
+}
+
+export async function getPortfolio(): Promise<PortfolioItem[]> {
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<PortfolioItem>(
+    `SELECT
+       symbol,
+       SUM(CASE WHEN type = 'BUY' THEN quantity ELSE -quantity END) AS quantity,
+       SUM(CASE WHEN type = 'BUY' THEN quantity * price ELSE 0 END)
+         / NULLIF(SUM(CASE WHEN type = 'BUY' THEN quantity ELSE 0 END), 0)
+         AS average_price
+     FROM transactions
+     GROUP BY symbol
+     HAVING quantity > 0
+     ORDER BY symbol`,
+  );
 }
 
 // // TO IMPLEMENT
