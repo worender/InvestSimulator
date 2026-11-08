@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite";
-import { ValidateAvatarUrl, ValidateUserName } from "./checkSecurityParam";
+import { normalizeAndValidateSymbol ,validateAvatarUrl, validateCurrencyCode, validateDate, validateIconWallet, validateNumberReal, validateUserName, validateWalletName } from "./checkSecurityParam";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initializationPromise: Promise<void> | null = null;
@@ -45,6 +45,58 @@ export interface Wallet {
   icon: string;
 }
 
+export interface AssetCategory {
+  id: number;
+  name: string;
+  wallet_id: number;
+}
+
+export interface Position {
+  id: number;
+  category_id: number;
+  symbol: string;
+  initial_quantity: number;
+  remaining_quantity: number;
+  buy_price: number;
+  opened_at: number;
+}
+
+export interface PortfolioSnapshot {
+  wallet_id: number;
+  snapshot_date: string;
+  cash_balance: number;
+  assets_value: number;
+}
+
+export interface CreateWalletInput {
+  name: string;
+  currency: string;
+  balance?: number;
+  icon?: string;
+}
+
+export interface CreateCategoryInput {
+  name: string;
+}
+
+export interface CreatePositionInput {
+  category_id: number;
+  symbol: string;
+  quantity: number;
+  buy_price: number;
+  opened_at?: number;
+}
+
+export interface UpdatePositionInput {
+  remaining_quantity?: number;
+}
+
+export interface CreateSnapshotInput {
+  wallet_id: number;
+  cash_balance: number;
+  assets_value: number;
+}
+
 export interface CreateTransactionInput {
   symbol: string;
   type: TransactionType;
@@ -52,6 +104,7 @@ export interface CreateTransactionInput {
   price: number;
   createdAt?: number;
   id_wallet: number;
+  category_id?: number;
 }
 
 export interface Settings {
@@ -75,6 +128,12 @@ export interface NotificationSettings {
   news: number;
   transactions: number;
   reminders: number;
+}
+
+export interface DailySnapshotValue {
+  wallet_id: number;
+  cash_balance: number;
+  assets_value: number;
 }
 
 export async function initializeDatabase(): Promise<void> {
@@ -101,9 +160,9 @@ export async function initializeDatabase(): Promise<void> {
           id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
           balance REAL NOT NULL DEFAULT 10000,
           currency TEXT,
-          id_user INTEGER,
+          id_user INTEGER ,
           name TEXT,
-          icon TEXT,
+          icon TEXT DEFAULT 'wallet-outline',
           FOREIGN KEY (id_user) REFERENCES users (id)
         );
 
@@ -128,7 +187,7 @@ export async function initializeDatabase(): Promise<void> {
         CREATE TABLE IF NOT EXISTS portfolio_snapshots (
           id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
           wallet_id INTEGER NOT NULL,
-          snapshot_date TEXT NOT NULL, -- Format YYYY-MM-DD
+          snapshot_date INTEGER NOT NULL,  -- numer dnia od 1970-01-01 (np. 2023-08-15 = 19600)
           cash_balance REAL NOT NULL,  -- Stan gotówki w danym dniu
           assets_value REAL NOT NULL,  -- Rynkowa wartość wszystkich aktywów w danym dniu
           FOREIGN KEY (wallet_id) REFERENCES wallet (id),
@@ -306,9 +365,9 @@ export async function createUserProfile(input: {
 }): Promise<UserProfile> {
   if (!input.username) throw new Error("Nazwa konta jest wymagana");
 
-  const username = ValidateUserName(input.username);
+  const username = validateUserName(input.username);
   const avatar_uri = input.avatar_uri
-    ? ValidateAvatarUrl(input.avatar_uri)
+    ? validateAvatarUrl(input.avatar_uri)
     : null;
   const database = await getReadyDatabase();
   console.log("Tworzenie profilu użytkownika:", username, avatar_uri);
@@ -327,12 +386,13 @@ export async function createUserProfile(input: {
     userId = result.lastInsertRowId;
   
     await database.runAsync(
-      `INSERT INTO wallet (id_user, balance, name, currency)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO wallet (id_user, balance, name, currency, icon)
+       VALUES (?, ?, ?, ?, ?)`,
       userId,
       10000,
       "Główny portfel",
       "PLN",
+      "wallet-outline"
     );
   
     await database.runAsync(
@@ -372,18 +432,18 @@ export async function updateUserProfile(
   const current = await getUserProfile(userId);
   if (!current) throw new Error("Nie znaleziono profilu użytkownika");
 
-  const validateUserName =
+  const validatedUserName =
     changes.username !== undefined
-      ? ValidateUserName(changes.username)
+      ? validateUserName(changes.username)
       : current.username;
-  const validateAvatarUrl =
+  const validatedAvatarUrl =
     changes.avatar_uri !== undefined && changes.avatar_uri !== null
-      ? ValidateAvatarUrl(changes.avatar_uri)
+      ? validateAvatarUrl(changes.avatar_uri)
       : current.avatar_uri;
 
   const next = {
-    username: validateUserName,
-    avatarUri: validateAvatarUrl,
+    username: validatedUserName,
+    avatarUri: validatedAvatarUrl,
   };
 
   await database.runAsync(
@@ -538,6 +598,719 @@ export async function getNotificationSettings(
       userId,
     )) ?? null
   );
+}
+
+export async function getWallet(userId : number, walletId : number): Promise<Wallet | null> {
+  if (userId <= 0 || !Number.isInteger(userId)) {
+    throw new Error("Nieprawidłowy identyfikator użytkownika");
+  }
+
+  if (walletId <= 0 || !Number.isInteger(walletId)) {
+    throw new Error("Nieprawidłowy identyfikator portfela");
+  }
+  
+  const database = await getReadyDatabase();
+
+  return (
+    (await database.getFirstAsync<Wallet>(
+      `SELECT * FROM wallet WHERE id_user = ? AND id = ?`,
+      userId,
+      walletId
+    )) ?? null
+  );
+}
+
+export async function getWallets(userId: number): Promise<Wallet[]> {
+  if (userId <= 0 || !Number.isInteger(userId)) {
+    throw new Error("Nieprawidłowy identyfikator użytkownika");
+  }
+
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<Wallet>(
+    `SELECT * FROM wallet WHERE id_user = ? ORDER BY id ASC`,
+    userId,
+  );
+}
+
+export async function updateWallet(
+  walletId: number,
+  userId: number,
+  changes: Partial<Omit<Wallet, "id" | "id_user">>,
+): Promise<void> {
+  
+
+
+  if (walletId <= 0 || !Number.isInteger(walletId)) {
+    throw new Error("Nieprawidłowy identyfikator portfela");
+  }
+
+  if (userId <= 0 || !Number.isInteger(userId)) {
+    throw new Error("Nieprawidłowy identyfikator użytkownika");
+  }
+
+  const database = await getReadyDatabase();
+
+  await database.withTransactionAsync(async () => {
+
+    const currentWallet = await database.getFirstAsync<Wallet>(
+      `SELECT * FROM wallet WHERE id = ? AND id_user = ?`,
+      walletId,
+      userId,
+    );
+
+    if (!currentWallet) {
+      throw new Error("Nie znaleziono portfela");
+    }
+
+    const nextWallet = {
+      balance:
+        changes.balance !== undefined
+          ? validateNumberReal(changes.balance)
+          : currentWallet.balance,
+      currency:
+        changes.currency !== undefined
+          ? validateCurrencyCode(changes.currency)
+          : currentWallet.currency,
+      name:
+        changes.name !== undefined
+          ? validateWalletName(changes.name)
+          : currentWallet.name,
+      icon:
+        changes.icon !== undefined
+          ? validateIconWallet(changes.icon)
+          : currentWallet.icon,
+    };
+
+    await database.runAsync(
+      `UPDATE wallet
+      SET balance = ?, currency = ?, name = ?, icon = ?
+      WHERE id = ? AND id_user = ?`,
+      nextWallet.balance,
+      nextWallet.currency,
+      nextWallet.name,
+      nextWallet.icon,
+      walletId,
+      userId,
+    );
+
+    
+
+    const updatedWallet = await database.getFirstAsync<Wallet>(
+      `SELECT * FROM wallet WHERE id_user = ? AND id = ?`,
+      userId,
+      walletId
+    );
+
+    if (!updatedWallet) {
+      throw new Error("Nie udało się odczytać zaktualizowanego portfela");
+    }
+  });
+  
+}
+
+export async function createWallet(
+  userId: number,
+  data: CreateWalletInput,
+): Promise<Wallet> {
+  if (userId <= 0 || !Number.isInteger(userId)) {
+    throw new Error("Nieprawidłowy identyfikator użytkownika");
+  }
+
+  const name = validateWalletName(data.name);
+  const currency = validateCurrencyCode(data.currency);
+  const balance = data.balance ?? 10000;
+  const icon = data.icon
+    ? validateIconWallet(data.icon)
+    : "wallet-outline";
+
+  validateNumberReal(balance);
+
+  const database = await getReadyDatabase();
+
+  const result = await database.runAsync(
+    `INSERT INTO wallet
+     (id_user, balance, currency, name, icon)
+     VALUES (?, ?, ?, ?, ?)`,
+    userId,
+    balance,
+    currency,
+    name,
+    icon,
+  );
+
+  const wallet = await database.getFirstAsync<Wallet>(
+    `SELECT * FROM wallet
+     WHERE id = ? AND id_user = ?`,
+    result.lastInsertRowId,
+    userId,
+  );
+
+  if (!wallet) {
+    throw new Error("Nie udało się utworzyć portfela");
+  }
+
+  return wallet;
+}
+
+export async function deleteWallet(
+  walletId: number,
+  userId: number,
+): Promise<void> {
+  const database = await getReadyDatabase();
+
+  await database.withTransactionAsync(async () => {
+    const wallet = await getWallet(userId, walletId);
+
+    if (!wallet) {
+      throw new Error("Nie znaleziono portfela");
+    }
+
+    await database.runAsync(
+      `DELETE FROM positions
+       WHERE category_id IN (
+         SELECT id FROM category_assets WHERE wallet_id = ?
+       )`,
+      walletId,
+    );
+
+    await database.runAsync(
+      `DELETE FROM category_assets
+       WHERE wallet_id = ?`,
+      walletId,
+    );
+
+    await database.runAsync(
+      `DELETE FROM transactions
+       WHERE id_wallet = ?`,
+      walletId,
+    );
+
+    await database.runAsync(
+      `DELETE FROM portfolio_snapshots
+       WHERE wallet_id = ?`,
+      walletId,
+    );
+
+    await database.runAsync(
+      `DELETE FROM wallet
+       WHERE id = ? AND id_user = ?`,
+      walletId,
+      userId,
+    );
+  });
+}
+
+export async function getCategories(
+  walletId: number,
+): Promise<AssetCategory[]> {
+  if (walletId <= 0 || !Number.isInteger(walletId)) {
+    throw new Error("Nieprawidłowy identyfikator portfela");
+  }
+
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<AssetCategory>(
+    `SELECT * FROM category_assets
+     WHERE wallet_id = ?
+     ORDER BY id ASC`,
+    walletId,
+  );
+}
+
+export async function createCategory(
+  walletId: number,
+  data: CreateCategoryInput,
+): Promise<AssetCategory> {
+  if (walletId <= 0 || !Number.isInteger(walletId)) {
+    throw new Error("Nieprawidłowy identyfikator portfela");
+  }
+
+  const name = data.name.trim();
+
+  if (name.length === 0 || name.length > 50) {
+    throw new Error("Nieprawidłowa nazwa kategorii");
+  }
+
+  const wallet = await databaseWalletExists(walletId);
+
+  if (!wallet) {
+    throw new Error("Nie znaleziono portfela");
+  }
+
+  const database = await getReadyDatabase();
+
+  const result = await database.runAsync(
+    `INSERT INTO category_assets (name, wallet_id)
+     VALUES (?, ?)`,
+    name,
+    walletId,
+  );
+
+  const category = await database.getFirstAsync<AssetCategory>(
+    `SELECT * FROM category_assets WHERE id = ?`,
+    result.lastInsertRowId,
+  );
+
+  if (!category) {
+    throw new Error("Nie udało się utworzyć kategorii");
+  }
+
+  return category;
+}
+
+async function databaseWalletExists(walletId: number): Promise<boolean> {
+  if (walletId <= 0 || !Number.isInteger(walletId)) {
+    throw new Error("Nieprawidłowy identyfikator portfela");
+  }
+
+  const database = await getReadyDatabase();
+
+  const wallet = await database.getFirstAsync<{ id: number }>(
+    `SELECT id FROM wallet WHERE id = ?`,
+    walletId,
+  );
+
+  return wallet !== null;
+}
+
+export async function getPositions(walletId: number): Promise<Position[]> {
+  if (walletId <= 0 || !Number.isInteger(walletId)) {
+    throw new Error("Nieprawidłowy identyfikator portfela");
+  }
+  
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<Position>(
+    `SELECT
+       p.id,
+       p.category_id,
+       p.symbol,
+       p.initial_quantity,
+       p.remaining_quantity,
+       p.buy_price,
+       p.opened_at
+     FROM positions p
+     INNER JOIN category_assets c
+       ON c.id = p.category_id
+     WHERE c.wallet_id = ?
+     ORDER BY p.opened_at DESC`,
+    walletId,
+  );
+}
+
+// Tylko do testów, nie używać w produkcji
+export async function createPosition(
+  categoryId: number,
+  data: CreatePositionInput,
+): Promise<Position> {
+  if (categoryId <= 0 || !Number.isInteger(categoryId)) {
+    throw new Error("Nieprawidłowy identyfikator kategorii");
+  }
+
+  const quantity = validateNumberReal(data.quantity);
+  const buyPrice = validateNumberReal(data.buy_price);
+
+  if (quantity <= 0 || buyPrice <= 0) {
+    throw new Error("Ilość i cena muszą być większe od zera");
+  }
+
+  const symbol = normalizeAndValidateSymbol(data.symbol);
+  const openedAt = data.opened_at ? validateDate(data.opened_at) : Date.now();
+
+  const database = await getReadyDatabase();
+
+  const category = await database.getFirstAsync<{ id: number }>(
+    `SELECT id FROM category_assets WHERE id = ?`,
+    categoryId,
+  );
+
+  if (!category) {
+    throw new Error("Nie znaleziono kategorii aktywów");
+  }
+
+  const result = await database.runAsync(
+    `INSERT INTO positions
+     (category_id, symbol, initial_quantity, remaining_quantity,
+      buy_price, opened_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    categoryId,
+    symbol,
+    quantity,
+    quantity,
+    buyPrice,
+    openedAt,
+  );
+
+  const position = await database.getFirstAsync<Position>(
+    `SELECT * FROM positions WHERE id = ?`,
+    result.lastInsertRowId,
+  );
+
+  if (!position) {
+    throw new Error("Nie udało się utworzyć pozycji");
+  }
+
+  return position;
+}
+
+// Tylko do testów, nie używać w produkcji
+export async function updatePosition(
+  positionId: number,
+  changes: UpdatePositionInput,
+): Promise<void> {
+  if (positionId <= 0 || !Number.isInteger(positionId)) {
+    throw new Error("Nieprawidłowy identyfikator pozycji");
+  }
+
+  if (changes.remaining_quantity === undefined) {
+    throw new Error("Brak danych do aktualizacji pozycji");
+  }
+
+  const remainingQuantity = validateNumberReal(
+    changes.remaining_quantity,
+  );
+
+  if (remainingQuantity < 0) {
+    throw new Error("Pozostała ilość nie może być ujemna");
+  }
+
+  const database = await getReadyDatabase();
+
+  const result = await database.runAsync(
+    `UPDATE positions
+     SET remaining_quantity = ?
+     WHERE id = ?`,
+    remainingQuantity,
+    positionId,
+  );
+
+  if (result.changes === 0) {
+    throw new Error("Nie znaleziono pozycji");
+  }
+}
+
+export async function getTransactions(
+  walletId: number,
+): Promise<Transaction[]> {
+  if (walletId <= 0 || !Number.isInteger(walletId)) {
+    throw new Error("Nieprawidłowy identyfikator portfela");
+  }
+
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<Transaction>(
+    `SELECT * FROM transactions
+     WHERE id_wallet = ?
+     ORDER BY created_at DESC`,
+    walletId,
+  );
+}
+
+// Główna funkcja do tworzenia transakcji kupna lub sprzedaży aktywów.
+// Obsługuje zarówno transakcje typu "BUY", jak i "SELL", aktualizując odpowiednio stan portfela, pozycji oraz zapisując transakcję w bazie danych.
+export async function createTransaction(
+  input: CreateTransactionInput,
+): Promise<Transaction> {
+  if (input.id_wallet <= 0 || !Number.isInteger(input.id_wallet)) {
+    throw new Error("Nieprawidłowy identyfikator portfela");
+  }
+
+  if (input.type !== "BUY" && input.type !== "SELL") {
+    throw new Error("Nieprawidłowy typ transakcji");
+  }
+
+  const symbol = normalizeAndValidateSymbol(input.symbol);
+  const quantity = validateNumberReal(input.quantity);
+  const price = validateNumberReal(input.price);
+  const createdAt =
+    input.createdAt !== undefined
+      ? validateDate(input.createdAt)
+      : Date.now();
+
+  if (quantity <= 0 || price <= 0) {
+    throw new Error("Ilość i cena muszą być większe od zera");
+  }
+
+  if (input.type === "BUY") {
+    if (
+      input.category_id === undefined ||
+      input.category_id <= 0 ||
+      !Number.isInteger(input.category_id)
+    ) {
+      throw new Error(
+        "Dla transakcji kupna wymagany jest identyfikator kategorii",
+      );
+    }
+  }
+
+  const database = await getReadyDatabase();
+  let transactionId = 0;
+
+  await database.withTransactionAsync(async () => {
+    const wallet = await database.getFirstAsync<Wallet>(
+      `SELECT * FROM wallet WHERE id = ?`,
+      input.id_wallet,
+    );
+
+    if (!wallet) {
+      throw new Error("Nie znaleziono portfela");
+    }
+
+    const totalValue = quantity * price;
+
+    if (input.type === "BUY") {
+      if (wallet.balance < totalValue) {
+        throw new Error("Niewystarczające środki w portfelu");
+      }
+      
+      let categoryId: number;
+      if (
+        input.category_id === undefined ||
+        input.category_id <= 0 ||
+        !Number.isInteger(input.category_id)
+      ) {
+        throw new Error(
+          "Dla transakcji kupna wymagany jest identyfikator kategorii",
+        );
+      }
+      categoryId = input.category_id;
+
+      const category = await database.getFirstAsync<AssetCategory>(
+        `SELECT id, name, wallet_id
+         FROM category_assets
+         WHERE id = ? AND wallet_id = ?`,
+        categoryId,
+        input.id_wallet,
+      );
+
+      if (!category) {
+        throw new Error("Kategoria nie należy do wybranego portfela");
+      }
+
+      await database.runAsync(
+        `INSERT INTO positions
+         (category_id, symbol, initial_quantity, remaining_quantity,
+          buy_price, opened_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        input.category_id,
+        symbol,
+        quantity,
+        quantity,
+        price,
+        createdAt,
+      );
+
+      await database.runAsync(
+        `UPDATE wallet
+         SET balance = balance - ?
+         WHERE id = ?`,
+        totalValue,
+        input.id_wallet,
+      );
+    } else {
+      const positions = await database.getAllAsync<Position>(
+        `SELECT p.*
+         FROM positions p
+         INNER JOIN category_assets c
+           ON c.id = p.category_id
+         WHERE c.wallet_id = ?
+           AND p.symbol = ?
+           AND p.remaining_quantity > 0
+         ORDER BY p.opened_at ASC, p.id ASC`,
+        input.id_wallet,
+        symbol,
+      );
+
+      const availableQuantity = positions.reduce(
+        (sum, position) => sum + position.remaining_quantity,
+        0,
+      );
+
+      if (availableQuantity < quantity) {
+        throw new Error("Niewystarczająca ilość aktywa do sprzedaży");
+      }
+
+      let quantityToSell = quantity;
+
+      for (const position of positions) {
+        if (quantityToSell <= 0) {
+          break;
+        }
+
+        const soldFromPosition = Math.min(
+          position.remaining_quantity,
+          quantityToSell,
+        );
+
+        await database.runAsync(
+          `UPDATE positions
+           SET remaining_quantity = remaining_quantity - ?
+           WHERE id = ?`,
+          soldFromPosition,
+          position.id,
+        );
+
+        quantityToSell -= soldFromPosition;
+      }
+
+      await database.runAsync(
+        `UPDATE wallet
+         SET balance = balance + ?
+         WHERE id = ?`,
+        totalValue,
+        input.id_wallet,
+      );
+    }
+
+    const result = await database.runAsync(
+      `INSERT INTO transactions
+       (symbol, type, quantity, price, created_at, id_wallet)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      symbol,
+      input.type,
+      quantity,
+      price,
+      createdAt,
+      input.id_wallet,
+    );
+
+    transactionId = result.lastInsertRowId;
+  });
+
+  const transaction = await database.getFirstAsync<Transaction>(
+    `SELECT * FROM transactions WHERE id = ?`,
+    transactionId,
+  );
+
+  if (!transaction) {
+    throw new Error("Nie udało się odczytać utworzonej transakcji");
+  }
+
+  return transaction;
+}
+
+// Funkcja do pobierania wszystkich snapshotów portfela dla danego identyfikatora portfela.
+// Snapshoty beda wykorzystane do analizy historycznej portfela,
+// np. do tworzenia wykresów wartości portfela w czasie.
+export async function getPortfolioSnapshots(
+  walletId: number,
+): Promise<PortfolioSnapshot[]> {
+  if (walletId <= 0 || !Number.isInteger(walletId)) {
+    throw new Error("Nieprawidłowy identyfikator portfela");
+  }
+
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<PortfolioSnapshot>(
+    `SELECT * FROM portfolio_snapshots
+     WHERE wallet_id = ?
+     ORDER BY snapshot_date DESC`,
+    walletId,
+  );
+}
+
+
+function getCurrentDayNumber(): number {
+  return Math.floor(Date.now() / 86_400_000);
+}
+
+export async function createPortfolioSnapshot(
+  input: CreateSnapshotInput,
+): Promise<PortfolioSnapshot> {
+  if (
+    input.wallet_id <= 0 ||
+    !Number.isInteger(input.wallet_id)
+  ) {
+    throw new Error("Nieprawidłowy identyfikator portfela");
+  }
+
+  const cashBalance = validateNumberReal(input.cash_balance);
+  const assetsValue = validateNumberReal(input.assets_value);
+
+  if (cashBalance < 0 || assetsValue < 0) {
+    throw new Error("Wartości snapshotu nie mogą być ujemne");
+  }
+
+  const snapshotDate = getCurrentDayNumber();
+  const database = await getReadyDatabase();
+
+  await database.withTransactionAsync(async () => {
+    const wallet = await database.getFirstAsync<{ id: number }>(
+      `SELECT id
+       FROM wallet
+       WHERE id = ?`,
+      input.wallet_id,
+    );
+
+    if (!wallet) {
+      throw new Error("Nie znaleziono portfela");
+    }
+
+    await database.runAsync(
+      `INSERT INTO portfolio_snapshots
+       (wallet_id, snapshot_date, cash_balance, assets_value)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(wallet_id, snapshot_date)
+       DO UPDATE SET
+         cash_balance = excluded.cash_balance,
+         assets_value = excluded.assets_value`,
+      input.wallet_id,
+      snapshotDate,
+      cashBalance,
+      assetsValue,
+    );
+  });
+
+  const snapshot = await database.getFirstAsync<PortfolioSnapshot>(
+    `SELECT *
+     FROM portfolio_snapshots
+     WHERE wallet_id = ? AND snapshot_date = ?`,
+    input.wallet_id,
+    snapshotDate,
+  );
+
+  if (!snapshot) {
+    throw new Error("Nie udało się odczytać snapshotu portfela");
+  }
+
+  return snapshot;
+}
+
+// Funkcja do tworzenia codziennych snapshotów portfela.
+// Trzeba ją wywoływać codziennie, aby zapisywać stan portfela w danym dniu.
+export async function createDailySnapshots(
+  userId: number,
+  values: DailySnapshotValue[],
+): Promise<PortfolioSnapshot[]> {
+  if (userId <= 0 || !Number.isInteger(userId)) {
+    throw new Error("Nieprawidłowy identyfikator użytkownika");
+  }
+
+  const wallets = await getWallets(userId);
+  const snapshots: PortfolioSnapshot[] = [];
+
+  for (const wallet of wallets) {
+    const value = values.find(
+      (item) => item.wallet_id === wallet.id,
+    );
+
+    if (!value) {
+      throw new Error(
+        `Brak wyceny dla portfela o identyfikatorze ${wallet.id}`,
+      );
+    }
+
+    const snapshot = await createPortfolioSnapshot({
+      wallet_id: wallet.id,
+      cash_balance: value.cash_balance,
+      assets_value: value.assets_value,
+    });
+
+    snapshots.push(snapshot);
+  }
+
+  return snapshots;
 }
 
 export async function clearLocalDatabase(): Promise<void> {
