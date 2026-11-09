@@ -30,6 +30,12 @@ export interface Transaction {
   id_wallet: number;
 }
 
+export interface PortfolioItem {
+  symbol: string;
+  quantity: number;
+  average_price: number;
+}
+
 export interface Wallet {
   id: number;
   balance: number;
@@ -235,6 +241,23 @@ async function getReadyDatabase(): Promise<SQLite.SQLiteDatabase> {
   return getDatabase();
 }
 
+export async function getPortfolio(): Promise<PortfolioItem[]> {
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<PortfolioItem>(
+    `SELECT
+       symbol,
+       SUM(CASE WHEN type = 'BUY' THEN quantity ELSE -quantity END) AS quantity,
+       SUM(CASE WHEN type = 'BUY' THEN quantity * price ELSE 0 END)
+         / NULLIF(SUM(CASE WHEN type = 'BUY' THEN quantity ELSE 0 END), 0)
+         AS average_price
+     FROM transactions
+     GROUP BY symbol
+     HAVING quantity > 0
+     ORDER BY symbol`,
+  );
+}
+
 // // TO IMPLEMENT
 // const requirePositive = (value: number, fieldName: string): void => {
 //   if (!Number.isFinite(value) || value <= 0) {
@@ -290,25 +313,53 @@ export async function createUserProfile(input: {
   const database = await getReadyDatabase();
   console.log("Tworzenie profilu użytkownika:", username, avatar_uri);
 
-  const result = await database.runAsync(
-    `INSERT INTO users (username, avatar_uri, created_at)
-     VALUES (?, ?, ?)`,
-    username,
-    avatar_uri ?? null,
-    Date.now(),
-  );
+  let userId: number = 0;
 
-  const userId = result.lastInsertRowId;
-  await database.runAsync(
-    "INSERT OR IGNORE INTO wallet (id_user, balance, name, currency) VALUES (?, ?, ?, ?)",
-    userId,
-    10000,
-    "Główny portfel",
-    "PLN",
-  );
-
+  await database.withTransactionAsync(async () => {
+    const result = await database.runAsync(
+      `INSERT INTO users (username, avatar_uri, created_at)
+       VALUES (?, ?, ?)`,
+      username,
+      avatar_uri ?? null,
+      Date.now(),
+    );
+  
+    userId = result.lastInsertRowId;
+  
+    await database.runAsync(
+      `INSERT INTO wallet (id_user, balance, name, currency)
+       VALUES (?, ?, ?, ?)`,
+      userId,
+      10000,
+      "Główny portfel",
+      "PLN",
+    );
+  
+    await database.runAsync(
+      `INSERT INTO settings
+       (user_id, dark_mode, color_mode, multi_currency, font_size,
+        biometric_enabled, currency)
+       VALUES (?, 1, 'default', 0, 'medium', 0, 'PLN')`,
+      userId,
+    );
+  
+    await database.runAsync(
+      `INSERT INTO notification_settings
+       (user_id, notifications_enabled, push_notifications_enabled,
+        portfolio, market, news, transactions, reminders)
+       VALUES (?, 0, 0, 0, 0, 0, 0, 0)`,
+      userId,
+    );
+  
+    // return userId;
+  });
+  
   const profile = await getUserProfile(userId);
-  if (!profile) throw new Error("Nie udało się utworzyć konta");
+  
+  if (!profile) {
+    throw new Error("Nie udało się utworzyć konta");
+  }
+  
   return profile;
 }
 

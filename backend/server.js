@@ -173,6 +173,16 @@ const orderNewsForTopic = (items, topic) => {
   return [...relevant, ...rest];
 };
 
+const KNOWN_US_SYMBOLS = new Set([
+  "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "TSLA", "META",
+  "NFLX", "AMD", "INTC", "IBM", "ORCL", "CRM", "ADBE", "QCOM", "TXN",
+  "AVGO", "CSCO", "PYPL", "UBER", "ABNB", "DIS", "BA", "KO", "PEP",
+  "MCD", "NKE", "SBUX", "WMT", "COST", "TGT", "JNJ", "PFE", "MRK",
+  "UNH", "ABBV", "JPM", "BAC", "WFC", "C", "GS", "MS", "V", "MA",
+  "AXP", "XOM", "CVX", "COP", "SLB", "EOG", "CAT", "DE", "GE", "HON",
+  "MMM", "LMT", "RTX", "SPY", "QQQ", "IWM", "DIA", "VOO", "VTI"
+]);
+
 const normalizeYahooSymbol = (value, exchange) => {
   const symbol = String(value).trim().toUpperCase();
   if (!symbol) return symbol;
@@ -204,6 +214,10 @@ const normalizeYahooSymbol = (value, exchange) => {
     symbol.includes("=") ||
     symbol.startsWith("^")
   ) {
+    return symbol;
+  }
+
+  if (KNOWN_US_SYMBOLS.has(symbol)) {
     return symbol;
   }
 

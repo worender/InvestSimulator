@@ -1,8 +1,11 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { PropsWithChildren } from "react";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,12 +49,41 @@ export function SettingsSheet({
   children,
 }: SettingsSheetProps) {
   const { colors } = useTheme();
-  const { bottom } = useSafeAreaInsets();
+  const { bottom, top } = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const translateY = useSharedValue(windowHeight);
   const dragStart = useSharedValue(0);
 
   useLockScreenWhileActive(true);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return undefined;
+
+    const isIos = Platform.OS === "ios";
+    const showSubscription = Keyboard.addListener(
+      isIos ? "keyboardWillShow" : "keyboardDidShow",
+      (event) => setKeyboardHeight(event.endCoordinates.height),
+    );
+    const hideSubscription = Keyboard.addListener(
+      isIos ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardHeight(0),
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  const isKeyboardOpen = keyboardHeight > 0;
+  // Gdy klawiatura jest otwarta, arkusz zajmuje całą przestrzeń nad nią,
+  // dzięki czemu aktywne pole tekstowe pozostaje widoczne.
+  const sheetHeight: `${number}%` | number = isKeyboardOpen
+    ? Platform.OS === "ios"
+      ? Math.max(windowHeight - keyboardHeight - top, 0)
+      : "100%"
+    : height;
 
   const finishClose = useCallback(() => {
     onClose();
@@ -166,94 +198,113 @@ export function SettingsSheet({
       statusBarTranslucent
     >
       <GestureHandlerRootView style={styles.gestureRoot}>
-        <View style={styles.modalRoot}>
-          <Reanimated.View
-            style={[StyleSheet.absoluteFill, backdropAnimatedStyle]}
-          >
-            <Pressable
-              style={[styles.backdrop, { backgroundColor: colors.backdrop }]}
-              onPress={animateClose}
-              accessibilityLabel="Zamknij ustawienia"
-            />
-          </Reanimated.View>
-
-          <Reanimated.View
+        <KeyboardAvoidingView
+          style={styles.gestureRoot}
+          behavior={
+            Platform.OS === "ios"
+              ? "padding"
+              : Platform.OS === "android"
+                ? "height"
+                : undefined
+          }
+        >
+          <View
             style={[
-              styles.sheet,
+              styles.modalRoot,
               {
-                height,
-                backgroundColor: colors.background,
-                borderColor: colors.borderGlass,
+                paddingTop:
+                  isKeyboardOpen && Platform.OS !== "ios" ? top : 0,
               },
-              sheetAnimatedStyle,
             ]}
           >
-            <View
-              style={[styles.header, { borderBottomColor: colors.borderGlass }]}
+            <Reanimated.View
+              style={[StyleSheet.absoluteFill, backdropAnimatedStyle]}
             >
-              <GestureDetector gesture={dragGesture}>
-                <View
-                  style={styles.dragArea}
-                  accessibilityHint="Przeciągnij w dół, aby zamknąć okno"
-                >
-                  <Reanimated.View
-                    style={[styles.dragHandle, handleAnimatedStyle]}
-                  />
-                </View>
-              </GestureDetector>
+              <Pressable
+                style={[styles.backdrop, { backgroundColor: colors.backdrop }]}
+                onPress={animateClose}
+                accessibilityLabel="Zamknij ustawienia"
+              />
+            </Reanimated.View>
 
-              <View style={styles.headerRow}>
-                <View style={styles.side} />
-
-                <GestureDetector gesture={headerDragGesture}>
-                  <View style={styles.center}>
-                    <Text
-                      accessibilityRole="header"
-                      numberOfLines={1}
-                      style={[styles.headerTitle, { color: colors.text }]}
-                    >
-                      {title}
-                    </Text>
-                    {subtitle ? (
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.headerSubtitle,
-                          { color: colors.textMuted },
-                        ]}
-                      >
-                        {subtitle}
-                      </Text>
-                    ) : null}
+            <Reanimated.View
+              style={[
+                styles.sheet,
+                {
+                  height: sheetHeight,
+                  backgroundColor: colors.background,
+                  borderColor: colors.borderGlass,
+                },
+                sheetAnimatedStyle,
+              ]}
+            >
+              <View
+                style={[styles.header, { borderBottomColor: colors.borderGlass }]}
+              >
+                <GestureDetector gesture={dragGesture}>
+                  <View
+                    style={styles.dragArea}
+                    accessibilityHint="Przeciągnij w dół, aby zamknąć okno"
+                  >
+                    <Reanimated.View
+                      style={[styles.dragHandle, handleAnimatedStyle]}
+                    />
                   </View>
                 </GestureDetector>
 
-                <View style={[styles.side, styles.sideRight]}>
-                  <Pressable
-                    onPress={animateClose}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel="Zamknij"
-                  >
-                    <Ionicons name="close" size={22} color={colors.accent} />
-                  </Pressable>
+                <View style={styles.headerRow}>
+                  <View style={styles.side} />
+
+                  <GestureDetector gesture={headerDragGesture}>
+                    <View style={styles.center}>
+                      <Text
+                        accessibilityRole="header"
+                        numberOfLines={1}
+                        style={[styles.headerTitle, { color: colors.text }]}
+                      >
+                        {title}
+                      </Text>
+                      {subtitle ? (
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.headerSubtitle,
+                            { color: colors.textMuted },
+                          ]}
+                        >
+                          {subtitle}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </GestureDetector>
+
+                  <View style={[styles.side, styles.sideRight]}>
+                    <Pressable
+                      onPress={animateClose}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel="Zamknij"
+                    >
+                      <Ionicons name="close" size={22} color={colors.accent} />
+                    </Pressable>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            <ScrollView
-              style={styles.content}
-              contentContainerStyle={[
-                styles.contentContainer,
-                { paddingBottom: 28 + bottom },
-              ]}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {children}
-            </ScrollView>
-          </Reanimated.View>
-        </View>
+              <ScrollView
+                style={styles.content}
+                contentContainerStyle={[
+                  styles.contentContainer,
+                  { paddingBottom: 28 + bottom },
+                ]}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {children}
+              </ScrollView>
+            </Reanimated.View>
+          </View>
+        </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>
   );

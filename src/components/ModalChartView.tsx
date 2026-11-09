@@ -30,6 +30,7 @@ import Reanimated, {
 import {
   buildFallbackFinancialData,
   enrichFinancialData,
+  getCachedStockData,
   getStockData,
   StockFinancialData,
 } from "../api/marketService";
@@ -37,10 +38,18 @@ import { convertForDisplay, displaySymbol } from "../displayCurrency";
 import { useLockScreenWhileActive } from "../interactionLock";
 import { notify } from "../notificationBus";
 import { useTheme } from "../theme";
+import { useWatchlist } from "../watchlist";
 import type { ChartInterval } from "./ChartFullscreenModal";
+import { CategorySelector } from "./CategorySelector";
 import { Section } from "./Section";
 import { Skeleton } from "./Skeleton";
 import { StockCandleChart } from "./StockCandleChart";
+
+const RETURN_PERIODS = [
+  { key: "1Y", label: "1Y" },
+  { key: "3Y", label: "3Y" },
+  { key: "5Y", label: "5Y" },
+] as const;
 
 interface ModalChartViewProps {
   instrument: {
@@ -201,7 +210,8 @@ export function ModalChartView({
     "1Y" | "3Y" | "5Y"
   >("1Y");
 
-  const [isFavorite, setIsFavorite] = useState(false);
+  const { isWatched, toggle: toggleWatchlist } = useWatchlist();
+  const isFavorite = isWatched(instrument.stock);
   const [favScale] = useState(() => new Animated.Value(1));
 
   const { height: windowHeight } = useWindowDimensions();
@@ -331,7 +341,12 @@ export function ModalChartView({
         useNativeDriver: true,
       }),
     ]).start();
-    setIsFavorite((prev) => !prev);
+    toggleWatchlist({
+      symbol: instrument.stock,
+      name: instrument.title,
+      exchange: instrument.exchange,
+      currency: instrument.currency,
+    });
   };
 
   useEffect(() => {
@@ -341,7 +356,18 @@ export function ModalChartView({
       let current: StockFinancialData | null | undefined =
         propFinancialData ?? instrument.financialData;
       if (!current) {
-        setLoading(true);
+        const cached = getCachedStockData(
+          instrument.stock,
+          instrument.exchange,
+        );
+        if (cached) {
+          current = cached;
+          if (isMounted) {
+            setFinancialData(cached);
+          }
+        } else {
+          setLoading(true);
+        }
         current = await getStockData(instrument.stock, instrument.exchange);
         if (isMounted && current) {
           setFinancialData(current);
@@ -486,17 +512,6 @@ export function ModalChartView({
       chartContainer: {
         paddingTop: theme.spacing.sm,
       },
-      periodButtons: {
-        flexDirection: "row" as const,
-        alignItems: "center" as const,
-        gap: 16,
-      },
-      periodButtonText: {
-        fontSize: 12,
-        fontWeight: "700" as const,
-        paddingBottom: 6,
-        borderBottomWidth: 2,
-      },
       periodBanner: {
         flexDirection: "row" as const,
         justifyContent: "space-between" as const,
@@ -581,11 +596,7 @@ export function ModalChartView({
                       <Ionicons
                         name={isFavorite ? "heart" : "heart-outline"}
                         size={22}
-                        color={
-                          isFavorite
-                            ? theme.colors.negative
-                            : theme.colors.textMuted
-                        }
+                        color={isFavorite ? "#FF3B30" : theme.colors.textMuted}
                       />
                     </Animated.View>
                   </Pressable>
@@ -643,34 +654,12 @@ export function ModalChartView({
               </View>
 
               <Section label="Zwrot">
-                <View style={styles.periodButtons}>
-                  {(["1Y", "3Y", "5Y"] as const).map((period) => {
-                    const active = selectedReturnPeriod === period;
-                    return (
-                      <Pressable
-                        key={period}
-                        onPress={() => setSelectedReturnPeriod(period)}
-                        accessibilityRole="button"
-                      >
-                        <Text
-                          style={[
-                            styles.periodButtonText,
-                            {
-                              color: active
-                                ? theme.colors.accent
-                                : theme.colors.textMuted,
-                              borderBottomColor: active
-                                ? theme.colors.accent
-                                : "transparent",
-                            },
-                          ]}
-                        >
-                          {period}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <CategorySelector
+                  options={RETURN_PERIODS}
+                  value={selectedReturnPeriod}
+                  onChange={setSelectedReturnPeriod}
+                  accessibilityLabel="Okres zwrotu"
+                />
                 {periodReturn !== undefined && (
                   <View
                     style={[
