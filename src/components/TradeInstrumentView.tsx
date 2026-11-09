@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,6 +31,8 @@ import {
 } from '../displayCurrency';
 import { notify } from '../notificationBus';
 import { useTheme } from '../theme';
+import { useContainerWidth } from '../useContainerWidth';
+import { useLayoutMode } from '../useLayoutMode';
 
 interface TradeInstrumentViewProps {
   portfolio: MockPortfolio;
@@ -63,6 +66,7 @@ export function TradeInstrumentView({
 }: TradeInstrumentViewProps) {
   const { colors, mode } = useTheme();
   const { width } = useWindowDimensions();
+  const sideBySide = useLayoutMode().isDesktop;
   const isDark = mode === 'dark';
 
   // Wyszukiwarka i filtr
@@ -301,7 +305,9 @@ export function TradeInstrumentView({
     });
   };
 
-  const chartWidth = Math.max(width - 56, 260);
+  // Szerokość z pomiaru kontenera: w oknie dialogowym na desktopie jest węższy niż okno przeglądarki
+  const [wrapperWidth, onWrapperLayout] = useContainerWidth(width - 40);
+  const chartWidth = Math.max(wrapperWidth - 16, 260);
 
   return (
     <ScrollView
@@ -465,7 +471,7 @@ export function TradeInstrumentView({
         </View>
 
         {/* Pomniejszony wykres*/}
-        <View style={styles.chartWrapper}>
+        <View style={styles.chartWrapper} onLayout={onWrapperLayout}>
           <LineChart.Provider data={activeInstrument.chartPoints}>
             <LineChart height={84} width={chartWidth}>
               <LineChart.Path color={colors.accent} width={2.2} />
@@ -572,7 +578,9 @@ export function TradeInstrumentView({
         </View>
 
         {/* Przyciski Kup i Sprzedaj */}
-        <View style={styles.actionButtonsCol}>
+        {/* Na desktopie przyciski stoją obok siebie, a komunikat jest pod swoim przyciskiem */}
+        <View style={[styles.actionButtonsCol, sideBySide && styles.actionButtonsRow]}>
+          <View style={[styles.actionCell, sideBySide && styles.actionCellRow]}>
           <Pressable
             onPress={handleExecuteBuy}
             disabled={!hasEnoughCash}
@@ -594,7 +602,9 @@ export function TradeInstrumentView({
               Brak wystarczających środków ({formatDisplayMoney(Math.max(0, totalCost - portfolio.cashBalance), portfolio.currency)}).
             </Text>
           )}
+          </View>
 
+          <View style={[styles.actionCell, sideBySide && styles.actionCellRow]}>
           <Pressable
             onPress={handleExecuteSell}
             disabled={!hasEnoughUnits}
@@ -618,6 +628,7 @@ export function TradeInstrumentView({
                 : `Dostępne do sprzedaży: ${ownedQuantity} szt.`}
             </Text>
           )}
+          </View>
         </View>
       </View>
     </ScrollView>
@@ -828,6 +839,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     minWidth: 44,
+    // Na webie <input> ma domyślną szerokość ok. 20 znaków i rozpychał wiersz poza ekran telefonu
+    ...Platform.select({ web: { width: 96, textAlign: 'center' } }),
   },
   quantityUnit: {
     fontSize: 12,
@@ -866,6 +879,17 @@ const styles = StyleSheet.create({
   },
   actionButtonsCol: {
     gap: 8,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  actionCell: {
+    gap: 8,
+  },
+  actionCellRow: {
+    flex: 1,
   },
   tradeBtn: {
     flexDirection: 'row',
