@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { convertForDisplay, displaySymbol } from "../displayCurrency";
+import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 import { Skeleton } from "./Skeleton";
 
@@ -30,13 +30,14 @@ export function InstrumentRow({
   secondary,
 }: InstrumentRowProps) {
   const { colors } = useTheme();
+  const display = useDisplayCurrency();
   const hasPrice = price !== undefined && price !== null;
   const isPositive = (changePercent ?? 0) >= 0;
   const priceLabel = hasPrice
-    ? `${convertForDisplay(price, currency).toLocaleString("pl-PL", {
+    ? `${display.convertForDisplay(price, currency).toLocaleString("pl-PL", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      })} ${displaySymbol(currency)}`
+      })} ${display.displaySymbol(currency)}`
     : "";
 
   return (
