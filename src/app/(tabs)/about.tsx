@@ -144,9 +144,9 @@ export default function AboutScreen() {
             onPress={() =>
               notify({
                 variant: "info",
-                title: "Centrum wiedzy",
+                title: "Kategorie artykułów",
                 message:
-                  "Rozwiń blok kategorii, aby zobaczyć artykuły i najnowsze newsy rynkowe.",
+                  "Rozwiń kategorię, aby zobaczyć artykuły i najnowsze newsy rynkowe.",
               })
             }
             accessibilityLabel="Pomoc"
@@ -175,10 +175,6 @@ export default function AboutScreen() {
           showsVerticalScrollIndicator={false}
           {...scrollNav}
         >
-          <Text style={[styles.title, { color: colors.text }]}>
-            Centrum wiedzy
-          </Text>
-
           <ExpandableCategoryBlock
             title="Artykuły edukacyjne"
             count={EDUCATIONAL_ARTICLES.length}
@@ -288,13 +284,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
-  title: {
-    fontSize: 25,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-    marginTop: 8,
-    marginBottom: 20,
-  },
   skeletonRow: {
     paddingVertical: 14,
     gap: 8,

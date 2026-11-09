@@ -139,8 +139,6 @@ export default function Index() {
     searchTerm.length >= 2 &&
     (searchLoading || completedQuery !== "");
 
-  const dayTime = new Date().getHours();
-
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
@@ -283,15 +281,6 @@ export default function Index() {
             </Section>
           ) : (
             <>
-              <Text style={[styles.title, { color: colors.text }]}>
-                {dayTime < 12
-                  ? "Dzień dobry"
-                  : dayTime < 18
-                    ? "Dzień dobry"
-                    : "Dobry wieczór"}
-                , {activeAccount?.username || "inwestorze"}
-              </Text>
-
               <Section label="Portfel">
                 <PortfolioOverviewCard
                   key={`${defaultCurrency}-${multiCurrency}`}
@@ -335,13 +324,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    marginBottom: 8,
-  },
-  title: { fontSize: 25, fontWeight: "700", letterSpacing: -0.5, marginTop: 8 },
   searchState: {
     alignItems: "center",
     paddingVertical: 44,

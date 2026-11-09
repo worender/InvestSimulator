@@ -82,9 +82,8 @@ export function AccountSwitcher({
         style={({ pressed }) => [
           styles.accountBox,
           {
-            backgroundColor: colors.surface,
-            borderColor: expanded ? colors.accent : colors.borderGlass,
-            opacity: pressed ? 0.78 : 1,
+            borderBottomColor: colors.borderGlass,
+            opacity: pressed ? 0.68 : 1,
           },
         ]}
       >
@@ -119,10 +118,7 @@ export function AccountSwitcher({
           <View
             style={[
               styles.dropdown,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.borderGlass,
-              },
+              { backgroundColor: colors.background },
             ]}
           >
             {accounts.map((account, index) => {
@@ -178,7 +174,6 @@ export function AccountSwitcher({
                 styles.addRow,
                 {
                   borderTopColor: colors.borderGlass,
-                  backgroundColor: colors.surface,
                   opacity: pressed ? 0.68 : 1,
                 },
               ]}
@@ -201,28 +196,20 @@ const styles = StyleSheet.create({
   area: {
     width: "100%",
     alignSelf: "center",
-    marginTop: 10,
+    marginTop: 8,
   },
   accountBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    borderRadius: 18,
-    borderWidth: 1.2,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   accountCopy: { flex: 1, minWidth: 0 },
   accountName: {
     fontSize: 17,
     fontWeight: "800",
     letterSpacing: -0.25,
-  },
-  accountHint: {
-    fontSize: 10,
-    fontWeight: "600",
-    marginTop: 3,
-    letterSpacing: 0.2,
   },
   dropdownClip: {
     overflow: "hidden",
@@ -232,19 +219,15 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingTop: 8,
   },
   dropdown: {
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
   },
   accountRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   rowName: {
     flex: 1,
@@ -255,8 +238,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   addBadge: {
