@@ -139,8 +139,6 @@ export default function Index() {
     searchTerm.length >= 2 &&
     (searchLoading || completedQuery !== "");
 
-  const dayTime = new Date().getHours();
-
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <PanelHeader
