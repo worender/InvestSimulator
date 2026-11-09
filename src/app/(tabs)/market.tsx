@@ -29,10 +29,11 @@ import { Section } from '../../components/Section';
 import { Skeleton } from '../../components/Skeleton';
 import { StockCandleChart } from '../../components/StockCandleChart';
 import { resolveCurrency } from '../../currency';
-import { notify } from '../../notificationBus';
+import { NOTIFICATION_GROUPS, notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
 import { useKeyboardShortcut } from '../../useKeyboardShortcut';
 import { useLayoutMode } from '../../useLayoutMode';
+import { useResetOnPanelBlur } from '../../useResetOnPanelBlur';
 import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
 
 interface FeaturedStock {
@@ -112,6 +113,15 @@ export default function MarketScreen() {
     exchange: string;
     financialData?: StockFinancialData;
   } | null>(null);
+
+  // Po opuszczeniu zakładki wyszukiwanie i jego lista wyników wracają do stanu początkowego.
+  useResetOnPanelBlur(() => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setCompletedQuery('');
+    setSearchLoading(false);
+  });
 
   // Pobieranie aktualnych notowań dla domyślnych spółek w tle po załadowaniu komponentu
   useEffect(() => {
@@ -199,6 +209,7 @@ export default function MarketScreen() {
           notify({
             variant: 'warning',
             title: 'Brak danych finansowych',
+            category: NOTIFICATION_GROUPS.marketFinancials,
             message: `Nie udało się pobrać szczegółów dla ${item.symbol}. Dostępne są tylko notowania.`,
           });
         }
@@ -207,6 +218,7 @@ export default function MarketScreen() {
         notify({
           variant: 'error',
           title: 'Błąd pobierania danych',
+          category: NOTIFICATION_GROUPS.marketFinancials,
           message: `Nie udało się pobrać danych dla ${item.symbol}. Spróbuj ponownie później.`,
         });
       }

@@ -2,7 +2,7 @@ import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
-import { notify } from "../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 
 const API_PORT = 3000;
 const LOCAL_BASE_URL = `http://localhost:${API_PORT}`;
@@ -328,6 +328,7 @@ const fetchStockCandlesFromApi = async (
       notify({
         variant: "error",
         title: "Opóźnione pobieranie danych",
+        category: NOTIFICATION_GROUPS.marketChart,
         message: `Oczekiwanie na ponowną próbę pobrania danych świec dla ${symbol}. Próba za ${elapsedSeconds} sekund...`,
       });
       return null;
@@ -365,6 +366,7 @@ const fetchStockCandlesFromApi = async (
     notify({
       variant: "warning",
       title: "Brak notowań",
+      category: NOTIFICATION_GROUPS.marketChart,
       message: `Nie udało się pobrać danych wykresu dla ${symbol}. Spróbuj ponownie za chwilę.`,
     });
     return null;
@@ -440,6 +442,7 @@ export const searchInstruments = async (
     notify({
       variant: "error",
       title: "Wyszukiwanie nie powiodło się",
+      category: NOTIFICATION_GROUPS.marketSearch,
       message:
         "Nie udało się pobrać wyników. Sprawdź połączenie z internetem i spróbuj ponownie.",
     });
@@ -513,6 +516,7 @@ const fetchDynamicTrendsFromApi = async (
     notify({
       variant: "warning",
       title: "Brak trendów",
+      category: NOTIFICATION_GROUPS.marketTrends,
       message:
         "Nie udało się pobrać danych trendów. Spróbuj ponownie za chwilę.",
     });
@@ -675,6 +679,7 @@ const fetchStockDataFromApi = async (
     notify({
       variant: "error",
       title: "Błąd danych finansowych",
+      category: NOTIFICATION_GROUPS.marketFinancials,
       message: `Nie udało się pobrać danych finansowych dla ${symbol}. Sprawdź połączenie i spróbuj ponownie.`,
     });
     return null;
@@ -731,6 +736,7 @@ const fetchStockPerformanceFromApi = async (
     notify({
       variant: "warning",
       title: "Brak danych wyników",
+      category: NOTIFICATION_GROUPS.marketEarnings,
       message: `Nie udało się pobrać wyników historycznych dla ${symbol}. Dane mogą być niepełne.`,
     });
     return null;
@@ -785,6 +791,7 @@ const fetchStockQuoteDetailsFromApi = async (
     notify({
       variant: "error",
       title: "Błąd danych notowań",
+      category: NOTIFICATION_GROUPS.marketQuotes,
       message: `Nie udało się pobrać szczegółów notowań dla ${symbol}. Dane mogą być niepełne.`,
     });
     return null;
@@ -865,6 +872,7 @@ export const enrichFinancialData = async (
           notify({
             variant: "warning",
             title: "Brak danych wyników",
+            category: NOTIFICATION_GROUPS.marketEarnings,
             message:
               "Nie udało się uzupełnić danych o wyniki historyczne. Wyświetlona zostanie podstawowa wersja.",
           });
@@ -903,6 +911,7 @@ export const enrichFinancialData = async (
           notify({
             variant: "warning",
             title: "Brak danych notowań",
+            category: NOTIFICATION_GROUPS.marketQuotes,
             message:
               "Nie udało się uzupełnić danych o szczegóły notowań. Wyświetlona zostanie podstawowa wersja.",
           });
@@ -983,6 +992,7 @@ export const buildFallbackFinancialData = async (
     notify({
       variant: "error",
       title: "Brak danych finansowych",
+      category: NOTIFICATION_GROUPS.marketFinancials,
       message:
         "Nie udało się pobrać żadnych danych finansowych. Sprawdź połączenie z internetem.",
     });

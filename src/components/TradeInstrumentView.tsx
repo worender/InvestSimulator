@@ -29,7 +29,7 @@ import {
   convertForDisplay,
   displaySymbol,
 } from '../displayCurrency';
-import { notify } from '../notificationBus';
+import { NOTIFICATION_GROUPS, notify } from '../notificationBus';
 import { useTheme } from '../theme';
 import { useContainerWidth } from '../useContainerWidth';
 import { useLayoutMode } from '../useLayoutMode';
@@ -266,6 +266,7 @@ export function TradeInstrumentView({
       notify({
         variant: 'warning',
         title: 'Brak środków',
+        category: NOTIFICATION_GROUPS.transactions,
         message: 'Nie posiadasz wystarczających środków na zakup tej ilości.',
       });
       return;
@@ -279,6 +280,7 @@ export function TradeInstrumentView({
     notify({
       variant: 'success',
       title: 'Zlecenie zrealizowane',
+      category: NOTIFICATION_GROUPS.transactions,
       message: `Pomyślnie kupiono ${parsedQuantity} szt. ${activeInstrument.symbol} za ${formatDisplayMoney(totalCost, activeInstrument.currency)}.`,
     });
   };
@@ -288,6 +290,7 @@ export function TradeInstrumentView({
       notify({
         variant: 'warning',
         title: 'Brak jednostek',
+        category: NOTIFICATION_GROUPS.transactions,
         message: 'Nie posiadasz wystarczającej liczby jednostek do sprzedaży.',
       });
       return;
@@ -301,6 +304,7 @@ export function TradeInstrumentView({
     notify({
       variant: 'success',
       title: 'Zlecenie sprzedaży zrealizowane',
+      category: NOTIFICATION_GROUPS.transactions,
       message: `Pomyślnie sprzedano ${parsedQuantity} szt. ${activeInstrument.symbol} za ${formatDisplayMoney(totalCost, activeInstrument.currency)}.`,
     });
   };

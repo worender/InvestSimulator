@@ -7,7 +7,7 @@ import {
   StockFinancialData,
 } from '../api/marketService';
 import { convertForDisplay, displaySymbol } from '../displayCurrency';
-import { notify } from '../notificationBus';
+import { NOTIFICATION_GROUPS, notify } from '../notificationBus';
 import { useTheme } from '../theme';
 import { Section } from './Section';
 import { Skeleton } from './Skeleton';
@@ -92,6 +92,7 @@ export function useInstrumentFinancialData(instrument: InstrumentRef, propFinanc
           notify({
             variant: 'error',
             title: 'Brak danych finansowych',
+            category: NOTIFICATION_GROUPS.marketFinancials,
             message: `Nie udało się pobrać danych dla ${instrument.stock}. Wykres pozostaje dostępny.`,
           });
         }

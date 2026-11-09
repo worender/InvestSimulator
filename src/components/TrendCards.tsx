@@ -12,7 +12,7 @@ import {
 } from "../api/marketService";
 import { currencySymbol, resolveCurrency } from "../currency";
 import { convertForDisplay, displaySymbol } from "../displayCurrency";
-import { notify } from "../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { useTheme } from "../theme";
 import { CategorySelector } from "./CategorySelector";
 import { CHART_RANGES } from "./ChartFullscreenModal";
@@ -242,6 +242,7 @@ export function TrendCards() {
               notify({
                 variant: "error",
                 title: "Błąd ładowania trendów",
+                category: NOTIFICATION_GROUPS.marketTrends,
                 message:
                   "Nie udało się pobrać danych trendów. Spróbuj ponownie później.",
               });

@@ -3,6 +3,7 @@ import { BlurView } from "expo-blur";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SearchableInstrument } from "../database/mockSearchableInstruments";
 import { formatMoneyForDisplay } from "../displayCurrency";
+import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
 
 interface MarketClosedNoticeModalProps {
@@ -39,6 +40,7 @@ export function MarketClosedNoticeModal({
       animationType="fade"
       onRequestClose={onClose}
     >
+      <NotificationHost />
       <View style={styles.backdrop}>
         <BlurView
           intensity={isDark ? 50 : 35}

@@ -34,10 +34,11 @@ import { TrendCards } from "../../components/TrendCards";
 import { WatchedInstrumentsSection } from "../../components/WatchedInstrumentsSection";
 import { AccountAvatar } from "../../components/settings/AccountAvatar";
 import { resolveCurrency } from "../../currency";
-import { notify } from "../../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
 import { useKeyboardShortcut } from "../../useKeyboardShortcut";
 import { useLayoutMode } from "../../useLayoutMode";
+import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 export default function Index() {
@@ -64,6 +65,16 @@ export default function Index() {
     exchange: string;
     financialData?: StockFinancialData;
   } | null>(null);
+
+  // Po opuszczeniu zakładki menu konta i wyszukiwanie wracają do stanu początkowego.
+  useResetOnPanelBlur(() => {
+    setSearchOpen(false);
+    setAccountMenuOpen(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    setCompletedQuery("");
+    setSearchLoading(false);
+  });
 
   useEffect(() => {
     const timeout = setTimeout(async () => {
@@ -115,6 +126,7 @@ export default function Index() {
         notify({
           variant: "warning",
           title: "Brak danych finansowych",
+          category: NOTIFICATION_GROUPS.marketFinancials,
           message: `Nie udało się pobrać szczegółów dla ${instrument.symbol}. Dostępne są tylko notowania.`,
         });
       }
@@ -128,6 +140,7 @@ export default function Index() {
       notify({
         variant: "error",
         title: "Błąd pobierania danych",
+        category: NOTIFICATION_GROUPS.marketFinancials,
         message: `Nie udało się pobrać danych dla ${instrument.symbol}. Spróbuj ponownie później.`,
       });
       setModalInstrument(selectedInstrument);

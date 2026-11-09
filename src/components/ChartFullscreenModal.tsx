@@ -32,6 +32,7 @@ import {
   displaySymbol,
 } from '../displayCurrency';
 import { useLockScreenWhileActive } from '../interactionLock';
+import { NotificationHost } from '../notifications';
 import { useTheme } from '../theme';
 
 export type ChartInterval = '1m' | '5m' | '15m' | '1h' | '1d' | '1wk';
@@ -330,6 +331,7 @@ export function ChartFullscreenModal({
       onRequestClose={animateClose}
       statusBarTranslucent
     >
+      <NotificationHost />
       <View style={styles.modalRoot}>
         <Reanimated.View style={[styles.backdrop, backdropAnimatedStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} />

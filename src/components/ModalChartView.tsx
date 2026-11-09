@@ -36,7 +36,8 @@ import {
 } from "../api/marketService";
 import { convertForDisplay, displaySymbol } from "../displayCurrency";
 import { useLockScreenWhileActive } from "../interactionLock";
-import { notify } from "../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
+import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
 import { useWatchlist } from "../watchlist";
 import { CategorySelector } from "./CategorySelector";
@@ -394,6 +395,7 @@ export function ModalChartView({
           notify({
             variant: "error",
             title: "Brak danych finansowych",
+            category: NOTIFICATION_GROUPS.marketFinancials,
             message: `Nie udało się pobrać danych dla ${instrument.stock}. Wykres pozostaje dostępny.`,
           });
         }
@@ -551,6 +553,7 @@ export function ModalChartView({
       animationType="none"
       onRequestClose={animateClose}
     >
+      <NotificationHost />
       <GestureHandlerRootView style={styles.gestureRoot}>
         <View style={styles.modalRoot}>
           <Reanimated.View
