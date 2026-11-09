@@ -1,3 +1,4 @@
+import { Platform } from "expo";
 import * as SQLite from "expo-sqlite";
 import { ValidateAvatarUrl, ValidateUserName } from "./checkSecurityParam";
 import {
@@ -7,14 +8,24 @@ import {
   type ArticleSource,
   type EducationalArticle,
 } from "./educationalArticles";
+import { acquireDbLock } from "./dbLock";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initializationPromise: Promise<void> | null = null;
 
-function getDatabase(): Promise<SQLite.SQLiteDatabase> {
+export async function getDatabase() {
+  if (Platform.OS === "web") {
+    const ok = await acquireDbLock();
+    if (!ok) throw new Error("DB_OPEN_IN_OTHER_TAB");
+  }
   databasePromise ??= SQLite.openDatabaseAsync("invest-simulator.db");
   return databasePromise;
 }
+
+// function getDatabase(): Promise<SQLite.SQLiteDatabase> {
+//   databasePromise ??= SQLite.openDatabaseAsync("invest-simulator.db");
+//   return databasePromise;
+// }
 
 export type TransactionType = "BUY" | "SELL";
 
@@ -388,6 +399,26 @@ export async function getPortfolio(): Promise<PortfolioItem[]> {
 //   }
 // };
 
+///Get the user's wallet (balance shown in the web sidebar), returns null if not found. Default userId is 1.
+export async function getWallet(userId = 1): Promise<Wallet | null> {
+  if (userId <= 0 || !Number.isInteger(userId)) {
+    throw new Error("Nieprawidłowy identyfikator użytkownika");
+  }
+
+  const database = await getReadyDatabase();
+
+  return (
+    (await database.getFirstAsync<Wallet>(
+      `SELECT id, balance, currency, id_user, name, icon
+     FROM wallet
+     WHERE id_user = ?
+     ORDER BY id
+     LIMIT 1`,
+      userId,
+    )) ?? null
+  );
+}
+
 ///Get user profile by userId, returns null if not found. Default userId is 1.
 export async function getUserProfile(userId = 1): Promise<UserProfile | null> {
   if (userId <= 0 || !Number.isInteger(userId)) {
@@ -440,9 +471,9 @@ export async function createUserProfile(input: {
       avatar_uri ?? null,
       Date.now(),
     );
-  
+
     userId = result.lastInsertRowId;
-  
+
     await database.runAsync(
       `INSERT INTO wallet (id_user, balance, name, currency)
        VALUES (?, ?, ?, ?)`,
@@ -451,7 +482,7 @@ export async function createUserProfile(input: {
       "Główny portfel",
       "PLN",
     );
-  
+
     await database.runAsync(
       `INSERT INTO settings
        (user_id, dark_mode, color_mode, multi_currency, font_size,
@@ -459,7 +490,7 @@ export async function createUserProfile(input: {
        VALUES (?, 1, 'default', 0, 'medium', 0, 'PLN')`,
       userId,
     );
-  
+
     await database.runAsync(
       `INSERT INTO notification_settings
        (user_id, notifications_enabled, push_notifications_enabled,
@@ -467,16 +498,16 @@ export async function createUserProfile(input: {
        VALUES (?, 0, 0, 0, 0, 0, 0, 0)`,
       userId,
     );
-  
+
     // return userId;
   });
-  
+
   const profile = await getUserProfile(userId);
-  
+
   if (!profile) {
     throw new Error("Nie udało się utworzyć konta");
   }
-  
+
   return profile;
 }
 

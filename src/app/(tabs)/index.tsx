@@ -1,5 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
+import { useIsFocused } from "expo-router";
 import {
   useCallback,
   useEffect,
@@ -7,7 +8,14 @@ import {
   useState,
   type ComponentRef,
 } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getStockData,
@@ -28,10 +36,13 @@ import { AccountAvatar } from "../../components/settings/AccountAvatar";
 import { resolveCurrency } from "../../currency";
 import { notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
+import { useKeyboardShortcut } from "../../useKeyboardShortcut";
+import { useLayoutMode } from "../../useLayoutMode";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 export default function Index() {
   const { colors, defaultCurrency, multiCurrency, activeAccount } = useTheme();
+  const { isDesktop } = useLayoutMode();
   const { bottom, top } = useSafeAreaInsets();
   // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
@@ -139,7 +150,18 @@ export default function Index() {
     searchTerm.length >= 2 &&
     (searchLoading || completedQuery !== "");
 
-  const dayTime = new Date().getHours();
+  // Skróty na webie działają tylko na widocznej zakładce (pozostałe zostają zamontowane w tle)
+  const isFocused = useIsFocused();
+  const openSearchShortcut = useCallback((event: KeyboardEvent) => {
+    event.preventDefault();
+    setSearchOpen(true);
+  }, []);
+  useKeyboardShortcut("/", openSearchShortcut, isFocused && !modalVisible);
+  useKeyboardShortcut(
+    "Escape",
+    closeSearch,
+    isFocused && searchOpen && !modalVisible,
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -187,13 +209,14 @@ export default function Index() {
           style={{ backgroundColor: colors.background }}
           contentContainerStyle={[
             styles.content,
+            isDesktop && styles.contentDesktop,
             {
               paddingBottom: 38 + bottom,
               paddingTop: top + PANEL_HEADER_HEIGHT + 8,
             },
           ]}
           keyboardShouldPersistTaps="always"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={Platform.OS === "web"}
           {...scrollNav}
         >
           {isSearching ? (
@@ -283,15 +306,6 @@ export default function Index() {
             </Section>
           ) : (
             <>
-              <Text style={[styles.title, { color: colors.text }]}>
-                {dayTime < 12
-                  ? "Dzień dobry"
-                  : dayTime < 18
-                    ? "Dzień dobry"
-                    : "Dobry wieczór"}
-                , {activeAccount?.username || "inwestorze"}
-              </Text>
-
               <Section label="Portfel">
                 <PortfolioOverviewCard
                   key={`${defaultCurrency}-${multiCurrency}`}
@@ -335,6 +349,15 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
+  contentDesktop: {
+    width: "100%",
+    maxWidth: 1280,
+    alignSelf: "center",
+    paddingHorizontal: 32,
+  },
+  columns: { flexDirection: "row", alignItems: "flex-start", gap: 32 },
+  mainColumn: { flex: 3, minWidth: 0 },
+  sideColumn: { flex: 2, minWidth: 0 },
   eyebrow: {
     fontSize: 11,
     fontWeight: "700",

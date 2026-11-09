@@ -45,6 +45,7 @@ import {
   type FontSizePreference,
   type ThemeMode,
 } from "../../theme";
+import { useLayoutMode } from "../../useLayoutMode";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 const THEME_OPTIONS: ChoiceOption<ThemeMode>[] = [
@@ -104,6 +105,7 @@ export default function SettingsScreen() {
   const { bottom, top } = useSafeAreaInsets();
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
+  const { isDesktop, isWeb } = useLayoutMode();
   const scrollRef = useRef<ScrollViewInstance>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -349,13 +351,14 @@ export default function SettingsScreen() {
           style={{ backgroundColor: colors.background }}
           contentContainerStyle={[
             styles.content,
+            isDesktop && styles.contentDesktop,
             {
               paddingBottom: 38 + bottom,
               paddingTop: top + PANEL_HEADER_HEIGHT + 8,
             },
           ]}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={isWeb}
           {...scrollNav}
         >
           <AccountSwitcher
@@ -884,8 +887,9 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   blurTarget: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
+  // Na desktopie treść w wyśrodkowanej kolumnie o ograniczonej szerokości
+  contentDesktop: { width: "100%", maxWidth: 760, alignSelf: "center", paddingHorizontal: 32 },
   swatchArea: {
-    paddingHorizontal: 14,
     paddingTop: 12,
     paddingBottom: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -895,8 +899,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rateCopy: { flex: 1, minWidth: 0 },
@@ -906,8 +909,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   rateName: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 12,
+    marginTop: 3,
   },
   rateValue: {
     fontSize: 15,
@@ -918,18 +921,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   rateRefreshCopy: { flex: 1, minWidth: 0 },
   rateRefreshTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
   rateRefreshMeta: {
-    fontSize: 11,
-    marginTop: 2,
-    lineHeight: 15,
+    fontSize: 12,
+    marginTop: 3,
+    lineHeight: 17,
   },
   accountActions: {
     marginTop: 48,

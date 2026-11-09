@@ -26,6 +26,7 @@ import Reanimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CandlestickChart } from 'react-native-wagmi-charts';
 import { CandleData, getStockCandles } from '../api/marketService';
+import { ChartCrosshair, renderCandleLine, renderCandleRect } from './CandleHoverCrosshair';
 import {
   convertForDisplay,
   displaySymbol,
@@ -519,8 +520,10 @@ export function ChartFullscreenModal({
                         useAnimations={false}
                         positiveColor={colors.positive}
                         negativeColor={colors.negative}
+                        renderLine={renderCandleLine}
+                        renderRect={renderCandleRect}
                       />
-                      <CandlestickChart.Crosshair color={colors.textMuted} minDurationMs={240}>
+                      <ChartCrosshair color={colors.textMuted} minDurationMs={240}>
                         <CandlestickChart.Tooltip
                           style={[
                             styles.tooltip,
@@ -536,7 +539,7 @@ export function ChartFullscreenModal({
                             style: { color: colors.text, fontSize: 12, fontWeight: '700' },
                           }}
                         />
-                      </CandlestickChart.Crosshair>
+                      </ChartCrosshair>
                     </CandlestickChart>
                   </CandlestickChart.Provider>
                 </View>

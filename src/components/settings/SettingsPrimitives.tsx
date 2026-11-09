@@ -29,20 +29,10 @@ export function SettingsCategory({ title, children }: SettingsCategoryProps) {
 
   return (
     <View style={styles.category}>
-      <Text style={[styles.categoryLabel, { color: colors.accent }]}>
+      <Text style={[styles.categoryLabel, { color: colors.textMuted }]}>
         {title}
       </Text>
-      <View
-        style={[
-          styles.group,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.borderGlass,
-          },
-        ]}
-      >
-        {children}
-      </View>
+      {children}
     </View>
   );
 }
@@ -139,12 +129,13 @@ export function SettingsRow({
     </>
   );
 
+  const baseOpacity = disabled ? 0.5 : 1;
   const rowStyle = [
     styles.row,
     {
       borderBottomColor: colors.borderGlass,
       borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth,
-      opacity: disabled ? 0.5 : 1,
+      opacity: baseOpacity,
     },
   ];
 
@@ -159,8 +150,12 @@ export function SettingsRow({
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
-        ...rowStyle,
-        { backgroundColor: pressed ? colors.surfaceMutedGlass : "transparent" },
+        styles.row,
+        {
+          borderBottomColor: colors.borderGlass,
+          borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth,
+          opacity: pressed ? 0.65 : baseOpacity,
+        },
       ]}
     >
       {content}
@@ -171,20 +166,14 @@ export function SettingsRow({
 const styles = StyleSheet.create({
   category: {
     marginTop: 24,
-    marginBottom: 4,
+    marginBottom: 8,
   },
   categoryLabel: {
     fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.2,
+    fontWeight: "700",
+    letterSpacing: 1.1,
     textTransform: "uppercase",
-    marginBottom: 10,
-    marginLeft: 2,
-  },
-  group: {
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden",
+    marginBottom: 12,
   },
   nestedClip: {
     overflow: "hidden",
@@ -196,31 +185,29 @@ const styles = StyleSheet.create({
     right: 0,
   },
   nestedIndent: {
-    marginLeft: 26,
+    marginLeft: 36,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 14,
     minHeight: 58,
   },
   iconBadge: {
     width: 24,
-    height: 34,
     alignItems: "center",
     justifyContent: "center",
   },
   copy: { flex: 1, minWidth: 0 },
   title: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     letterSpacing: -0.1,
   },
   subtitle: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 17,
     marginTop: 3,
   },
 });

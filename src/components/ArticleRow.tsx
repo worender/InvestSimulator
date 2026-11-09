@@ -85,9 +85,9 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
-    lineHeight: 21,
+    lineHeight: 20,
     letterSpacing: -0.1,
   },
   languageBadge: {
@@ -106,12 +106,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   summary: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 19,
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
   },
   meta: {
-    marginTop: 8,
+    marginTop: 6,
     fontSize: 11,
     fontWeight: "500",
     letterSpacing: 0.1,
