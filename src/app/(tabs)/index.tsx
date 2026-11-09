@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
-import { useIsFocused, useRouter } from "expo-router";
+import { useIsFocused } from "expo-router";
 import {
   useCallback,
   useEffect,
@@ -8,7 +8,14 @@ import {
   useState,
   type ComponentRef,
 } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getStockData,
@@ -35,6 +42,7 @@ import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 export default function Index() {
   const { colors, defaultCurrency, multiCurrency, activeAccount } = useTheme();
+  const { isDesktop } = useLayoutMode();
   const { bottom, top } = useSafeAreaInsets();
   // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
@@ -149,7 +157,11 @@ export default function Index() {
     setSearchOpen(true);
   }, []);
   useKeyboardShortcut("/", openSearchShortcut, isFocused && !modalVisible);
-  useKeyboardShortcut("Escape", closeSearch, isFocused && searchOpen && !modalVisible);
+  useKeyboardShortcut(
+    "Escape",
+    closeSearch,
+    isFocused && searchOpen && !modalVisible,
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -337,7 +349,12 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
-  contentDesktop: { width: "100%", maxWidth: 1280, alignSelf: "center", paddingHorizontal: 32 },
+  contentDesktop: {
+    width: "100%",
+    maxWidth: 1280,
+    alignSelf: "center",
+    paddingHorizontal: 32,
+  },
   columns: { flexDirection: "row", alignItems: "flex-start", gap: 32 },
   mainColumn: { flex: 3, minWidth: 0 },
   sideColumn: { flex: 2, minWidth: 0 },

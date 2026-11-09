@@ -1,17 +1,20 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Animated,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
-} from 'react-native';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+} from "react-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
 import Reanimated, {
   cancelAnimation,
   Easing,
@@ -36,8 +39,8 @@ import { useLockScreenWhileActive } from "../interactionLock";
 import { notify } from "../notificationBus";
 import { useTheme } from "../theme";
 import { useWatchlist } from "../watchlist";
-import type { ChartInterval } from "./ChartFullscreenModal";
 import { CategorySelector } from "./CategorySelector";
+import type { ChartInterval } from "./ChartFullscreenModal";
 import { Section } from "./Section";
 import { Skeleton } from "./Skeleton";
 import { StockCandleChart } from "./StockCandleChart";
@@ -63,6 +66,127 @@ interface ModalChartViewProps {
   initialInterval?: ChartInterval;
 }
 
+// Funkcja formatująca wartość pieniężną zgodnie z ustawieniami regionalnymi i symbolem waluty
+export const formatCurrency = (
+  value?: number,
+  currencyCode?: string,
+): string => {
+  if (value === undefined || currencyCode === undefined) return "-";
+  const converted = convertForDisplay(value, currencyCode);
+  const symbol = displaySymbol(currencyCode);
+  return `${converted.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
+};
+
+// Funkcja formatująca wartość procentową z dwoma miejscami po przecinku
+export const formatPercent = (value?: number): string => {
+  if (value === undefined) return "-";
+  return `${value.toFixed(2)}%`;
+};
+
+// Funkcja formatująca wartość liczbową z dwoma miejscami po przecinku
+export const formatDate = (dateString?: string): string => {
+  if (!dateString) return "-";
+  return new Date(dateString).toLocaleDateString("pl-PL", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+};
+
+// Funkcja formatująca wartość liczbową z dwoma miejscami po przecinku
+export const formatNumber = (value?: number): string => {
+  if (value === undefined || value === null) return "-";
+  return value.toLocaleString("pl-PL");
+};
+
+// Funkcja formatująca wartość stosunku z dwoma miejscami po przecinku
+export const formatRatio = (value?: number): string => {
+  if (value === undefined || value === null || Number.isNaN(value)) return "-";
+  return value.toLocaleString("pl-PL", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
+interface DataItemProps {
+  label: string;
+  value: string;
+  subValue?: string;
+  divider?: boolean;
+}
+
+// Komponent wyświetlający pojedynczy wiersz danych finansowych z etykietą, wartością i opcjonalną wartością podrzędną oraz linią podziału
+function DataItem({ label, value, subValue, divider = true }: DataItemProps) {
+  const theme = useTheme();
+  return (
+    <View
+      style={[
+        dataItemStyles.dataRow,
+        divider && {
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: theme.colors.borderGlass,
+        },
+      ]}
+    >
+      <Text
+        style={[
+          dataItemStyles.dataLabel,
+          { color: theme.colors.textMuted, fontSize: theme.fontSize.sm },
+        ]}
+      >
+        {label}
+      </Text>
+      <View style={dataItemStyles.dataValueContainer}>
+        <Text
+          style={[
+            dataItemStyles.dataValue,
+            { color: theme.colors.text, fontSize: theme.fontSize.sm },
+          ]}
+        >
+          {value}
+        </Text>
+        {subValue && (
+          <Text
+            style={[
+              dataItemStyles.dataSubValue,
+              {
+                color: theme.colors.textMuted,
+                fontSize: theme.fontSize.xs,
+                marginLeft: theme.spacing.xs,
+              },
+            ]}
+          >
+            {subValue}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// Stylesheet dla komponentu DataItem (pojedynczy wiersz danych finansowych)
+const dataItemStyles = StyleSheet.create({
+  dataRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+  },
+  dataLabel: {
+    flex: 1,
+  },
+  dataValueContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  dataValue: {
+    fontWeight: "500",
+  },
+  dataSubValue: {},
+});
+
 // Komponent wyświetlający widok wykresu w formie modala
 export function ModalChartView({
   instrument,
@@ -75,17 +199,23 @@ export function ModalChartView({
 
   // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(true);
-  const { financialData, loading } = useInstrumentFinancialData(instrument, propFinancialData);
+
+  const [financialData, setFinancialData] = useState<StockFinancialData | null>(
+    propFinancialData ?? instrument.financialData ?? null,
+  );
+  const [loading, setLoading] = useState<boolean>(
+    !propFinancialData && !instrument.financialData,
+  );
+  const [selectedReturnPeriod, setSelectedReturnPeriod] = useState<
+    "1Y" | "3Y" | "5Y"
+  >("1Y");
 
   const { isWatched, toggle: toggleWatchlist } = useWatchlist();
   const isFavorite = isWatched(instrument.stock);
   const [favScale] = useState(() => new Animated.Value(1));
-  
-  // Przeciąganie i animacja modala
+
   const { height: windowHeight } = useWindowDimensions();
-  // Wartość przesunięcia arkusza w dół
   const translateY = useSharedValue(windowHeight);
-  // Pozycja arkusza w chwili rozpoczęcia gestu
   const dragStart = useSharedValue(0);
   const finishClose = useCallback(() => {
     onClose();
@@ -94,14 +224,13 @@ export function ModalChartView({
   // Próg przesunięcia, po którym modal zostanie zamknięty
   const closeThreshold = Math.max(windowHeight * 0.12, 96);
 
-  // Wyjazd arkusza poza ekran - używany przez gest, tło i przycisk zamknięcia
   const animateClose = useCallback(() => {
     // eslint-disable-next-line react-hooks/immutability
     translateY.value = withTiming(
       windowHeight,
       { duration: 220, easing: Easing.out(Easing.cubic) },
       (finished) => {
-        'worklet';
+        "worklet";
         if (finished) {
           runOnJS(finishClose)();
         }
@@ -112,7 +241,10 @@ export function ModalChartView({
   // Animacja wejścia
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
-    translateY.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) });
+    translateY.value = withTiming(0, {
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+    });
   }, [translateY]);
 
   const createDragGesture = useCallback(
@@ -131,7 +263,8 @@ export function ModalChartView({
         })
         .onEnd((event) => {
           const shouldClose =
-            translateY.value > closeThreshold || (event.translationY > 32 && event.velocityY > 800);
+            translateY.value > closeThreshold ||
+            (event.translationY > 32 && event.velocityY > 800);
 
           if (shouldClose) {
             const remaining = Math.max(windowHeight - translateY.value, 0);
@@ -140,7 +273,7 @@ export function ModalChartView({
               windowHeight,
               { duration, easing: Easing.out(Easing.cubic) },
               (finished) => {
-                'worklet';
+                "worklet";
                 if (finished) {
                   runOnJS(finishClose)();
                 }
@@ -159,7 +292,10 @@ export function ModalChartView({
   );
 
   const dragGesture = useMemo(() => createDragGesture(), [createDragGesture]);
-  const headerDragGesture = useMemo(() => createDragGesture(), [createDragGesture]);
+  const headerDragGesture = useMemo(
+    () => createDragGesture(),
+    [createDragGesture],
+  );
 
   const sheetAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -176,7 +312,14 @@ export function ModalChartView({
 
   const handleAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
-      { scaleX: interpolate(translateY.value, [0, 80], [1, 1.35], Extrapolation.CLAMP) },
+      {
+        scaleX: interpolate(
+          translateY.value,
+          [0, 80],
+          [1, 1.35],
+          Extrapolation.CLAMP,
+        ),
+      },
     ],
     backgroundColor: interpolateColor(
       translateY.value,
@@ -187,8 +330,16 @@ export function ModalChartView({
 
   const toggleFavorite = () => {
     Animated.sequence([
-      Animated.timing(favScale, { toValue: 1.2, duration: 70, useNativeDriver: true }),
-      Animated.spring(favScale, { toValue: 1, friction: 3, useNativeDriver: true }),
+      Animated.timing(favScale, {
+        toValue: 1.2,
+        duration: 70,
+        useNativeDriver: true,
+      }),
+      Animated.spring(favScale, {
+        toValue: 1,
+        friction: 3,
+        useNativeDriver: true,
+      }),
     ]).start();
     toggleWatchlist({
       symbol: instrument.stock,
@@ -402,7 +553,9 @@ export function ModalChartView({
     >
       <GestureHandlerRootView style={styles.gestureRoot}>
         <View style={styles.modalRoot}>
-          <Reanimated.View style={[StyleSheet.absoluteFill, backdropAnimatedStyle]}>
+          <Reanimated.View
+            style={[StyleSheet.absoluteFill, backdropAnimatedStyle]}
+          >
             <Pressable
               style={styles.backdrop}
               onPress={animateClose}
@@ -411,14 +564,20 @@ export function ModalChartView({
           </Reanimated.View>
 
           <Reanimated.View style={[styles.sheet, sheetAnimatedStyle]}>
-            <View style={[styles.header, { borderBottomColor: theme.colors.borderGlass }]}>
-              {/* Górna belka */}
+            <View
+              style={[
+                styles.header,
+                { borderBottomColor: theme.colors.borderGlass },
+              ]}
+            >
               <GestureDetector gesture={dragGesture}>
                 <View
                   style={styles.dragArea}
                   accessibilityHint="Przeciągnij w dół, aby zamknąć okno"
                 >
-                  <Reanimated.View style={[styles.dragHandle, handleAnimatedStyle]} />
+                  <Reanimated.View
+                    style={[styles.dragHandle, handleAnimatedStyle]}
+                  />
                 </View>
               </GestureDetector>
 
@@ -429,11 +588,13 @@ export function ModalChartView({
                     onPress={toggleFavorite}
                     hitSlop={10}
                     accessibilityRole="button"
-                    accessibilityLabel={isFavorite ? 'Usuń z polubionych' : 'Dodaj do polubionych'}
+                    accessibilityLabel={
+                      isFavorite ? "Usuń z polubionych" : "Dodaj do polubionych"
+                    }
                   >
                     <Animated.View style={{ transform: [{ scale: favScale }] }}>
                       <Ionicons
-                        name={isFavorite ? 'heart' : 'heart-outline'}
+                        name={isFavorite ? "heart" : "heart-outline"}
                         size={22}
                         color={isFavorite ? "#FF3B30" : theme.colors.textMuted}
                       />
@@ -464,7 +625,11 @@ export function ModalChartView({
                     accessibilityRole="button"
                     accessibilityLabel="Zamknij"
                   >
-                    <Ionicons name="close" size={22} color={theme.colors.accent} />
+                    <Ionicons
+                      name="close"
+                      size={22}
+                      color={theme.colors.accent}
+                    />
                   </Pressable>
                 </View>
               </View>
@@ -473,11 +638,11 @@ export function ModalChartView({
             <ScrollView
               style={styles.content}
               contentContainerStyle={styles.contentContainer}
-              showsVerticalScrollIndicator={Platform.OS === 'web'}
+              showsVerticalScrollIndicator={false}
             >
               <View style={styles.chartContainer}>
                 <StockCandleChart
-                  key={`${instrument.stock}-${initialRangeIndex ?? 'default'}-${initialInterval ?? 'default'}`}
+                  key={`${instrument.stock}-${initialRangeIndex ?? "default"}-${initialInterval ?? "default"}`}
                   stock={instrument.stock}
                   title={instrument.title}
                   currency={financialData?.currency ?? instrument.currency}
