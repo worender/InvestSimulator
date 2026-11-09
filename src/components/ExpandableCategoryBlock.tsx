@@ -18,18 +18,16 @@ import { useTheme } from "../theme";
 
 type ExpandableCategoryBlockProps = PropsWithChildren<{
   title: string;
-  icon?: keyof typeof Ionicons.glyphMap;
   count?: number;
   expanded: boolean;
   onToggle: () => void;
 }>;
 
 /**
- * Karta kategorii z animowanym rozwijaniem w dół
+ * Kategoria artykułów z animowanym rozwijaniem w dół
  */
 export function ExpandableCategoryBlock({
   title,
-  icon = "newspaper-outline",
   count,
   expanded,
   onToggle,
@@ -68,13 +66,9 @@ export function ExpandableCategoryBlock({
       Math.abs(current - nextHeight) < 0.5 ? current : nextHeight,
     );
   };
+
   return (
-    <View
-      style={[
-        styles.block,
-        { backgroundColor: colors.surface, borderColor: colors.borderGlass },
-      ]}
-    >
+    <View style={styles.section}>
       <Pressable
         onPress={onToggle}
         accessibilityRole="button"
@@ -82,30 +76,19 @@ export function ExpandableCategoryBlock({
         accessibilityLabel={`${title}${count !== undefined ? `, ${count} artykułów` : ""}`}
         style={({ pressed }) => [
           styles.header,
-          {
-            borderBottomColor: colors.borderGlass,
-            borderBottomWidth: expanded ? StyleSheet.hairlineWidth : 0,
-            opacity: pressed ? 0.72 : 1,
-          },
+          { opacity: pressed ? 0.62 : 1 },
         ]}
       >
-        <Ionicons name={icon} size={18} color={colors.accent} />
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+        <Text
+          style={[styles.label, { color: colors.textMuted }]}
+          numberOfLines={1}
+        >
           {title}
+          {count !== undefined ? ` (${count})` : ""}
         </Text>
 
-        {count !== undefined && (
-          <View
-            style={[styles.countBadge, { backgroundColor: colors.accentGlass }]}
-          >
-            <Text style={[styles.countText, { color: colors.accent }]}>
-              {count}
-            </Text>
-          </View>
-        )}
-
         <Reanimated.View style={chevronAnimatedStyle}>
-          <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+          <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
         </Reanimated.View>
       </Pressable>
 
@@ -124,36 +107,22 @@ export function ExpandableCategoryBlock({
 }
 
 const styles = StyleSheet.create({
-  block: {
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden",
-    marginBottom: 14,
+  section: {
+    marginTop: 24,
+    marginBottom: 8,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
+    gap: 6,
+    marginBottom: 12,
   },
-  title: {
+  label: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: "700",
-    letterSpacing: -0.1,
-  },
-  countBadge: {
-    minWidth: 24,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  countText: {
     fontSize: 11,
     fontWeight: "700",
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
   },
   bodyClip: {
     overflow: "hidden",
@@ -163,7 +132,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
     paddingBottom: 4,
   },
 });

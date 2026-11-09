@@ -35,6 +35,7 @@ type Portfolio = {
   accent: string;
   stock: string;
   stockName: string;
+  exchange: string;
 };
 // Przykładowe dane portfela dla każdej waluty
 const cards: Record<Currency, Portfolio> = {
@@ -49,6 +50,7 @@ const cards: Record<Currency, Portfolio> = {
     accent: "#607a99",
     stock: "PKO",
     stockName: "PKO Bank Polski",
+    exchange: "GPW",
   },
   EUR: {
     name: "Portfel europejski",
@@ -61,6 +63,7 @@ const cards: Record<Currency, Portfolio> = {
     accent: "#81779c",
     stock: "MC.PA",
     stockName: "Louis Vuitton / LVMH",
+    exchange: "EURONEXT_PARIS",
   },
   USD: {
     name: "Portfel amerykański",
@@ -73,6 +76,7 @@ const cards: Record<Currency, Portfolio> = {
     accent: "#648a78",
     stock: "AAPL",
     stockName: "Apple",
+    exchange: "NASDAQ",
   },
 };
 
@@ -255,7 +259,7 @@ function PortfolioCard({
 export function PortfolioOverviewCard({
   onStockChange,
 }: {
-  onStockChange?: (stock: string, title: string, currency: Currency) => void;
+  onStockChange?: (stock: string, title: string, currency: Currency, exchange?: string) => void;
 }) {
   const { defaultCurrency, multiCurrency } = useTheme();
   // Kolejność talii: [wierzch, środek, spód]. Zmieniana dopiero po zakończeniu animacji
@@ -285,8 +289,8 @@ export function PortfolioOverviewCard({
   const currency = multiCurrency ? deckOrder[0] : defaultCurrency;
   const data = cards[currency];
   useEffect(() => {
-    onStockChange?.(data.stock, data.stockName, currency);
-  }, [currency, data.stock, data.stockName, onStockChange]);
+    onStockChange?.(data.stock, data.stockName, currency, data.exchange);
+  }, [currency, data.stock, data.stockName, data.exchange, onStockChange]);
 
   const commitShuffle = useCallback(
     (nextOrder: Currency[], departed: Currency) => {

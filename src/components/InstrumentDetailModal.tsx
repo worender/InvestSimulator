@@ -35,6 +35,7 @@ import { useLockScreenWhileActive } from "../interactionLock";
 import { notify } from "../notificationBus";
 import { useTheme } from "../theme";
 import { useLayoutMode } from "../useLayoutMode";
+import { CategorySelector } from "./CategorySelector";
 import { MarketClosedNoticeModal } from "./MarketClosedNoticeModal";
 import { StockCandleChart } from "./StockCandleChart";
 import { TradeInstrumentView } from "./TradeInstrumentView";
@@ -43,6 +44,10 @@ export type ModalTab = "details" | "trade";
 
 // Szerokość okna dialogowego na desktopie
 const DIALOG_MAX_WIDTH = 720;
+const DETAIL_TABS = [
+  { key: "details", label: "Szczegóły" },
+  { key: "trade", label: "Kup / Sprzedaj" },
+] as const;
 
 // Skala ryzyka inwestycyjnego: od najniższego do najwyższego.
 const RISK_LEVELS = [
@@ -530,57 +535,12 @@ export function InstrumentDetailModal({
             <View
               style={[styles.tabsBar, { borderBottomColor: colors.border }]}
             >
-              <Pressable
-                onPress={() => setUserSelectedTab("details")}
-                style={[
-                  styles.tabBtn,
-                  activeTab === "details" && [
-                    styles.activeTabBtn,
-                    { borderBottomColor: colors.accent },
-                  ],
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    {
-                      color:
-                        activeTab === "details"
-                          ? colors.accent
-                          : colors.textMuted,
-                    },
-                    activeTab === "details" && styles.activeTabText,
-                  ]}
-                >
-                  Szczegóły
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setUserSelectedTab("trade")}
-                style={[
-                  styles.tabBtn,
-                  activeTab === "trade" && [
-                    styles.activeTabBtn,
-                    { borderBottomColor: colors.accent },
-                  ],
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    {
-                      color:
-                        activeTab === "trade"
-                          ? colors.accent
-                          : colors.textMuted,
-                    },
-                    activeTab === "trade" && styles.activeTabText,
-                  ]}
-                >
-                  Kup / Sprzedaj
-                </Text>
-              </Pressable>
+              <CategorySelector
+                options={DETAIL_TABS}
+                value={activeTab}
+                onChange={setUserSelectedTab}
+                accessibilityLabel="Sekcja instrumentu"
+              />
             </View>
 
             {/* Zawartość zakładek */}
@@ -1393,24 +1353,9 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   tabsBar: {
-    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  tabBtn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  activeTabBtn: {},
-  tabText: {
-    fontSize: 14,
-    fontWeight: "400",
-  },
-  activeTabText: {
-    fontWeight: "700",
   },
   scrollArea: {
     flex: 1,

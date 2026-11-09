@@ -22,15 +22,13 @@ import {
 } from '../../api/marketService';
 import { InstrumentDetails, useInstrumentFinancialData } from '../../components/InstrumentDetails';
 import { ModalChartView } from '../../components/ModalChartView';
+import { CategorySelector } from '../../components/CategorySelector';
+import { InstrumentRow } from '../../components/InstrumentRow';
 import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
 import { Section } from '../../components/Section';
 import { Skeleton } from '../../components/Skeleton';
 import { StockCandleChart } from '../../components/StockCandleChart';
 import { resolveCurrency } from '../../currency';
-import {
-  convertForDisplay,
-  displaySymbol,
-} from '../../displayCurrency';
 import { notify } from '../../notificationBus';
 import { useTheme } from '../../theme';
 import { useKeyboardShortcut } from '../../useKeyboardShortcut';
@@ -75,6 +73,12 @@ const FILTER_LABELS = {
   PL: 'Polska (GPW)',
   GLOBAL: 'Świat (Global)',
 } as const;
+
+const FILTER_OPTIONS = [
+  { key: 'ALL', label: FILTER_LABELS.ALL },
+  { key: 'PL', label: FILTER_LABELS.PL },
+  { key: 'GLOBAL', label: FILTER_LABELS.GLOBAL },
+] as const;
 
 // Ekran "Rynek" wyświetlający notowania giełdowe i umożliwiający wyszukiwanie instrumentów 
 export default function MarketScreen() {
@@ -225,14 +229,6 @@ export default function MarketScreen() {
     setModalInstrument(null);
   }, []);
 
-  // Weryfikacja znaku waluty i zwracanie odpowiedniego symbolu waluty
-  const formatPrice = (val?: number, curr?: string) => {
-    if (val === undefined || val === null) return '--';
-    const converted = convertForDisplay(val, curr);
-    const sym = displaySymbol(curr);
-    return `${converted.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${sym}`;
-  };
-
   // Filtrowanie spółek w zależności od wybranego filtra rynku (ALL, PL, GLOBAL)
   const filteredStocks = stocksList.filter((s) => {
     if (selectedFilter === 'ALL') return true;
@@ -332,24 +328,12 @@ export default function MarketScreen() {
           >
             {!isSearching && (
               <View style={styles.filtersRow}>
-                {(['ALL', 'PL', 'GLOBAL'] as const).map((filterKey) => {
-                  const active = selectedFilter === filterKey;
-                  return (
-                    <Pressable key={filterKey} onPress={() => setSelectedFilter(filterKey)}>
-                      <Text
-                        style={[
-                          styles.filterText,
-                          {
-                            color: active ? colors.accent : colors.textMuted,
-                            borderBottomColor: active ? colors.accent : 'transparent',
-                          },
-                        ]}
-                      >
-                        {FILTER_LABELS[filterKey]}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                <CategorySelector
+                  options={FILTER_OPTIONS}
+                  value={selectedFilter}
+                  onChange={setSelectedFilter}
+                  accessibilityLabel="Filtr rynku"
+                />
               </View>
             )}
 
@@ -422,64 +406,20 @@ export default function MarketScreen() {
               <View>
                 {filteredStocks.map((stock, index) => {
                   const hasPrice = stock.price !== undefined;
-                  const isPositive = (stock.change ?? 0) >= 0;
 
                   return (
-                    <TouchableOpacity
+                    <InstrumentRow
                       key={stock.symbol}
-                      nativeID={`market-row-${stock.symbol}`}
-                      style={[
-                        styles.stockRow,
-                        isDesktop && styles.stockRowDesktop,
-                        index < filteredStocks.length - 1 && {
-                          borderBottomWidth: StyleSheet.hairlineWidth,
-                          borderBottomColor: colors.borderGlass,
-                        },
-                        isDesktop && stock.symbol === selectedStock.symbol && { backgroundColor: colors.accentGlass },
-                      ]}
-                      onPress={() => pressInstrument(stock)}
-                      activeOpacity={0.6}
-                    >
-                      <View style={styles.stockMeta}>
-                        <View style={styles.stockSymbolRow}>
-                          <Text
-                            style={[
-                              styles.stockSymbol,
-                              { color: colors.text },
-                            ]}
-                          >
-                            {stock.symbol.replace(/\.PA$/, '')}
-                          </Text>
-                          <Text style={[styles.exchangeTag, { color: colors.textMuted }]}>
-                            · {stock.exchangeName}
-                          </Text>
-                        </View>
-                        <Text style={[styles.stockName, { color: colors.textMuted }]} numberOfLines={1}>
-                          {stock.name}
-                        </Text>
-                      </View>
-
-                      <View style={styles.stockRight}>
-                        {hasPrice ? (
-                          <>
-                            <Text style={[styles.priceText, { color: colors.text }]}>
-                              {formatPrice(stock.price, stock.currency)}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.changeText,
-                                { color: isPositive ? colors.positive : colors.negative },
-                              ]}
-                            >
-                              {isPositive ? '+' : ''}
-                              {(stock.changePercent ?? 0).toFixed(2)}%
-                            </Text>
-                          </>
-                        ) : (
-                          <Skeleton width={72} height={16} />
-                        )}
-                      </View>
-                    </TouchableOpacity>
+                      symbol={stock.symbol}
+                      name={stock.name}
+                      exchangeName={stock.exchangeName}
+                      price={stock.price}
+                      changePercent={stock.changePercent}
+                      currency={stock.currency}
+                      divider={index < filteredStocks.length - 1}
+                      loading={!hasPrice}
+                      onPress={() => openStockModal(stock)}
+                    />
                   );
                 })}
               </View>
@@ -559,16 +499,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   filtersRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
     marginBottom: 18,
-  },
-  filterText: {
-    fontSize: 12,
-    fontWeight: '700',
-    paddingBottom: 6,
-    borderBottomWidth: 2,
   },
   stockRow: {
     flexDirection: 'row',
@@ -597,19 +528,6 @@ const styles = StyleSheet.create({
   stockName: {
     fontSize: 12,
     marginTop: 3,
-  },
-  stockRight: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  priceText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  changeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 4,
   },
   skeletonCopy: {
     flex: 1,

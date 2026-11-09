@@ -23,6 +23,7 @@ import Reanimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SidebarTabBar } from '../../components/SidebarTabBar';
 import { useInteractionLock } from '../../interactionLock';
+import { isNavigationSwipeLocked } from '../../navigationSwipeLock';
 import { useNavigationVisibility } from '../../navigationVisibility';
 import { useTheme } from '../../theme';
 import { useLayoutMode } from '../../useLayoutMode';
@@ -100,6 +101,7 @@ export default function TabLayout() {
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gestureState) => {
+          if (isNavigationSwipeLocked()) return false;
           return Math.abs(gestureState.dx) > 22 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.6;
         },
         onPanResponderRelease: (_, gestureState) => {

@@ -23,13 +23,30 @@ import Reanimated, {
   useSharedValue,
   withSpring,
   withTiming,
-} from 'react-native-reanimated';
-import type { StockFinancialData } from '../api/marketService';
-import { useLockScreenWhileActive } from '../interactionLock';
-import { useTheme } from '../theme';
-import type { ChartInterval } from './ChartFullscreenModal';
-import { InstrumentDetails, useInstrumentFinancialData } from './InstrumentDetails';
-import { StockCandleChart } from './StockCandleChart';
+} from "react-native-reanimated";
+import {
+  buildFallbackFinancialData,
+  enrichFinancialData,
+  getCachedStockData,
+  getStockData,
+  StockFinancialData,
+} from "../api/marketService";
+import { convertForDisplay, displaySymbol } from "../displayCurrency";
+import { useLockScreenWhileActive } from "../interactionLock";
+import { notify } from "../notificationBus";
+import { useTheme } from "../theme";
+import { useWatchlist } from "../watchlist";
+import type { ChartInterval } from "./ChartFullscreenModal";
+import { CategorySelector } from "./CategorySelector";
+import { Section } from "./Section";
+import { Skeleton } from "./Skeleton";
+import { StockCandleChart } from "./StockCandleChart";
+
+const RETURN_PERIODS = [
+  { key: "1Y", label: "1Y" },
+  { key: "3Y", label: "3Y" },
+  { key: "5Y", label: "5Y" },
+] as const;
 
 interface ModalChartViewProps {
   instrument: {
@@ -60,7 +77,8 @@ export function ModalChartView({
   useLockScreenWhileActive(true);
   const { financialData, loading } = useInstrumentFinancialData(instrument, propFinancialData);
 
-  const [isFavorite, setIsFavorite] = useState(false);
+  const { isWatched, toggle: toggleWatchlist } = useWatchlist();
+  const isFavorite = isWatched(instrument.stock);
   const [favScale] = useState(() => new Animated.Value(1));
   
   // Przeciąganie i animacja modala
@@ -172,92 +190,208 @@ export function ModalChartView({
       Animated.timing(favScale, { toValue: 1.2, duration: 70, useNativeDriver: true }),
       Animated.spring(favScale, { toValue: 1, friction: 3, useNativeDriver: true }),
     ]).start();
-    setIsFavorite((prev) => !prev);
+    toggleWatchlist({
+      symbol: instrument.stock,
+      name: instrument.title,
+      exchange: instrument.exchange,
+      currency: instrument.currency,
+    });
   };
 
-  // Stylesheet dla komponentu ModalChartView (widok wykresu w formie modala)
-  const styles = useMemo(() => ({
-    gestureRoot: {
-      flex: 1,
-    },
-    modalRoot: {
-      flex: 1,
-      justifyContent: 'flex-end' as const,
-    },
-    backdrop: {
-      ...StyleSheet.absoluteFill,
-      backgroundColor: theme.colors.backdrop,
-    },
-    sheet: {
-      height: '91%' as const,
-      maxHeight: '91%' as const,
-      backgroundColor: theme.colors.background,
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.colors.borderGlass,
-      overflow: 'hidden' as const,
-    },
-    dragArea: {
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-      paddingTop: 10,
-      paddingBottom: 10,
-    },
-    dragHandle: {
-      width: 44,
-      height: 5,
-      borderRadius: 3,
-      backgroundColor: theme.colors.border,
-    },
-    header: {
-      paddingBottom: 8,
-      paddingHorizontal: theme.spacing.xl,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-    },
-    headerRow: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-    },
-    side: {
-      width: 40,
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-    },
-    sideRight: {
-      justifyContent: 'flex-end' as const,
-    },
-    center: {
-      flex: 1,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-    },
-    headerTitle: {
-      maxWidth: '100%' as const,
-      fontSize: 18,
-      fontWeight: '700' as const,
-      color: theme.colors.text,
-      letterSpacing: -0.2,
-    },
-    headerSubtitle: {
-      fontSize: theme.fontSize.xs,
-      fontWeight: '700' as const,
-      letterSpacing: 0.8,
-      textTransform: 'uppercase' as const,
-      color: theme.colors.textMuted,
-      marginTop: 2,
-    },
-    content: {
-      flex: 1,
-    },
-    contentContainer: {
-      paddingHorizontal: theme.spacing.xl,
-      paddingBottom: theme.spacing.xl,
-    },
-    chartContainer: {
-      paddingTop: theme.spacing.sm,
-    },
-  }), [theme]);
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadData = async () => {
+      let current: StockFinancialData | null | undefined =
+        propFinancialData ?? instrument.financialData;
+      if (!current) {
+        const cached = getCachedStockData(
+          instrument.stock,
+          instrument.exchange,
+        );
+        if (cached) {
+          current = cached;
+          if (isMounted) {
+            setFinancialData(cached);
+          }
+        } else {
+          setLoading(true);
+        }
+        current = await getStockData(instrument.stock, instrument.exchange);
+        if (isMounted && current) {
+          setFinancialData(current);
+        }
+      }
+      if (current) {
+        const enriched = await enrichFinancialData(
+          current,
+          instrument.stock,
+          instrument.exchange,
+        );
+        if (isMounted) {
+          setFinancialData(enriched);
+        }
+      } else {
+        const fallback = await buildFallbackFinancialData(
+          instrument.stock,
+          instrument.exchange,
+          instrument.currency,
+        );
+        if (isMounted && fallback) {
+          setFinancialData(fallback);
+        } else if (isMounted) {
+          notify({
+            variant: "error",
+            title: "Brak danych finansowych",
+            message: `Nie udało się pobrać danych dla ${instrument.stock}. Wykres pozostaje dostępny.`,
+          });
+        }
+      }
+
+      if (isMounted) {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    instrument.stock,
+    instrument.exchange,
+    instrument.currency,
+    propFinancialData,
+    instrument.financialData,
+  ]);
+
+  const periodReturn = useMemo(() => {
+    if (!financialData) return undefined;
+    switch (selectedReturnPeriod) {
+      case "1Y":
+        return financialData.performance1Y;
+      case "3Y":
+        return financialData.performance3Y;
+      case "5Y":
+        return financialData.performance5Y;
+    }
+  }, [financialData, selectedReturnPeriod]);
+
+  // Stylesheet dla komponentu ModalChartView
+  const styles = useMemo(
+    () => ({
+      gestureRoot: {
+        flex: 1,
+      },
+      modalRoot: {
+        flex: 1,
+        justifyContent: "flex-end" as const,
+      },
+      backdrop: {
+        ...StyleSheet.absoluteFill,
+        backgroundColor: theme.colors.backdrop,
+      },
+      sheet: {
+        height: "91%" as const,
+        maxHeight: "91%" as const,
+        backgroundColor: theme.colors.background,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderColor: theme.colors.borderGlass,
+        overflow: "hidden" as const,
+      },
+      dragArea: {
+        alignItems: "center" as const,
+        justifyContent: "center" as const,
+        paddingTop: 10,
+        paddingBottom: 10,
+      },
+      dragHandle: {
+        width: 44,
+        height: 5,
+        borderRadius: 3,
+        backgroundColor: theme.colors.border,
+      },
+      header: {
+        paddingBottom: 8,
+        paddingHorizontal: theme.spacing.xl,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+      },
+      headerRow: {
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+      },
+      side: {
+        width: 40,
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+      },
+      sideRight: {
+        justifyContent: "flex-end" as const,
+      },
+      center: {
+        flex: 1,
+        alignItems: "center" as const,
+        justifyContent: "center" as const,
+      },
+      headerTitle: {
+        maxWidth: "100%" as const,
+        fontSize: 18,
+        fontWeight: "700" as const,
+        color: theme.colors.text,
+        letterSpacing: -0.2,
+      },
+      headerSubtitle: {
+        fontSize: theme.fontSize.xs,
+        fontWeight: "700" as const,
+        letterSpacing: 0.8,
+        textTransform: "uppercase" as const,
+        color: theme.colors.textMuted,
+        marginTop: 2,
+      },
+      content: {
+        flex: 1,
+      },
+      contentContainer: {
+        paddingHorizontal: theme.spacing.xl,
+        paddingBottom: theme.spacing.xl,
+      },
+      chartContainer: {
+        paddingTop: theme.spacing.sm,
+      },
+      periodBanner: {
+        flexDirection: "row" as const,
+        justifyContent: "space-between" as const,
+        alignItems: "center" as const,
+        paddingTop: theme.spacing.md,
+        marginTop: theme.spacing.sm,
+        borderTopWidth: StyleSheet.hairlineWidth,
+      },
+      periodBannerLabel: {
+        fontSize: theme.fontSize.xs,
+        color: theme.colors.textMuted,
+      },
+      periodBannerValue: {
+        fontSize: theme.fontSize.sm,
+        fontWeight: "700" as const,
+      },
+      skeletonRow: {
+        flexDirection: "row" as const,
+        justifyContent: "space-between" as const,
+        alignItems: "center" as const,
+        paddingVertical: 14,
+      },
+      footerNote: {
+        marginTop: theme.spacing.lg,
+        fontSize: theme.fontSize.xs,
+        color: theme.colors.textMuted,
+        textAlign: "center" as const,
+      },
+    }),
+    [theme],
+  );
 
   return (
     <Modal
@@ -301,7 +435,7 @@ export function ModalChartView({
                       <Ionicons
                         name={isFavorite ? 'heart' : 'heart-outline'}
                         size={22}
-                        color={isFavorite ? theme.colors.negative : theme.colors.textMuted}
+                        color={isFavorite ? "#FF3B30" : theme.colors.textMuted}
                       />
                     </Animated.View>
                   </Pressable>
@@ -354,7 +488,327 @@ export function ModalChartView({
                 />
               </View>
 
-              <InstrumentDetails financialData={financialData} loading={loading} />
+              <Section label="Zwrot">
+                <CategorySelector
+                  options={RETURN_PERIODS}
+                  value={selectedReturnPeriod}
+                  onChange={setSelectedReturnPeriod}
+                  accessibilityLabel="Okres zwrotu"
+                />
+                {periodReturn !== undefined && (
+                  <View
+                    style={[
+                      styles.periodBanner,
+                      { borderTopColor: theme.colors.borderGlass },
+                    ]}
+                  >
+                    <Text style={styles.periodBannerLabel}>
+                      Szacowany zwrot ({selectedReturnPeriod})
+                    </Text>
+                    <Text
+                      style={[
+                        styles.periodBannerValue,
+                        {
+                          color:
+                            periodReturn >= 0
+                              ? theme.colors.positive
+                              : theme.colors.negative,
+                        },
+                      ]}
+                    >
+                      {periodReturn >= 0 ? "+" : ""}
+                      {formatPercent(periodReturn)}
+                    </Text>
+                  </View>
+                )}
+              </Section>
+
+              {loading && !financialData && (
+                <Section label="Dane finansowe">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <View key={i} style={styles.skeletonRow}>
+                      <Skeleton width="45%" height={16} />
+                      <Skeleton width="30%" height={16} />
+                    </View>
+                  ))}
+                </Section>
+              )}
+
+              {financialData && (
+                <>
+                  <Section label="Dane rynkowe">
+                    <DataItem
+                      label="Cena"
+                      value={formatCurrency(
+                        financialData.price,
+                        financialData.currency,
+                      )}
+                    />
+                    <DataItem
+                      label="Zmiana"
+                      value={
+                        financialData.change >= 0
+                          ? `+${formatCurrency(financialData.change, financialData.currency)}`
+                          : formatCurrency(
+                              financialData.change,
+                              financialData.currency,
+                            )
+                      }
+                    />
+                    <DataItem
+                      label="Zmiana %"
+                      value={
+                        financialData.changePercent >= 0
+                          ? `+${formatPercent(financialData.changePercent)}`
+                          : formatPercent(financialData.changePercent)
+                      }
+                    />
+                    <DataItem
+                      label="Wolumen"
+                      value={formatNumber(financialData.volume)}
+                    />
+                    <DataItem
+                      label="Wolumen średni 10d"
+                      value={formatNumber(financialData.averageVolume)}
+                      divider={false}
+                    />
+                  </Section>
+
+                  <Section label="Wskaźniki wyceny">
+                    <DataItem
+                      label="P/E (trailing)"
+                      value={
+                        financialData.trailingPE
+                          ? formatRatio(financialData.trailingPE)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="P/E (forward)"
+                      value={
+                        financialData.forwardPE
+                          ? formatRatio(financialData.forwardPE)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="P/B"
+                      value={
+                        financialData.priceToBook
+                          ? formatRatio(financialData.priceToBook)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="P/S"
+                      value={
+                        financialData.priceToSales
+                          ? formatRatio(financialData.priceToSales)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="EV/EBITDA"
+                      value={
+                        financialData.enterpriseValueToEbitda
+                          ? formatRatio(financialData.enterpriseValueToEbitda)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="P/FCF"
+                      value={
+                        financialData.priceToFreeCashFlow
+                          ? formatRatio(financialData.priceToFreeCashFlow)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="Marża zysku"
+                      value={
+                        financialData.profitMargins
+                          ? formatPercent(financialData.profitMargins)
+                          : "-"
+                      }
+                      divider={false}
+                    />
+                  </Section>
+
+                  <Section label="Dywidendy">
+                    <DataItem
+                      label="Stopa dywidendy"
+                      value={formatPercent(financialData.dividendYield)}
+                    />
+                    <DataItem
+                      label="Kwota dywidendy"
+                      value={formatCurrency(
+                        financialData.dividendRate,
+                        financialData.currency,
+                      )}
+                    />
+                    <DataItem
+                      label="Data ex-dividenda"
+                      value={formatDate(financialData.exDividendDate)}
+                    />
+                    <DataItem
+                      label="Payout ratio"
+                      value={formatPercent(financialData.payoutRatio)}
+                    />
+                    <DataItem
+                      label="Średnia 5-letnia dywidenda"
+                      value={formatPercent(
+                        financialData.fiveYearAvgDividendYield,
+                      )}
+                      divider={false}
+                    />
+                  </Section>
+
+                  <Section label="Wycena i akcje">
+                    <DataItem
+                      label="Kapitalizacja rynkowa"
+                      value={formatCurrency(
+                        financialData.marketCap,
+                        financialData.currency,
+                      )}
+                    />
+                    <DataItem
+                      label="Liczba akcji"
+                      value={formatNumber(financialData.sharesOutstanding)}
+                    />
+                    <DataItem
+                      label="Wartość księgowa"
+                      value={formatCurrency(
+                        financialData.bookValue,
+                        financialData.currency,
+                      )}
+                    />
+                    <DataItem
+                      label="Akcje w obiegu"
+                      value={formatNumber(financialData.floatShares)}
+                    />
+                    <DataItem
+                      label="Beta"
+                      value={
+                        financialData.beta
+                          ? formatRatio(financialData.beta)
+                          : "-"
+                      }
+                      divider={false}
+                    />
+                  </Section>
+
+                  <Section label="Wyniki historyczne">
+                    <DataItem
+                      label="1 rok"
+                      value={
+                        financialData.performance1Y !== undefined
+                          ? formatPercent(financialData.performance1Y)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="3 lata"
+                      value={
+                        financialData.performance3Y !== undefined
+                          ? formatPercent(financialData.performance3Y)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="5 lat"
+                      value={
+                        financialData.performance5Y !== undefined
+                          ? formatPercent(financialData.performance5Y)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="Rok bieżący (YTD)"
+                      value={
+                        financialData.performanceYTD !== undefined
+                          ? formatPercent(financialData.performanceYTD)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="Średni zwrot 1 rok"
+                      value={
+                        financialData.oneYearAvgReturn
+                          ? formatPercent(financialData.oneYearAvgReturn)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="Średni zwrot 3 lata"
+                      value={
+                        financialData.threeYearAvgReturn
+                          ? formatPercent(financialData.threeYearAvgReturn)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="Średni zwrot 5 lat"
+                      value={
+                        financialData.fiveYearAvgReturn
+                          ? formatPercent(financialData.fiveYearAvgReturn)
+                          : "-"
+                      }
+                      divider={false}
+                    />
+                  </Section>
+
+                  <Section label="Dane dodatkowe">
+                    <DataItem
+                      label="Wartość przedsiębiorstwa"
+                      value={formatCurrency(
+                        financialData.enterpriseValue,
+                        financialData.currency,
+                      )}
+                    />
+                    <DataItem
+                      label="EV/Przychody"
+                      value={
+                        financialData.enterpriseValueToRevenue
+                          ? formatRatio(financialData.enterpriseValueToRevenue)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="Akcje krótkoterminowe"
+                      value={formatNumber(financialData.sharesShort)}
+                    />
+                    <DataItem
+                      label="Stosunek krótkich akcji"
+                      value={
+                        financialData.shortRatio
+                          ? formatRatio(financialData.shortRatio)
+                          : "-"
+                      }
+                    />
+                    <DataItem
+                      label="% krótkich akcji"
+                      value={
+                        financialData.shortPercentOfFloat
+                          ? formatPercent(financialData.shortPercentOfFloat)
+                          : "-"
+                      }
+                      divider={!financialData.lastSplitFactor}
+                    />
+                    {financialData.lastSplitFactor && (
+                      <DataItem
+                        label="Ostatni split"
+                        value={`${financialData.lastSplitFactor}x`}
+                        subValue={formatDate(financialData.lastSplitDate)}
+                        divider={false}
+                      />
+                    )}
+                  </Section>
+                </>
+              )}
+
+              <Text style={styles.footerNote}>
+                Dane edukacyjne · mogą być opóźnione
+              </Text>
             </ScrollView>
           </Reanimated.View>
         </View>

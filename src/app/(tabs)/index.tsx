@@ -16,13 +16,16 @@ import {
   searchInstruments,
   StockFinancialData,
 } from "../../api/marketService";
+import { AccountMenu } from "../../components/AccountMenu";
 import { ModalChartView } from "../../components/ModalChartView";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import { PortfolioOverviewCard } from "../../components/PortfolioOverviewCard";
+import { SavedArticlesSection } from "../../components/SavedArticlesSection";
 import { Section } from "../../components/Section";
 import { Skeleton } from "../../components/Skeleton";
-import { StockCandleChart } from "../../components/StockCandleChart";
 import { TrendCards } from "../../components/TrendCards";
+import { WatchedInstrumentsSection } from "../../components/WatchedInstrumentsSection";
+import { AccountAvatar } from "../../components/settings/AccountAvatar";
 import { resolveCurrency } from "../../currency";
 import { notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
@@ -30,56 +33,14 @@ import { useKeyboardShortcut } from "../../useKeyboardShortcut";
 import { useLayoutMode } from "../../useLayoutMode";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
-// Przykładowe spółki w portfelu, które są wyświetlane na ekranie głównym aplikacji
-const portfolioStocks: Record<
-  string,
-  {
-    currency: string;
-    stock: string;
-    title: string;
-    symbol: string;
-    exchange: string;
-  }
-> = {
-  PLN: {
-    currency: "PLN",
-    stock: "PKO",
-    title: "PKO BANK POLSKI",
-    symbol: "zł",
-    exchange: "GPW",
-  },
-  EUR: {
-    currency: "EUR",
-    stock: "MC.PA",
-    title: "LOUIS VUITTON / LVMH",
-    symbol: "€",
-    exchange: "EURONEXT_PARIS",
-  },
-  USD: {
-    currency: "USD",
-    stock: "AAPL",
-    title: "APPLE",
-    symbol: "$",
-    exchange: "NASDAQ",
-  },
-};
-
 export default function Index() {
-  const { colors, defaultCurrency, multiCurrency } = useTheme();
+  const { colors, defaultCurrency, multiCurrency, activeAccount } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
   // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
-  const router = useRouter();
   const scrollNav = useScrollAwareNavigation();
-  const { isDesktop } = useLayoutMode();
-  const [selectedPortfolioStock, setSelectedPortfolioStock] = useState(
-    () => portfolioStocks[defaultCurrency] ?? portfolioStocks.PLN,
-  );
-  const portfolioStock =
-    selectedPortfolioStock.currency === defaultCurrency
-      ? selectedPortfolioStock
-      : portfolioStocks[defaultCurrency] ?? portfolioStocks.PLN;
   const [searchOpen, setSearchOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<InstrumentSearchResult[]>(
     [],
@@ -95,15 +56,7 @@ export default function Index() {
     exchange: string;
     financialData?: StockFinancialData;
   } | null>(null);
-  const chartStock = portfolioStock;
 
-  // Funkcja obsługująca zmianę spółki w portfelu, aktualizująca stan portfolioStock
-  const handleStockChange = useCallback(
-    (stock: string, title: string, currency: string) => {
-      setSelectedPortfolioStock({ ...portfolioStocks[currency], stock, title });
-    },
-    [],
-  );
   useEffect(() => {
     const timeout = setTimeout(async () => {
       const query = searchQuery.trim();
@@ -214,15 +167,21 @@ export default function Index() {
         }
         right={
           <Pressable
-            onPress={() => router.navigate("/settings")}
-            accessibilityLabel="Przejdź do ustawień"
+            onPress={() => setAccountMenuOpen((open) => !open)}
+            accessibilityLabel="Menu konta"
+            accessibilityState={{ expanded: accountMenuOpen }}
             hitSlop={8}
+            style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
           >
-            <Ionicons
-              name="person-circle-outline"
-              size={24}
-              color={colors.textMuted}
-            />
+            {activeAccount?.avatar_uri ? (
+              <AccountAvatar
+                uri={activeAccount.avatar_uri}
+                name={activeAccount.username}
+                size={30}
+              />
+            ) : (
+              <Ionicons name="person-circle" size={26} color={colors.accent} />
+            )}
           </Pressable>
         }
         search={{
@@ -335,40 +294,31 @@ export default function Index() {
             </Section>
           ) : (
             <>
-              <Text style={[styles.title, { color: colors.text }]}>
-                Dzień dobry, inwestorze
-              </Text>
-
               <Section label="Portfel">
                 <PortfolioOverviewCard
                   key={`${defaultCurrency}-${multiCurrency}`}
-                  onStockChange={handleStockChange}
                 />
               </Section>
 
-              {/* Na desktopie wykres i trendy stoją obok siebie, na mobile jedno pod drugim */}
-              <View style={isDesktop && styles.columns}>
-                <View style={isDesktop && styles.mainColumn}>
-                  <Section>
-                    <StockCandleChart
-                      stock={chartStock.stock}
-                      title={chartStock.title}
-                      currency={chartStock.symbol}
-                      exchange={chartStock.exchange}
-                    />
-                  </Section>
-                </View>
+              <Section label="Obserwowane">
+                <WatchedInstrumentsSection />
+              </Section>
 
-                <View style={isDesktop && styles.sideColumn}>
-                  <Section>
-                    <TrendCards />
-                  </Section>
-                </View>
-              </View>
+              <Section label="Zapisane artykuły">
+                <SavedArticlesSection />
+              </Section>
+
+              <Section label="Warte uwagi">
+                <TrendCards />
+              </Section>
             </>
           )}
         </ScrollView>
       </BlurTargetView>
+
+      {accountMenuOpen && (
+        <AccountMenu onClose={() => setAccountMenuOpen(false)} />
+      )}
 
       {/* Modal Chart View */}
       {modalVisible && modalInstrument?.stock && (
