@@ -621,12 +621,17 @@ export interface StockFinancialData {
 // Funkcja autentyfikująca żądania do API z użyciem tokenu JWT
 export const authenticatedFetch = async (
   endpointPath: string,
+  init?: RequestInit,
 ): Promise<Response | null> => {
   try {
     const baseUrl = await getApiBaseUrl();
     const request = (token: string) =>
       fetch(`${baseUrl}${endpointPath}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        ...init,
+        headers: {
+          ...((init?.headers as Record<string, string> | undefined) ?? {}),
+          Authorization: `Bearer ${token}`,
+        },
       });
 
     let token = await getValidToken();
@@ -820,6 +825,75 @@ export const getStockQuoteDetails = async (
   return withInFlight(`quote_${cacheKey}`, () =>
     fetchStockQuoteDetailsFromApi(symbol, exchange),
   );
+};
+
+const quoteBatchKey = (symbol: string, exchange?: string) =>
+  `${symbol}_${exchange || ""}`;
+
+// Funkcja pobierająca notowania wielu instrumentów jednym żądaniem (lista rynku).
+// Wynik jest kluczowany tak samo jak cache pojedynczych notowań.
+export const getStockQuotesBatch = async (
+  instruments: { symbol: string; exchange?: string }[],
+  options?: { forceRefresh?: boolean },
+): Promise<Record<string, StockQuoteDetails | null>> => {
+  const results: Record<string, StockQuoteDetails | null> = {};
+  if (instruments.length === 0) return results;
+
+  const pending: { symbol: string; exchange?: string }[] = [];
+  const now = Date.now();
+
+  for (const instrument of instruments) {
+    const key = quoteBatchKey(instrument.symbol, instrument.exchange);
+    const cached = quoteDetailsCache.get(key);
+
+    if (cached && !options?.forceRefresh) {
+      results[key] = cached.data;
+      if (now - cached.timestamp >= QUOTES_CACHE_TTL) {
+        void withInFlight(`quote_${key}`, () =>
+          fetchStockQuoteDetailsFromApi(instrument.symbol, instrument.exchange),
+        );
+      }
+      continue;
+    }
+
+    pending.push(instrument);
+  }
+
+  if (pending.length === 0) return results;
+
+  try {
+    const response = await authenticatedFetch("/api/instruments/quotes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instruments: pending }),
+    });
+
+    if (!response || !response.ok) {
+      throw new Error(`Błąd serwera: ${response?.status ?? "brak odpowiedzi"}`);
+    }
+
+    const payload = (await response.json()) as {
+      quotes?: Record<string, StockQuoteDetails | null>;
+    };
+    const quotes = payload.quotes ?? {};
+
+    for (const instrument of pending) {
+      const key = quoteBatchKey(instrument.symbol, instrument.exchange);
+      const data = quotes[key] ?? null;
+      results[key] = data;
+      if (data) {
+        quoteDetailsCache.set(key, { data, timestamp: Date.now() });
+      }
+    }
+  } catch (error) {
+    console.error("Błąd wsadowego pobierania notowań:", error);
+    for (const instrument of pending) {
+      const key = quoteBatchKey(instrument.symbol, instrument.exchange);
+      if (!(key in results)) results[key] = null;
+    }
+  }
+
+  return results;
 };
 
 // Funkcja pobierająca dane dotyczące instrumentu giełdowego (łączy dane finansowe, notowania i wyniki historyczne)

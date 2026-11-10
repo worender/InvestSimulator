@@ -1,7 +1,14 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { BlurTargetView } from 'expo-blur';
-import { useIsFocused } from 'expo-router';
-import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { BlurTargetView } from "expo-blur";
+import { useIsFocused } from "expo-router";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+} from "react";
 import {
   Platform,
   Pressable,
@@ -11,97 +18,134 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  getCachedDynamicTrends,
+  getCachedQuoteDetails,
+  getDynamicTrends,
   getStockData,
-  getStockQuoteDetails,
+  getStockQuotesBatch,
   InstrumentSearchResult,
   searchInstruments,
   StockFinancialData,
-} from '../../api/marketService';
-import { InstrumentDetails, useInstrumentFinancialData } from '../../components/InstrumentDetails';
-import { ModalChartView } from '../../components/ModalChartView';
-import { CategorySelector } from '../../components/CategorySelector';
-import { InstrumentRow } from '../../components/InstrumentRow';
-import { PANEL_HEADER_HEIGHT, PanelHeader } from '../../components/PanelHeader';
-import { Section } from '../../components/Section';
-import { Skeleton } from '../../components/Skeleton';
-import { StockCandleChart } from '../../components/StockCandleChart';
-import { resolveCurrency } from '../../currency';
+  StockQuoteDetails,
+  type DynamicTrendAsset,
+} from "../../api/marketService";
+import { CategorySelector } from "../../components/CategorySelector";
+import {
+  InstrumentDetails,
+  useInstrumentFinancialData,
+} from "../../components/InstrumentDetails";
+import { InstrumentRow } from "../../components/InstrumentRow";
+import { ModalChartView } from "../../components/ModalChartView";
+import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
+import { Section } from "../../components/Section";
+import { Skeleton } from "../../components/Skeleton";
+import { StockCandleChart } from "../../components/StockCandleChart";
+import { resolveCurrency } from "../../currency";
+import {
+  FIXED_MARKET_INSTRUMENTS,
+  isDynamicMarketTab,
+  MARKET_SECTION_LABELS,
+  MARKET_TABS,
+  type DynamicMarketTabKey,
+  type MarketInstrument,
+  type MarketTabKey,
+} from "../../marketTabs";
 import { NOTIFICATION_GROUPS, notify } from '../../notificationBus';
-import { useTheme } from '../../theme';
-import { useKeyboardShortcut } from '../../useKeyboardShortcut';
-import { useLayoutMode } from '../../useLayoutMode';
-import { useResetOnPanelBlur } from '../../useResetOnPanelBlur';
-import { useScrollAwareNavigation } from '../../useScrollAwareNavigation';
+import { useTheme } from "../../theme";
+import { useKeyboardShortcut } from "../../useKeyboardShortcut";
+import { useLayoutMode } from "../../useLayoutMode";
+import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
+import { useWatchlist } from "../../watchlist";
 
-interface FeaturedStock {
-  symbol: string;
-  name: string;
-  exchange: string;
-  exchangeName: string;
-  currency: string;
-  category: 'PL' | 'GLOBAL';
-  price?: number;
-  change?: number;
-  changePercent?: number;
-}
+const quoteKey = (symbol: string, exchange?: string) =>
+  `${symbol}_${exchange || ""}`;
 
-type MarketInstrument = { symbol: string; name: string; exchange: string; exchangeName?: string; currency?: string };
+const withResolvedCurrency = (
+  instrument: MarketInstrument,
+): MarketInstrument & { currency: string } => ({
+  ...instrument,
+  currency: instrument.currency || resolveCurrency(instrument),
+});
 
-// Domyślna lista spółek wyświetlanych w sekcji "Wybrane spółki GPW i światowe" na ekranie MarketScreen
-const DEFAULT_STOCKS: FeaturedStock[] = [
-  // Polska (GPW)
-  { symbol: 'PKO', name: 'PKO Bank Polski', exchange: 'GPW', exchangeName: 'Warszawa GPW', currency: 'PLN', category: 'PL' },
-  { symbol: 'CDR', name: 'CD Projekt', exchange: 'GPW', exchangeName: 'Warszawa GPW', currency: 'PLN', category: 'PL' },
-  { symbol: 'KGH', name: 'KGHM Polska Miedź', exchange: 'GPW', exchangeName: 'Warszawa GPW', currency: 'PLN', category: 'PL' },
-  { symbol: 'PZU', name: 'Grupa PZU', exchange: 'GPW', exchangeName: 'Warszawa GPW', currency: 'PLN', category: 'PL' },
-  { symbol: 'DNP', name: 'Dino Polska', exchange: 'GPW', exchangeName: 'Warszawa GPW', currency: 'PLN', category: 'PL' },
-  { symbol: 'ALE', name: 'Allegro', exchange: 'GPW', exchangeName: 'Warszawa GPW', currency: 'PLN', category: 'PL' },
+const toMarketInstrument = (asset: DynamicTrendAsset): MarketInstrument => ({
+  symbol: asset.symbol,
+  name: asset.name,
+  exchange: asset.exchange,
+  exchangeName: asset.exchangeName,
+  currency: resolveCurrency(asset),
+});
 
-  // Świat (Global)
-  { symbol: 'AAPL', name: 'Apple Inc.', exchange: 'NASDAQ', exchangeName: 'NASDAQ', currency: 'USD', category: 'GLOBAL' },
-  { symbol: 'MSFT', name: 'Microsoft Corporation', exchange: 'NASDAQ', exchangeName: 'NASDAQ', currency: 'USD', category: 'GLOBAL' },
-  { symbol: 'NVDA', name: 'NVIDIA Corporation', exchange: 'NASDAQ', exchangeName: 'NASDAQ', currency: 'USD', category: 'GLOBAL' },
-  { symbol: 'MC.PA', name: 'LVMH Louis Vuitton', exchange: 'EURONEXT_PARIS', exchangeName: 'Euronext Paryż', currency: 'EUR', category: 'GLOBAL' },
-  { symbol: 'TSLA', name: 'Tesla Inc.', exchange: 'NASDAQ', exchangeName: 'NASDAQ', currency: 'USD', category: 'GLOBAL' },
-  { symbol: 'AMZN', name: 'Amazon.com Inc.', exchange: 'NASDAQ', exchangeName: 'NASDAQ', currency: 'USD', category: 'GLOBAL' },
-];
-
-const FILTER_LABELS = {
-  ALL: 'Wszystkie',
-  PL: 'Polska (GPW)',
-  GLOBAL: 'Świat (Global)',
-} as const;
-
-const FILTER_OPTIONS = [
-  { key: 'ALL', label: FILTER_LABELS.ALL },
-  { key: 'PL', label: FILTER_LABELS.PL },
-  { key: 'GLOBAL', label: FILTER_LABELS.GLOBAL },
-] as const;
-
-// Ekran "Rynek" wyświetlający notowania giełdowe i umożliwiający wyszukiwanie instrumentów 
+// Ekran "Rynek" wyświetlający notowania giełdowe i umożliwiający wyszukiwanie instrumentów
 export default function MarketScreen() {
   const { colors } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
-  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie).
+  // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie)
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
+  const { instruments: watchlistInstruments } = useWatchlist();
 
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<InstrumentSearchResult[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<InstrumentSearchResult[]>(
+    [],
+  );
   const [searchLoading, setSearchLoading] = useState(false);
-  const [completedQuery, setCompletedQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PL' | 'GLOBAL'>('ALL');
-  const [stocksList, setStocksList] = useState<FeaturedStock[]>(DEFAULT_STOCKS);
+  const [completedQuery, setCompletedQuery] = useState("");
+  const [selectedTab, setSelectedTab] = useState<MarketTabKey>("watchlist");
+  const [dynamicInstruments, setDynamicInstruments] = useState<
+    Record<DynamicMarketTabKey, MarketInstrument[]>
+  >({ gainers: [], active: [] });
+  const [dynamicLoading, setDynamicLoading] = useState<
+    Record<DynamicMarketTabKey, boolean>
+  >({
+    gainers: false,
+    active: false,
+  });
   const { isDesktop } = useLayoutMode();
   const { width: windowWidth } = useWindowDimensions();
   // Na węższym desktopie lista oddaje miejsce wykresowi
   const listPanelWidth = windowWidth >= 1280 ? 420 : 340;
+
+  // Lista instrumentów wybranej zakładki. Zakładki stałe mają z góry ustalone składy
+  const watchlistItems = useMemo<MarketInstrument[]>(
+    () =>
+      watchlistInstruments.map((instrument) => ({
+        ...instrument,
+        exchangeName: instrument.exchange,
+      })),
+    [watchlistInstruments],
+  );
+
+  const currentInstruments = useMemo<MarketInstrument[]>(() => {
+    if (selectedTab === "watchlist") return watchlistItems;
+    if (isDynamicMarketTab(selectedTab)) return dynamicInstruments[selectedTab];
+    return FIXED_MARKET_INSTRUMENTS[selectedTab];
+  }, [dynamicInstruments, selectedTab, watchlistItems]);
+
+  const [quotes, setQuotes] = useState<
+    Record<string, StockQuoteDetails | null>
+  >(() => {
+    const initial: Record<string, StockQuoteDetails | null> = {};
+    for (const instrument of watchlistInstruments) {
+      const cached = getCachedQuoteDetails(
+        instrument.symbol,
+        instrument.exchange,
+      );
+      if (cached) {
+        initial[quoteKey(instrument.symbol, instrument.exchange)] = cached;
+      }
+    }
+    return initial;
+  });
+
   // Instrument pokazywany w prawym panelu na desktopie
-  const [selectedStock, setSelectedStock] = useState<MarketInstrument & { currency: string }>(DEFAULT_STOCKS[0]);
+  const initialSelected = watchlistItems[0] ?? FIXED_MARKET_INSTRUMENTS.pl[0];
+  const [selectedStock, setSelectedStock] = useState<
+    MarketInstrument & { currency: string }
+  >(() => withResolvedCurrency(initialSelected));
 
   // Modal view state
   const [modalVisible, setModalVisible] = useState(false);
@@ -166,7 +210,7 @@ export default function MarketScreen() {
       const q = searchQuery.trim();
       if (q.length < 2) {
         setSearchResults([]);
-        setCompletedQuery('');
+        setCompletedQuery("");
         setSearchLoading(false);
         return;
       }
@@ -180,30 +224,73 @@ export default function MarketScreen() {
     return () => clearTimeout(timeout);
   }, [searchQuery]);
 
-  // Funckja otwierająca modal z wykresem dla wybranego instrumentu, pobierająca dane finansowe w tle
-  const openStockModal = useCallback(
-    async (item: MarketInstrument) => {
-      const currency = item.currency || resolveCurrency(item);
+  // Notowania dla aktualnie widocznej listy
+  useEffect(() => {
+    if (currentInstruments.length === 0) return;
 
-      const instrumentData = {
-        stock: item.symbol,
-        title: item.name.toUpperCase(),
-        currency,
-        symbol: item.symbol,
-        exchange: item.exchange,
-      };
+    const missing = currentInstruments.filter(
+      (instrument) =>
+        quotes[quoteKey(instrument.symbol, instrument.exchange)] === undefined,
+    );
+    if (missing.length === 0) return;
 
-      setModalInstrument(instrumentData);
-      setModalVisible(true);
+    let active = true;
 
-      // Pobierz dane finansowe w tle
-      try {
-        const financialData = await getStockData(item.symbol, item.exchange);
-        if (financialData) {
-          setModalInstrument((curr) =>
-            curr
-              ? { ...curr, currency: financialData.currency || curr.currency, financialData }
-              : null,
+    getStockQuotesBatch(
+      missing.map(({ symbol, exchange }) => ({ symbol, exchange })),
+    )
+      .then((result) => {
+        if (!active) return;
+        setQuotes((prev) => {
+          const next = { ...prev };
+          for (const instrument of missing) {
+            const key = quoteKey(instrument.symbol, instrument.exchange);
+            next[key] = result[key] ?? null;
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setQuotes((prev) => {
+          const next = { ...prev };
+          for (const instrument of missing) {
+            next[quoteKey(instrument.symbol, instrument.exchange)] = null;
+          }
+          return next;
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentInstruments, quotes]);
+
+  // Instrument dla prawego panelu
+  const panelInstrument = useMemo<
+    (MarketInstrument & { currency: string }) | null
+  >(() => {
+    if (currentInstruments.length === 0) return null;
+    const selected = currentInstruments.find(
+      (instrument) =>
+        instrument.symbol === selectedStock.symbol &&
+        instrument.exchange === selectedStock.exchange,
+    );
+    return withResolvedCurrency(selected ?? currentInstruments[0]);
+  }, [currentInstruments, selectedStock.exchange, selectedStock.symbol]);
+
+  // Dynamiczne zakładki: lista z Yahoo, cache 10 min po stronie klienta i serwera
+  const applyDynamicAssets = useCallback(
+    (category: DynamicMarketTabKey, assets: DynamicTrendAsset[]) => {
+      const mapped = assets.slice(0, 10).map(toMarketInstrument);
+      setDynamicInstruments((prev) => ({ ...prev, [category]: mapped }));
+
+      if (mapped.length > 0) {
+        setSelectedStock((current) => {
+          const exists = mapped.some(
+            (instrument) =>
+              instrument.symbol === current.symbol &&
+              instrument.exchange === current.exchange,
           );
         } else {
           notify({
@@ -220,11 +307,95 @@ export default function MarketScreen() {
           title: 'Błąd pobierania danych',
           category: NOTIFICATION_GROUPS.marketFinancials,
           message: `Nie udało się pobrać danych dla ${item.symbol}. Spróbuj ponownie później.`,
+          return exists ? current : withResolvedCurrency(mapped[0]);
         });
       }
     },
     [],
   );
+
+  const loadDynamicTab = useCallback(
+    (category: DynamicMarketTabKey) => {
+      const cached = getCachedDynamicTrends(category);
+      if (cached && cached.length > 0) {
+        applyDynamicAssets(category, cached);
+        setDynamicLoading((prev) => ({ ...prev, [category]: false }));
+      } else {
+        setDynamicLoading((prev) => ({ ...prev, [category]: true }));
+      }
+
+      getDynamicTrends(category)
+        .then((assets) => {
+          applyDynamicAssets(category, assets);
+          setDynamicLoading((prev) => ({ ...prev, [category]: false }));
+        })
+        .catch(() => {
+          setDynamicLoading((prev) => ({ ...prev, [category]: false }));
+        });
+    },
+    [applyDynamicAssets],
+  );
+
+  // Zmiana zakładki
+  const handleTabChange = (tab: MarketTabKey) => {
+    setSelectedTab(tab);
+
+    if (isDynamicMarketTab(tab)) {
+      loadDynamicTab(tab);
+      return;
+    }
+
+    const list =
+      tab === "watchlist" ? watchlistItems : FIXED_MARKET_INSTRUMENTS[tab];
+    if (list.length > 0) {
+      setSelectedStock(withResolvedCurrency(list[0]));
+    }
+  };
+
+  // Funkcja otwierająca modal z wykresem dla wybranego instrumentu, pobierająca dane finansowe w tle
+  const openStockModal = useCallback(async (item: MarketInstrument) => {
+    const currency = item.currency || resolveCurrency(item);
+
+    const instrumentData = {
+      stock: item.symbol,
+      title: item.name.toUpperCase(),
+      currency,
+      symbol: item.symbol,
+      exchange: item.exchange,
+    };
+
+    setModalInstrument(instrumentData);
+    setModalVisible(true);
+
+    // Pobierz dane finansowe w tle
+    try {
+      const financialData = await getStockData(item.symbol, item.exchange);
+      if (financialData) {
+        setModalInstrument((curr) =>
+          curr
+            ? {
+                ...curr,
+                currency: financialData.currency || curr.currency,
+                financialData,
+              }
+            : null,
+        );
+      } else {
+        notify({
+          variant: "warning",
+          title: "Brak danych finansowych",
+          message: `Nie udało się pobrać szczegółów dla ${item.symbol}. Dostępne są tylko notowania.`,
+        });
+      }
+    } catch (err) {
+      console.warn("Błąd pobierania danych finansowych:", err);
+      notify({
+        variant: "error",
+        title: "Błąd pobierania danych",
+        message: `Nie udało się pobrać danych dla ${item.symbol}. Spróbuj ponownie później.`,
+      });
+    }
+  }, []);
 
   // Na desktopie kliknięcie wybiera instrument do prawego panelu, na mobile otwiera modal
   const pressInstrument = (item: MarketInstrument) => {
@@ -232,33 +403,36 @@ export default function MarketScreen() {
       openStockModal(item);
       return;
     }
-    setSelectedStock({ ...item, currency: item.currency || resolveCurrency(item) });
+    setSelectedStock(withResolvedCurrency(item));
   };
 
-  // Funckja zamykająca modal z wykresem i resetująca stan modalu
+  // Funkcja zamykająca modal z wykresem i resetująca stan modalu
   const closeModal = useCallback(() => {
     setModalVisible(false);
     setModalInstrument(null);
   }, []);
 
-  // Filtrowanie spółek w zależności od wybranego filtra rynku (ALL, PL, GLOBAL)
-  const filteredStocks = stocksList.filter((s) => {
-    if (selectedFilter === 'ALL') return true;
-    return s.category === selectedFilter;
-  });
-
   const searchTerm = searchQuery.trim();
-  const isSearching = searchOpen && searchTerm.length >= 2 && (searchLoading || completedQuery !== '');
-  const stockSectionTitle =
-    selectedFilter === 'ALL'
-      ? 'Wybrane spółki GPW i światowe'
-      : selectedFilter === 'PL'
-        ? 'Giełda Papierów Wartościowych w Warszawie'
-        : 'Rynki zagraniczne (USA, Europa)';
+  const isSearching =
+    searchOpen &&
+    searchTerm.length >= 2 &&
+    (searchLoading || completedQuery !== "");
 
-  const cycleFilter = () => {
-    setSelectedFilter((current) => (current === 'ALL' ? 'PL' : current === 'PL' ? 'GLOBAL' : 'ALL'));
-  };
+  const watchlistEmpty =
+    !isSearching &&
+    selectedTab === "watchlist" &&
+    currentInstruments.length === 0;
+  const dynamicEmpty =
+    !isSearching &&
+    isDynamicMarketTab(selectedTab) &&
+    !dynamicLoading[selectedTab] &&
+    currentInstruments.length === 0;
+  const showEmptyState = watchlistEmpty || dynamicEmpty;
+  const showDynamicSkeleton =
+    !isSearching &&
+    isDynamicMarketTab(selectedTab) &&
+    dynamicLoading[selectedTab] &&
+    currentInstruments.length === 0;
 
   // Funkcja zamykająca wyszukiwanie; zapytanie i wyniki zostają zapamiętane,
   // dzięki czemu po ponownym otwarciu można je od razu podmienić
@@ -272,21 +446,35 @@ export default function MarketScreen() {
     event.preventDefault();
     setSearchOpen(true);
   }, []);
-  useKeyboardShortcut('/', openSearchShortcut, isFocused && !modalVisible);
-  useKeyboardShortcut('Escape', closeSearch, isFocused && searchOpen && !modalVisible);
+  useKeyboardShortcut("/", openSearchShortcut, isFocused && !modalVisible);
+  useKeyboardShortcut(
+    "Escape",
+    closeSearch,
+    isFocused && searchOpen && !modalVisible,
+  );
 
   // Strzałki góra/dół przełączają instrument w prawym panelu (desktop), lista przewija się do zaznaczenia
   const selectByOffset = (offset: number) => (event: KeyboardEvent) => {
     event.preventDefault();
-    if (filteredStocks.length === 0) return;
-    const current = filteredStocks.findIndex((stock) => stock.symbol === selectedStock.symbol);
-    const next = filteredStocks[Math.min(Math.max(current + offset, 0), filteredStocks.length - 1)];
-    setSelectedStock(next);
-    document.getElementById(`market-row-${next.symbol}`)?.scrollIntoView({ block: 'nearest' });
+    if (currentInstruments.length === 0) return;
+    const current = currentInstruments.findIndex(
+      (instrument) =>
+        instrument.symbol === selectedStock.symbol &&
+        instrument.exchange === selectedStock.exchange,
+    );
+    const nextIndex = Math.min(
+      Math.max(current + offset, 0),
+      currentInstruments.length - 1,
+    );
+    const next = currentInstruments[nextIndex];
+    setSelectedStock(withResolvedCurrency(next));
+    document
+      .getElementById(`market-row-${next.symbol}`)
+      ?.scrollIntoView({ block: "nearest" });
   };
   const arrowsEnabled = isFocused && isDesktop && !isSearching && !modalVisible;
-  useKeyboardShortcut('ArrowDown', selectByOffset(1), arrowsEnabled);
-  useKeyboardShortcut('ArrowUp', selectByOffset(-1), arrowsEnabled);
+  useKeyboardShortcut("ArrowDown", selectByOffset(1), arrowsEnabled);
+  useKeyboardShortcut("ArrowUp", selectByOffset(-1), arrowsEnabled);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -302,67 +490,69 @@ export default function MarketScreen() {
             <Ionicons name="search" size={22} color={colors.accent} />
           </Pressable>
         }
-        right={
-          <Pressable
-            onPress={cycleFilter}
-            accessibilityLabel={`Filtr rynku: ${FILTER_LABELS[selectedFilter]}`}
-            hitSlop={8}
-          >
-            <Ionicons name="globe-outline" size={23} color={colors.textMuted} />
-          </Pressable>
-        }
         search={{
           open: searchOpen,
           value: searchQuery,
           onChangeText: setSearchQuery,
           onClose: closeSearch,
-          placeholder: 'Nazwa lub ticker, np. Apple',
+          placeholder: "Nazwa lub ticker, np. Apple",
         }}
       />
       {/* Na desktopie lista i wykres to dwa panele obok siebie, każdy przewijany osobno (jak w xStation) */}
-      <BlurTargetView ref={blurTargetRef} style={[styles.blurTarget, isDesktop && styles.split]}>
+      <BlurTargetView
+        ref={blurTargetRef}
+        style={[styles.blurTarget, isDesktop && styles.split]}
+      >
         <ScrollView
-          style={isDesktop ? [styles.listPanel, { width: listPanelWidth, borderRightColor: colors.border }] : undefined}
-          contentContainerStyle={[styles.content, { paddingTop: top + PANEL_HEADER_HEIGHT + 8, paddingBottom: 38 + bottom }]}
-          showsVerticalScrollIndicator={Platform.OS === 'web'}
+          style={
+            isDesktop
+              ? [
+                  styles.listPanel,
+                  { width: listPanelWidth, borderRightColor: colors.border },
+                ]
+              : undefined
+          }
+          contentContainerStyle={[
+            styles.content,
+            showEmptyState && styles.contentFill,
+            {
+              paddingTop: top + PANEL_HEADER_HEIGHT + 8,
+              paddingBottom: 38 + bottom,
+            },
+          ]}
+          showsVerticalScrollIndicator={Platform.OS === "web"}
           keyboardShouldPersistTaps="handled"
           {...scrollNav}
         >
-          <Section
-            first={isSearching}
-            label={
-              isSearching
-                ? searchLoading
-                  ? 'Wyszukiwanie...'
+          {isSearching ? (
+            <Section
+              first
+              label={
+                searchLoading
+                  ? "Wyszukiwanie..."
                   : `Wyniki dla "${searchQuery}" (${searchResults.length})`
-                : stockSectionTitle
-            }
-          >
-            {!isSearching && (
-              <View style={styles.filtersRow}>
-                <CategorySelector
-                  options={FILTER_OPTIONS}
-                  value={selectedFilter}
-                  onChange={setSelectedFilter}
-                  accessibilityLabel="Filtr rynku"
-                />
-              </View>
-            )}
-
-            {isSearching ? (
-              searchLoading ? (
+              }
+            >
+              {searchLoading ? (
                 <View>
                   {[1, 2, 3, 4].map((i) => (
                     <View
                       key={i}
                       style={[
                         styles.stockRow,
-                        { borderBottomColor: colors.borderGlass, borderBottomWidth: StyleSheet.hairlineWidth },
+                        {
+                          borderBottomColor: colors.borderGlass,
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                        },
                       ]}
                     >
                       <View style={styles.skeletonCopy}>
                         <Skeleton width="45%" height={14} />
-                        <Skeleton width="30%" height={10} style={styles.skeletonSubline} />
+                        <Skeleton
+                          width="30%"
+                          height={10}
+                          style={styles.skeletonSubline}
+                        />
                       </View>
                       <Skeleton width={58} height={14} />
                     </View>
@@ -370,10 +560,19 @@ export default function MarketScreen() {
                 </View>
               ) : searchResults.length === 0 ? (
                 <View style={styles.emptyBox}>
-                  <Ionicons name="search-outline" size={34} color={colors.textMuted} />
-                  <Text style={[styles.emptyTitle, { color: colors.text }]}>Nie znaleziono spółek</Text>
-                  <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-                    Spróbuj wpisać inny ticker lub nazwę firmy (np. Apple, KGHM, NVDA).
+                  <Ionicons
+                    name="search-outline"
+                    size={34}
+                    color={colors.textMuted}
+                  />
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                    Nie znaleziono spółek
+                  </Text>
+                  <Text
+                    style={[styles.emptySubtitle, { color: colors.textMuted }]}
+                  >
+                    Spróbuj wpisać inny ticker lub nazwę firmy (np. Apple, KGHM,
+                    NVDA).
                   </Text>
                 </View>
               ) : (
@@ -400,46 +599,147 @@ export default function MarketScreen() {
                     >
                       <View style={styles.stockMeta}>
                         <View style={styles.stockSymbolRow}>
-                          <Text style={[styles.stockSymbol, { color: colors.text }]}>{item.symbol.replace(/\.PA$/, '')}</Text>
-                          <Text style={[styles.exchangeTag, { color: colors.textMuted }]}>
+                          <Text
+                            style={[styles.stockSymbol, { color: colors.text }]}
+                          >
+                            {item.symbol.replace(/\.PA$/, "")}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.exchangeTag,
+                              { color: colors.textMuted },
+                            ]}
+                          >
                             · {item.exchangeName || item.exchange}
                           </Text>
                         </View>
-                        <Text style={[styles.stockName, { color: colors.textMuted }]} numberOfLines={1}>
+                        <Text
+                          style={[
+                            styles.stockName,
+                            { color: colors.textMuted },
+                          ]}
+                          numberOfLines={1}
+                        >
                           {item.name}
                         </Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                      <Ionicons
+                        name="chevron-forward"
+                        size={16}
+                        color={colors.textMuted}
+                      />
                     </TouchableOpacity>
                   ))}
                 </View>
-              )
-            ) : (
-              <View>
-                {filteredStocks.map((stock, index) => {
-                  const hasPrice = stock.price !== undefined;
-
-                  return (
-                    <InstrumentRow
-                      key={stock.symbol}
-                      symbol={stock.symbol}
-                      name={stock.name}
-                      exchangeName={stock.exchangeName}
-                      price={stock.price}
-                      changePercent={stock.changePercent}
-                      currency={stock.currency}
-                      divider={index < filteredStocks.length - 1}
-                      loading={!hasPrice}
-                      onPress={() => openStockModal(stock)}
-                    />
-                  );
-                })}
+              )}
+            </Section>
+          ) : (
+            <>
+              <View style={styles.tabsRow}>
+                <CategorySelector
+                  options={MARKET_TABS}
+                  value={selectedTab}
+                  onChange={handleTabChange}
+                  accessibilityLabel="Zakładki rynku"
+                />
               </View>
-            )}
-          </Section>
+
+              {showEmptyState ? (
+                <View style={styles.emptyState}>
+                  <Ionicons
+                    name={
+                      watchlistEmpty ? "star-outline" : "cloud-offline-outline"
+                    }
+                    size={34}
+                    color={colors.textMuted}
+                  />
+                  <Text
+                    style={[styles.emptyStateText, { color: colors.textMuted }]}
+                  >
+                    {watchlistEmpty
+                      ? "Tutaj pojawią się zaobserwowane instrumenty"
+                      : "Brak instrumentów do wyświetlenia"}
+                  </Text>
+                </View>
+              ) : showDynamicSkeleton ? (
+                <View>
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.stockRow,
+                        {
+                          borderBottomColor: colors.borderGlass,
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                        },
+                      ]}
+                    >
+                      <View style={styles.skeletonCopy}>
+                        <Skeleton width="45%" height={14} />
+                        <Skeleton
+                          width="30%"
+                          height={10}
+                          style={styles.skeletonSubline}
+                        />
+                      </View>
+                      <Skeleton width={58} height={14} />
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Section first label={MARKET_SECTION_LABELS[selectedTab]}>
+                  <View>
+                    {currentInstruments.map((stock, index) => {
+                      const key = quoteKey(stock.symbol, stock.exchange);
+                      const quote = quotes[key];
+
+                      return (
+                        <View key={key} nativeID={`market-row-${stock.symbol}`}>
+                          <InstrumentRow
+                            symbol={stock.symbol}
+                            name={stock.name}
+                            exchangeName={stock.exchangeName}
+                            price={quote?.price}
+                            changePercent={quote?.changePercent}
+                            currency={
+                              quote?.currency ??
+                              stock.currency ??
+                              resolveCurrency(stock)
+                            }
+                            divider={index < currentInstruments.length - 1}
+                            loading={quote === undefined}
+                            onPress={() => pressInstrument(stock)}
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+                </Section>
+              )}
+            </>
+          )}
         </ScrollView>
 
-        {isDesktop && <InstrumentPanel instrument={selectedStock} paddingTop={top + PANEL_HEADER_HEIGHT + 8} />}
+        {isDesktop &&
+          (panelInstrument ? (
+            <InstrumentPanel
+              instrument={panelInstrument}
+              paddingTop={top + PANEL_HEADER_HEIGHT + 8}
+            />
+          ) : (
+            <View style={[styles.detailPanel, styles.detailEmpty]}>
+              <Ionicons
+                name="analytics-outline"
+                size={32}
+                color={colors.textMuted}
+              />
+              <Text
+                style={[styles.detailEmptyText, { color: colors.textMuted }]}
+              >
+                Wybierz instrument, aby zobaczyć wykres
+              </Text>
+            </View>
+          ))}
       </BlurTargetView>
 
       {modalVisible && modalInstrument && (
@@ -454,7 +754,13 @@ export default function MarketScreen() {
 }
 
 // Prawy panel na desktopie: wykres i szczegóły finansowe wybranego instrumentu (na mobile to samo jest w modalu)
-function InstrumentPanel({ instrument, paddingTop }: { instrument: MarketInstrument & { currency: string }; paddingTop: number }) {
+function InstrumentPanel({
+  instrument,
+  paddingTop,
+}: {
+  instrument: MarketInstrument & { currency: string };
+  paddingTop: number;
+}) {
   const { financialData, loading } = useInstrumentFinancialData({
     stock: instrument.symbol,
     exchange: instrument.exchange,
@@ -462,7 +768,11 @@ function InstrumentPanel({ instrument, paddingTop }: { instrument: MarketInstrum
   });
 
   return (
-    <ScrollView style={styles.detailPanel} contentContainerStyle={[styles.detailContent, { paddingTop }]} showsVerticalScrollIndicator>
+    <ScrollView
+      style={styles.detailPanel}
+      contentContainerStyle={[styles.detailContent, { paddingTop }]}
+      showsVerticalScrollIndicator
+    >
       <StockCandleChart
         stock={instrument.symbol}
         title={instrument.name.toUpperCase()}
@@ -477,16 +787,26 @@ function InstrumentPanel({ instrument, paddingTop }: { instrument: MarketInstrum
 // Stylesheet dla komponentu MarketScreen (ekran "Rynek")
 const styles = StyleSheet.create({
   blurTarget: { flex: 1 },
-  split: { flexDirection: 'row' },
+  split: { flexDirection: "row" },
   listPanel: { flexGrow: 0, borderRightWidth: 1 },
   stockRowDesktop: { paddingHorizontal: 10, borderRadius: 8 },
   detailPanel: { flex: 1 },
   detailContent: {
-    width: '100%',
+    width: "100%",
     maxWidth: 1000,
-    alignSelf: 'center',
+    alignSelf: "center",
     paddingHorizontal: 32,
     paddingBottom: 38,
+  },
+  detailEmpty: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 32,
+  },
+  detailEmptyText: {
+    fontSize: 13,
+    textAlign: "center",
   },
   root: {
     flex: 1,
@@ -494,29 +814,32 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
   },
+  contentFill: {
+    flexGrow: 1,
+  },
+  tabsRow: {
+    marginBottom: 16,
+  },
   eyebrow: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 1.2,
     marginBottom: 8,
   },
   title: {
     fontSize: 25,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 13,
     marginTop: 6,
-    fontWeight: '500',
-  },
-  filtersRow: {
-    marginBottom: 18,
+    fontWeight: "500",
   },
   stockRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 14,
   },
   stockMeta: {
@@ -524,18 +847,18 @@ const styles = StyleSheet.create({
     paddingRight: 14,
   },
   stockSymbolRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+    flexDirection: "row",
+    alignItems: "baseline",
     gap: 4,
   },
   stockSymbol: {
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 0.2,
   },
   exchangeTag: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   stockName: {
     fontSize: 12,
@@ -549,19 +872,32 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   emptyBox: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 44,
     paddingHorizontal: 24,
     gap: 8,
   },
   emptyTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     marginTop: 4,
   },
   emptySubtitle: {
     fontSize: 13,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 18,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    gap: 10,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 19,
   },
 });

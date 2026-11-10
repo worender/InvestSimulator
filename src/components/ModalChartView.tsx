@@ -34,7 +34,11 @@ import {
   getStockData,
   StockFinancialData,
 } from "../api/marketService";
-import { convertForDisplay, displaySymbol } from "../displayCurrency";
+import {
+  convertForDisplay,
+  displaySymbol,
+  useDisplayCurrency,
+} from "../displayCurrency";
 import { useLockScreenWhileActive } from "../interactionLock";
 import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { NotificationHost } from "../notifications";
@@ -197,6 +201,14 @@ export function ModalChartView({
   initialInterval,
 }: ModalChartViewProps) {
   const theme = useTheme();
+  const display = useDisplayCurrency();
+  // Wersja formatowania powiązana z bieżącymi ustawieniami waluty
+  const formatCurrency = (value?: number, currencyCode?: string): string => {
+    if (value === undefined || currencyCode === undefined) return "-";
+    const converted = display.convertForDisplay(value, currencyCode);
+    const symbol = display.displaySymbol(currencyCode);
+    return `${converted.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
+  };
 
   // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(true);

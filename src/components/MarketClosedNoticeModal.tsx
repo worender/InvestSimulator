@@ -2,8 +2,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurView } from "expo-blur";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SearchableInstrument } from "../database/mockSearchableInstruments";
-import { formatMoneyForDisplay } from "../displayCurrency";
 import { NotificationHost } from "../notifications";
+import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 
 interface MarketClosedNoticeModalProps {
@@ -26,6 +26,7 @@ export function MarketClosedNoticeModal({
   onClose,
 }: MarketClosedNoticeModalProps) {
   const { colors, mode } = useTheme();
+  const display = useDisplayCurrency();
   const isDark = mode === "dark";
 
   if (!instrument) return null;
@@ -140,7 +141,7 @@ export function MarketClosedNoticeModal({
                 Szacowana wartość:
               </Text>
               <Text style={[styles.summaryValue, { color: colors.text }]}>
-                {formatMoneyForDisplay(totalCost, instrument.currency)}
+                {display.formatMoneyForDisplay(totalCost, instrument.currency)}
               </Text>
             </View>
           </View>

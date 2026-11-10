@@ -548,11 +548,16 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   const fontSizeScale = FONT_SCALES[fontSizePreference];
   setGlobalFontScale(fontSizeScale);
-  setDisplayCurrencyState({
-    multiCurrency,
-    currency: defaultCurrency,
-    rates,
-  });
+
+  // Aktualizacja stanu podczas renderowania powiadamiałaby subskrybentów w trakcie renderu i mogła
+  // zostawić część komponentów ze starymi wartościami
+  useEffect(() => {
+    setDisplayCurrencyState({
+      multiCurrency,
+      currency: defaultCurrency,
+      rates,
+    });
+  }, [defaultCurrency, multiCurrency, rates]);
 
   const value = useMemo(
     () => ({

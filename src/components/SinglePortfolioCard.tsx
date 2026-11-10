@@ -3,8 +3,7 @@ import { useMemo } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { MockPortfolio } from "../database/mockPortfolioData";
 import {
-  convertForDisplay,
-  displaySymbol,
+  useDisplayCurrency,
 } from "../displayCurrency";
 import { useTheme } from "../theme";
 import { GlassBackground } from "./GlassBackground";
@@ -19,6 +18,7 @@ interface SinglePortfolioCardProps {
 
 export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
   const { colors } = useTheme();
+  const display = useDisplayCurrency();
 
   const formatNumber = (val: number) =>
     Math.abs(val).toLocaleString("pl-PL", {
@@ -31,11 +31,11 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
   const arrowIcon = isPositive ? "arrow-up" : "arrow-down";
   const sign = isPositive ? "+" : "-";
 
-  const symbol = displaySymbol(portfolio.currency);
-  const totalFormatted = `${formatNumber(convertForDisplay(portfolio.totalValue, portfolio.currency))} ${symbol}`;
-  const activeFormatted = `${formatNumber(convertForDisplay(Math.max(0, portfolio.totalValue - portfolio.cashBalance), portfolio.currency))} ${symbol}`;
-  const inactiveFormatted = `${formatNumber(convertForDisplay(portfolio.cashBalance, portfolio.currency))} ${symbol}`;
-  const profitFormatted = `${sign}${formatNumber(convertForDisplay(portfolio.profitCurrency, portfolio.currency))} ${symbol}`;
+  const symbol = display.displaySymbol(portfolio.currency);
+  const totalFormatted = `${formatNumber(display.convertForDisplay(portfolio.totalValue, portfolio.currency))} ${symbol}`;
+  const activeFormatted = `${formatNumber(display.convertForDisplay(Math.max(0, portfolio.totalValue - portfolio.cashBalance), portfolio.currency))} ${symbol}`;
+  const inactiveFormatted = `${formatNumber(display.convertForDisplay(portfolio.cashBalance, portfolio.currency))} ${symbol}`;
+  const profitFormatted = `${sign}${formatNumber(display.convertForDisplay(portfolio.profitCurrency, portfolio.currency))} ${symbol}`;
   const profitPctFormatted = `${sign}${Math.abs(portfolio.profitPercent).toFixed(2)}%`;
 
   // Punkty wykresu dla 3 miesięcy
@@ -46,10 +46,10 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
     return buildPortfolioSeries([baseVal, midVal, endVal], 90).map(
       (point) => ({
         ...point,
-        value: convertForDisplay(point.value, portfolio.currency),
+        value: display.convertForDisplay(point.value, portfolio.currency),
       }),
     );
-  }, [portfolio]);
+  }, [portfolio, display]);
 
   const cardAccent = colors.accent;
 

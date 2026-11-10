@@ -8,8 +8,7 @@ import {
 import { getPortfolio, type PortfolioItem } from "../database/database";
 import { MOCK_PORTFOLIOS } from "../database/mockPortfolioData";
 import {
-  displaySymbol,
-  formatMoneyForDisplay,
+  useDisplayCurrency,
 } from "../displayCurrency";
 import { useTheme } from "../theme";
 import { useWatchlist, type WatchlistInstrument } from "../watchlist";
@@ -47,6 +46,7 @@ const formatPercent = (value: number) =>
 
 export function WatchedInstrumentsSection() {
   const { colors, rates } = useTheme();
+  const display = useDisplayCurrency();
   const { instruments } = useWatchlist();
 
   const cachedInitial = useMemo(() => {
@@ -190,7 +190,7 @@ export function WatchedInstrumentsSection() {
                   numberOfLines={1}
                   style={[styles.profit, { color: profitTone }]}
                 >
-                  {`${profit >= 0 ? "+" : "-"}${formatMoneyForDisplay(profit, holdingCurrency)} (${formatPercent(profitPercent)})`}
+                  {`${profit >= 0 ? "+" : "-"}${display.formatMoneyForDisplay(profit, holdingCurrency)} (${formatPercent(profitPercent)})`}
                 </Text>
               ) : null
             }
@@ -204,7 +204,7 @@ export function WatchedInstrumentsSection() {
             stock: selected.symbol,
             title: selected.name.toUpperCase(),
             currency: selected.currency,
-            symbol: displaySymbol(selected.currency),
+            symbol: display.displaySymbol(selected.currency),
             exchange: selected.exchange,
           }}
           onClose={() => setSelected(null)}
