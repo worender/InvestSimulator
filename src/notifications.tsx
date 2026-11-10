@@ -30,6 +30,11 @@ const NotificationContext = createContext<NotificationContextValue | null>(
 type NotificationViewContextValue = {
   notification?: AppNotification;
   dismiss: () => void;
+  // Czas pozostały do ukrycia i informacja, czy powiadomienie było już widoczne
+  getTiming: (notification: AppNotification) => {
+    duration: number;
+    alreadyShown: boolean;
+  };
 };
 
 const NotificationViewContext =
@@ -51,6 +56,8 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   // warstwę natywną, więc powiadomienie z korzenia aplikacji zostałoby pod nim.
   const [activeLayerId, setActiveLayerId] = useState<number | null>(null);
   const layersRef = useRef<number[]>([]);
+  const shownAtRef = useRef<Map<string, number>>(new Map());
+  const seenRef = useRef<Set<string>>(new Set());
 
   useEffect(
     () =>
@@ -61,7 +68,31 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   );
 
   const dismiss = useCallback(() => {
-    setQueue((current) => current.slice(1));
+    setQueue((current) => {
+      const [first] = current;
+      if (first) {
+        shownAtRef.current.delete(first.id);
+        seenRef.current.delete(first.id);
+      }
+      return current.slice(1);
+    });
+  }, []);
+
+  const getTiming = useCallback((notification: AppNotification) => {
+    const now = Date.now();
+    const alreadyShown = seenRef.current.has(notification.id);
+
+    let shownAt = shownAtRef.current.get(notification.id);
+    if (shownAt === undefined) {
+      shownAt = now;
+      shownAtRef.current.set(notification.id, shownAt);
+    }
+    seenRef.current.add(notification.id);
+
+    return {
+      duration: Math.max(0, notification.duration - (now - shownAt)),
+      alreadyShown,
+    };
   }, []);
 
   const registerLayer = useCallback((id: number) => {
@@ -79,8 +110,8 @@ export function NotificationProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<NotificationContextValue>(() => ({ notify }), []);
   const viewValue = useMemo<NotificationViewContextValue>(
-    () => ({ notification: queue[0], dismiss }),
-    [dismiss, queue],
+    () => ({ notification: queue[0], dismiss, getTiming }),
+    [dismiss, getTiming, queue],
   );
   const layerValue = useMemo<NotificationLayerContextValue>(
     () => ({ activeLayerId, registerLayer, unregisterLayer }),
@@ -94,7 +125,11 @@ export function NotificationProvider({ children }: PropsWithChildren) {
           {children}
           {/* Warstwa zapasowa dla ekranów, które nie są natywnymi modalami. */}
           {activeLayerId === null ? (
-            <NotificationViewport notification={queue[0]} onDismiss={dismiss} />
+            <NotificationViewport
+              notification={queue[0]}
+              onDismiss={dismiss}
+              getTiming={getTiming}
+            />
           ) : null}
         </NotificationLayerContext.Provider>
       </NotificationViewContext.Provider>
@@ -146,6 +181,7 @@ export function NotificationHost() {
       <NotificationViewport
         notification={viewContext.notification}
         onDismiss={viewContext.dismiss}
+        getTiming={viewContext.getTiming}
       />
     </GestureHandlerRootView>
   );
@@ -154,15 +190,22 @@ export function NotificationHost() {
 type NotificationViewportProps = {
   notification?: AppNotification;
   onDismiss: () => void;
+  getTiming: (notification: AppNotification) => {
+    duration: number;
+    alreadyShown: boolean;
+  };
 };
 
 function NotificationViewport({
   notification,
   onDismiss,
+  getTiming,
 }: NotificationViewportProps) {
   const { top } = useSafeAreaInsets();
 
   if (!notification) return null;
+
+  const { duration, alreadyShown } = getTiming(notification);
 
   return (
     <View
@@ -172,6 +215,8 @@ function NotificationViewport({
       <NotificationCard
         key={notification.id}
         notification={notification}
+        duration={duration}
+        alreadyShown={alreadyShown}
         onDismiss={onDismiss}
       />
     </View>

@@ -11,7 +11,7 @@ import {
   getStockCandles,
 } from "../api/marketService";
 import { currencySymbol, resolveCurrency } from "../currency";
-import { convertForDisplay, displaySymbol } from "../displayCurrency";
+import { useDisplayCurrency } from "../displayCurrency";
 import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { useTheme } from "../theme";
 import { CategorySelector } from "./CategorySelector";

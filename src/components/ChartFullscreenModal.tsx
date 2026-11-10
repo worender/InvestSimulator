@@ -28,14 +28,8 @@ import { CandlestickChart } from "react-native-wagmi-charts";
 import { CandleData, getStockCandles } from "../api/marketService";
 import { useDisplayCurrency } from "../displayCurrency";
 import { useLockScreenWhileActive } from "../interactionLock";
+import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
-import {
-  convertForDisplay,
-  displaySymbol,
-} from '../displayCurrency';
-import { useLockScreenWhileActive } from '../interactionLock';
-import { NotificationHost } from '../notifications';
-import { useTheme } from '../theme';
 import {
   ChartCrosshair,
   renderCandleLine,
