@@ -46,6 +46,10 @@ export function validateAvatarUrl(value: string): string {
     throw new Error("Nieprawidłowy URL avatara");
   }
 
+  if (/[<>"'`]/.test(avatarUrl)) {
+  throw new Error("Nieprawidłowy URL avatara");
+  }
+
   let parsedUrl: URL;
 
   try {
