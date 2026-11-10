@@ -11,7 +11,7 @@ import {
   getStockCandles,
 } from "../api/marketService";
 import { currencySymbol, resolveCurrency } from "../currency";
-import { convertForDisplay, displaySymbol } from "../displayCurrency";
+import { useDisplayCurrency } from "../displayCurrency";
 import { notify } from "../notificationBus";
 import { useTheme } from "../theme";
 import { CategorySelector } from "./CategorySelector";
@@ -351,10 +351,11 @@ function TrendCard({
   showSeparator: boolean;
   onPress: () => void;
 }) {
+  const display = useDisplayCurrency();
   const latest = candles[candles.length - 1];
   const values = candles.map((item) => ({
     timestamp: item.timestamp,
-    value: item.close,
+    value: display.convertForDisplay(item.close, currency),
   }));
   const hasChart = values.length > 1;
   const currency = resolveCurrency(asset);
@@ -403,8 +404,13 @@ function TrendCard({
           >
             {asset.exchangeName}
             {latest
-              ? ` · ${formatPrice(latest.close, currency)} ${displaySymbol(currency)}`
-              : ` · ${displaySymbol(currency)}`}
+              ? ` · ${display
+                  .convertForDisplay(latest.close, currency)
+                  .toLocaleString("pl-PL", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })} ${display.displaySymbol(currency)}`
+              : ` · ${display.displaySymbol(currency)}`}
           </Text>
         </View>
         <View
@@ -453,13 +459,6 @@ function toModalInstrument(asset: DynamicTrendAsset) {
     symbol: currencySymbol(currency),
     exchange: asset.exchange,
   };
-}
-
-function formatPrice(value: number, currency: string) {
-  return convertForDisplay(value, currency).toLocaleString("pl-PL", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 }
 
 function truncate(value: string, limit: number) {

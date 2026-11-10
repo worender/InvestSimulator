@@ -30,7 +30,7 @@ import {
   TransactionHistoryItem,
 } from "../database/mockPortfolioData";
 import { SearchableInstrument } from "../database/mockSearchableInstruments";
-import { convertForDisplay, displaySymbol } from "../displayCurrency";
+import { useDisplayCurrency } from "../displayCurrency";
 import { useLockScreenWhileActive } from "../interactionLock";
 import { notify } from "../notificationBus";
 import { useTheme } from "../theme";
@@ -92,13 +92,16 @@ export function InstrumentDetailModal({
   modalInstrument,
 }: InstrumentDetailModalProps) {
   const { colors, mode } = useTheme();
+  const display = useDisplayCurrency();
   const { bottom } = useSafeAreaInsets();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const isDark = mode === "dark";
   // Na dużym ekranie w przeglądarce zamiast wysuwanej od dołu karty jest wyśrodkowane okno dialogowe
   const { isDesktop } = useLayoutMode();
   const isDialog = isDesktop;
-  const pageWidth = isDialog ? Math.min(DIALOG_MAX_WIDTH, windowWidth - 48) : windowWidth;
+  const pageWidth = isDialog
+    ? Math.min(DIALOG_MAX_WIDTH, windowWidth - 48)
+    : windowWidth;
 
   // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(visible);
@@ -214,7 +217,14 @@ export function InstrumentDetailModal({
             });
           }
         }),
-    [closeThreshold, finishClose, translateY, dragStart, windowHeight, isDialog],
+    [
+      closeThreshold,
+      finishClose,
+      translateY,
+      dragStart,
+      windowHeight,
+      isDialog,
+    ],
   );
 
   const dragGesture = useMemo(() => createDragGesture(), [createDragGesture]);
@@ -324,7 +334,7 @@ export function InstrumentDetailModal({
 
   // Wartość przeliczona na walutę wyświetlania (gdy wyłączono wiele walut).
   const formatMoney = (value: number, currency?: string) =>
-    `${formatNumber(convertForDisplay(value, currency))} ${displaySymbol(currency)}`;
+    `${formatNumber(display.convertForDisplay(value, currency))} ${display.displaySymbol(currency)}`;
 
   // Wszystkie instrumenty w kategorii
   const categoryItems = useMemo(

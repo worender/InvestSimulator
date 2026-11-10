@@ -1,5 +1,5 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useMemo, useState } from 'react';
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -10,36 +10,36 @@ import {
   TextInput,
   View,
   useWindowDimensions,
-} from 'react-native';
+} from "react-native";
 import Reanimated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-} from 'react-native-reanimated';
-import { LineChart } from 'react-native-wagmi-charts';
-import { searchInstruments } from '../api/marketService';
-import { MockPortfolio, PortfolioAssetItem } from '../database/mockPortfolioData';
+} from "react-native-reanimated";
+import { LineChart } from "react-native-wagmi-charts";
+import { searchInstruments } from "../api/marketService";
+import {
+  MockPortfolio,
+  PortfolioAssetItem,
+} from "../database/mockPortfolioData";
 import {
   InstrumentFilterCategory,
   SEARCHABLE_INSTRUMENTS,
   SearchableInstrument,
-} from '../database/mockSearchableInstruments';
-import {
-  convertForDisplay,
-  displaySymbol,
-} from '../displayCurrency';
-import { notify } from '../notificationBus';
-import { useTheme } from '../theme';
-import { useContainerWidth } from '../useContainerWidth';
-import { useLayoutMode } from '../useLayoutMode';
+} from "../database/mockSearchableInstruments";
+import { useDisplayCurrency } from "../displayCurrency";
+import { notify } from "../notificationBus";
+import { useTheme } from "../theme";
+import { useContainerWidth } from "../useContainerWidth";
+import { useLayoutMode } from "../useLayoutMode";
 
 interface TradeInstrumentViewProps {
   portfolio: MockPortfolio;
   initialAsset?: PortfolioAssetItem | null;
   onMarketClosedAlert: (
     instrument: SearchableInstrument,
-    orderType: 'BUY' | 'SELL',
+    orderType: "BUY" | "SELL",
     quantity: number,
     total: number,
   ) => void;
@@ -50,14 +50,14 @@ const FILTER_CATEGORIES: {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
 }[] = [
-  { key: 'ALL', label: 'Wszystkie', icon: 'apps-outline' },
-  { key: 'STOCKS', label: 'Akcje', icon: 'trending-up-outline' },
-  { key: 'BONDS', label: 'Obligacje', icon: 'document-text-outline' },
-  { key: 'CFD', label: 'CFD', icon: 'swap-horizontal-outline' },
-  { key: 'CRYPTO', label: 'Krypto', icon: 'logo-bitcoin' },
+  { key: "ALL", label: "Wszystkie", icon: "apps-outline" },
+  { key: "STOCKS", label: "Akcje", icon: "trending-up-outline" },
+  { key: "BONDS", label: "Obligacje", icon: "document-text-outline" },
+  { key: "CFD", label: "CFD", icon: "swap-horizontal-outline" },
+  { key: "CRYPTO", label: "Krypto", icon: "logo-bitcoin" },
 ];
 
-type InputMode = 'quantity' | 'amount';
+type InputMode = "quantity" | "amount";
 
 export function TradeInstrumentView({
   portfolio,
@@ -65,13 +65,15 @@ export function TradeInstrumentView({
   onMarketClosedAlert,
 }: TradeInstrumentViewProps) {
   const { colors, mode } = useTheme();
+  const display = useDisplayCurrency();
   const { width } = useWindowDimensions();
   const sideBySide = useLayoutMode().isDesktop;
-  const isDark = mode === 'dark';
+  const isDark = mode === "dark";
 
   // Wyszukiwarka i filtr
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<InstrumentFilterCategory>('ALL');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] =
+    useState<InstrumentFilterCategory>("ALL");
   const [yahooResults, setYahooResults] = useState<SearchableInstrument[]>([]);
   const [isSearchingYahoo, setIsSearchingYahoo] = useState(false);
 
@@ -82,7 +84,9 @@ export function TradeInstrumentView({
   const activeInstrument = useMemo(() => {
     if (selectedInstrumentOverride) return selectedInstrumentOverride;
     if (initialAsset) {
-      const match = SEARCHABLE_INSTRUMENTS.find((i) => i.symbol === initialAsset.symbol);
+      const match = SEARCHABLE_INSTRUMENTS.find(
+        (i) => i.symbol === initialAsset.symbol,
+      );
       if (match) return match;
     }
     return SEARCHABLE_INSTRUMENTS[0];
@@ -102,10 +106,10 @@ export function TradeInstrumentView({
   }
 
   // Wartość pola wyboru ilości / kwoty
-  const isCrypto = activeInstrument.category === 'CRYPTO';
-  const [inputMode, setInputMode] = useState<InputMode>('quantity');
-  const [quantityStr, setQuantityStr] = useState('1');
-  const [amountStr, setAmountStr] = useState('');
+  const isCrypto = activeInstrument.category === "CRYPTO";
+  const [inputMode, setInputMode] = useState<InputMode>("quantity");
+  const [quantityStr, setQuantityStr] = useState("1");
+  const [amountStr, setAmountStr] = useState("");
 
   // Animacja strzałki zmieniającej tryb wprowadzania
   const modeRotation = useSharedValue(0);
@@ -127,26 +131,29 @@ export function TradeInstrumentView({
         const results = await searchInstruments(q);
         if (!isMounted) return;
 
-        const mapped: SearchableInstrument[] = results.slice(0, 4).map((r, idx) => ({
-          id: `yahoo-${r.symbol}-${idx}`,
-          symbol: r.symbol,
-          name: r.name || r.symbol,
-          category: 'STOCKS',
-          categoryLabel: `${r.exchangeName || r.exchange || 'Giełda'} (Yahoo)`,
-          exchange: r.exchange || 'GLOBAL',
-          currency: portfolio.currency,
-          price: 100.0 + (idx + 1) * 24.5,
-          changePercent: 1.25,
-          isMarketOpen: false,
-          marketOpenTimeInfo: 'Rynek zagraniczny otworzy się w godzinach kolejnej sesji.',
-          chartPoints: [
-            { timestamp: 1, value: 95 },
-            { timestamp: 2, value: 98 },
-            { timestamp: 3, value: 103 },
-            { timestamp: 4, value: 101 },
-            { timestamp: 5, value: 124 },
-          ],
-        }));
+        const mapped: SearchableInstrument[] = results
+          .slice(0, 4)
+          .map((r, idx) => ({
+            id: `yahoo-${r.symbol}-${idx}`,
+            symbol: r.symbol,
+            name: r.name || r.symbol,
+            category: "STOCKS",
+            categoryLabel: `${r.exchangeName || r.exchange || "Giełda"} (Yahoo)`,
+            exchange: r.exchange || "GLOBAL",
+            currency: portfolio.currency,
+            price: 100.0 + (idx + 1) * 24.5,
+            changePercent: 1.25,
+            isMarketOpen: false,
+            marketOpenTimeInfo:
+              "Rynek zagraniczny otworzy się w godzinach kolejnej sesji.",
+            chartPoints: [
+              { timestamp: 1, value: 95 },
+              { timestamp: 2, value: 98 },
+              { timestamp: 3, value: 103 },
+              { timestamp: 4, value: 101 },
+              { timestamp: 5, value: 124 },
+            ],
+          }));
 
         setYahooResults(mapped);
       } catch {
@@ -165,12 +172,15 @@ export function TradeInstrumentView({
   // Filtrowanie instrumentów
   const filteredInstruments = useMemo(() => {
     const isQueryValid = searchQuery.trim().length >= 2;
-    const combined = [...SEARCHABLE_INSTRUMENTS, ...(isQueryValid ? yahooResults : [])];
+    const combined = [
+      ...SEARCHABLE_INSTRUMENTS,
+      ...(isQueryValid ? yahooResults : []),
+    ];
     const q = searchQuery.trim().toLowerCase();
 
     return combined.filter((inst) => {
       const matchesCategory =
-        selectedCategory === 'ALL' || inst.category === selectedCategory;
+        selectedCategory === "ALL" || inst.category === selectedCategory;
       const matchesQuery =
         !q ||
         inst.symbol.toLowerCase().includes(q) ||
@@ -183,14 +193,17 @@ export function TradeInstrumentView({
   // Sprawdzenie ile jednostek użytkownik aktualnie posiada w tym portfelu
   const ownedQuantity = useMemo(() => {
     for (const cat of portfolio.categories) {
-      const found = cat.items.find((it) => it.symbol === activeInstrument.symbol);
+      const found = cat.items.find(
+        (it) => it.symbol === activeInstrument.symbol,
+      );
       if (found) return found.ownedQuantity;
     }
     return 0;
   }, [portfolio, activeInstrument]);
 
   // Obliczenia ilości i kosztów
-  const parseNumber = (value: string) => parseFloat(value.replace(',', '.')) || 0;
+  const parseNumber = (value: string) =>
+    parseFloat(value.replace(",", ".")) || 0;
 
   // Tryb za kwotę
   const parsedAmount = parseNumber(amountStr);
@@ -198,31 +211,36 @@ export function TradeInstrumentView({
     activeInstrument.price > 0
       ? Math.floor((parsedAmount / activeInstrument.price) * 100) / 100
       : 0;
-  const parsedQuantity = inputMode === 'amount' ? amountDerivedQuantity : parseNumber(quantityStr);
+  const parsedQuantity =
+    inputMode === "amount" ? amountDerivedQuantity : parseNumber(quantityStr);
   const totalCost = parsedQuantity * activeInstrument.price;
 
   // Walidacje
-  const hasEnoughCash = totalCost <= portfolio.cashBalance && parsedQuantity > 0;
-  const hasEnoughUnits = ownedQuantity >= parsedQuantity && parsedQuantity > 0 && ownedQuantity > 0;
+  const hasEnoughCash =
+    totalCost <= portfolio.cashBalance && parsedQuantity > 0;
+  const hasEnoughUnits =
+    ownedQuantity >= parsedQuantity && parsedQuantity > 0 && ownedQuantity > 0;
 
   const formatNumber = (num: number, maxDecimals = 2) =>
-    num.toLocaleString('pl-PL', {
+    num.toLocaleString("pl-PL", {
       minimumFractionDigits: 2,
       maximumFractionDigits: maxDecimals,
     });
 
   const formatDisplayMoney = (num: number, sourceCurrency: string) =>
-    `${formatNumber(convertForDisplay(num, sourceCurrency))} ${displaySymbol(sourceCurrency)}`;
+    `${formatNumber(display.convertForDisplay(num, sourceCurrency))} ${display.displaySymbol(sourceCurrency)}`;
 
   const handleStepQuantity = (delta: number) => {
-    if (inputMode === 'amount') {
+    if (inputMode === "amount") {
       const next = Math.max(0, parsedAmount + delta * 100);
       setAmountStr(next.toFixed(2));
       return;
     }
     const step = isCrypto ? (delta > 0 ? 0.05 : -0.05) : delta;
     const nextVal = Math.max(0, parsedQuantity + step);
-    setQuantityStr(isCrypto ? nextVal.toFixed(2) : Math.round(nextVal).toString());
+    setQuantityStr(
+      isCrypto ? nextVal.toFixed(2) : Math.round(nextVal).toString(),
+    );
   };
 
   // Zmiana trybu: za ilość <-> za kwotę
@@ -232,53 +250,59 @@ export function TradeInstrumentView({
       easing: Easing.out(Easing.cubic),
     });
 
-    if (inputMode === 'quantity') {
+    if (inputMode === "quantity") {
       setAmountStr((parsedQuantity * activeInstrument.price).toFixed(2));
-      setInputMode('amount');
+      setInputMode("amount");
     } else {
       setQuantityStr(parsedQuantity.toFixed(2));
-      setInputMode('quantity');
+      setInputMode("quantity");
     }
   };
 
   const handleSetMaxForBuy = () => {
     if (activeInstrument.price <= 0) return;
 
-    if (inputMode === 'amount') {
+    if (inputMode === "amount") {
       setAmountStr(portfolio.cashBalance.toFixed(2));
       return;
     }
 
     const maxQty = portfolio.cashBalance / activeInstrument.price;
-    setQuantityStr(isCrypto ? (Math.floor(maxQty * 100) / 100).toFixed(2) : Math.floor(maxQty).toString());
+    setQuantityStr(
+      isCrypto
+        ? (Math.floor(maxQty * 100) / 100).toFixed(2)
+        : Math.floor(maxQty).toString(),
+    );
   };
 
   const handleSetMaxForSell = () => {
-    if (inputMode === 'amount') {
+    if (inputMode === "amount") {
       setAmountStr((ownedQuantity * activeInstrument.price).toFixed(2));
       return;
     }
-    setQuantityStr(isCrypto ? ownedQuantity.toFixed(3) : ownedQuantity.toString());
+    setQuantityStr(
+      isCrypto ? ownedQuantity.toFixed(3) : ownedQuantity.toString(),
+    );
   };
 
   const handleExecuteBuy = () => {
     if (!hasEnoughCash) {
       notify({
-        variant: 'warning',
-        title: 'Brak środków',
-        message: 'Nie posiadasz wystarczających środków na zakup tej ilości.',
+        variant: "warning",
+        title: "Brak środków",
+        message: "Nie posiadasz wystarczających środków na zakup tej ilości.",
       });
       return;
     }
 
     if (!activeInstrument.isMarketOpen) {
-      onMarketClosedAlert(activeInstrument, 'BUY', parsedQuantity, totalCost);
+      onMarketClosedAlert(activeInstrument, "BUY", parsedQuantity, totalCost);
       return;
     }
 
     notify({
-      variant: 'success',
-      title: 'Zlecenie zrealizowane',
+      variant: "success",
+      title: "Zlecenie zrealizowane",
       message: `Pomyślnie kupiono ${parsedQuantity} szt. ${activeInstrument.symbol} za ${formatDisplayMoney(totalCost, activeInstrument.currency)}.`,
     });
   };
@@ -286,21 +310,21 @@ export function TradeInstrumentView({
   const handleExecuteSell = () => {
     if (!hasEnoughUnits) {
       notify({
-        variant: 'warning',
-        title: 'Brak jednostek',
-        message: 'Nie posiadasz wystarczającej liczby jednostek do sprzedaży.',
+        variant: "warning",
+        title: "Brak jednostek",
+        message: "Nie posiadasz wystarczającej liczby jednostek do sprzedaży.",
       });
       return;
     }
 
     if (!activeInstrument.isMarketOpen) {
-      onMarketClosedAlert(activeInstrument, 'SELL', parsedQuantity, totalCost);
+      onMarketClosedAlert(activeInstrument, "SELL", parsedQuantity, totalCost);
       return;
     }
 
     notify({
-      variant: 'success',
-      title: 'Zlecenie sprzedaży zrealizowane',
+      variant: "success",
+      title: "Zlecenie sprzedaży zrealizowane",
       message: `Pomyślnie sprzedano ${parsedQuantity} szt. ${activeInstrument.symbol} za ${formatDisplayMoney(totalCost, activeInstrument.currency)}.`,
     });
   };
@@ -317,7 +341,17 @@ export function TradeInstrumentView({
       keyboardShouldPersistTaps="handled"
     >
       {/* Pasek wyszukiwania */}
-      <View style={[styles.searchBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: colors.border }]}>
+      <View
+        style={[
+          styles.searchBox,
+          {
+            backgroundColor: isDark
+              ? "rgba(255,255,255,0.06)"
+              : "rgba(0,0,0,0.04)",
+            borderColor: colors.border,
+          },
+        ]}
+      >
         <Ionicons name="search" size={18} color={colors.textMuted} />
         <TextInput
           placeholder="Szukaj (Yahoo, GPW, Krypto, Obligacje)..."
@@ -331,7 +365,7 @@ export function TradeInstrumentView({
         {isSearchingYahoo ? (
           <ActivityIndicator size="small" color={colors.accent} />
         ) : searchQuery.length > 0 ? (
-          <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+          <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
             <Ionicons name="close-circle" size={18} color={colors.textMuted} />
           </Pressable>
         ) : null}
@@ -339,7 +373,9 @@ export function TradeInstrumentView({
 
       {/* Filtry kategorii */}
       <View style={styles.filtersHeader}>
-        <Text style={[styles.filtersLabel, { color: colors.textMuted }]}>FILTR KATEGORII</Text>
+        <Text style={[styles.filtersLabel, { color: colors.textMuted }]}>
+          FILTR KATEGORII
+        </Text>
         <Text style={[styles.filtersCount, { color: colors.textMuted }]}>
           {filteredInstruments.length} wyników
         </Text>
@@ -363,8 +399,8 @@ export function TradeInstrumentView({
                   backgroundColor: isActive
                     ? colors.accent
                     : isDark
-                      ? 'rgba(255, 255, 255, 0.08)'
-                      : 'rgba(0, 0, 0, 0.05)',
+                      ? "rgba(255, 255, 255, 0.08)"
+                      : "rgba(0, 0, 0, 0.05)",
                   borderColor: isActive ? colors.accent : colors.border,
                 },
               ]}
@@ -372,12 +408,12 @@ export function TradeInstrumentView({
               <Ionicons
                 name={cat.icon}
                 size={13}
-                color={isActive ? '#ffffff' : colors.textMuted}
+                color={isActive ? "#ffffff" : colors.textMuted}
               />
               <Text
                 style={[
                   styles.filterPillText,
-                  { color: isActive ? '#ffffff' : colors.text },
+                  { color: isActive ? "#ffffff" : colors.text },
                   isActive && styles.filterPillTextActive,
                 ]}
               >
@@ -410,16 +446,21 @@ export function TradeInstrumentView({
                 {
                   backgroundColor: isSelected
                     ? isDark
-                      ? 'rgba(59, 130, 246, 0.25)'
-                      : 'rgba(59, 130, 246, 0.12)'
+                      ? "rgba(59, 130, 246, 0.25)"
+                      : "rgba(59, 130, 246, 0.12)"
                     : isDark
-                      ? 'rgba(255, 255, 255, 0.04)'
-                      : 'rgba(0, 0, 0, 0.03)',
+                      ? "rgba(255, 255, 255, 0.04)"
+                      : "rgba(0, 0, 0, 0.03)",
                   borderColor: isSelected ? colors.accent : colors.border,
                 },
               ]}
             >
-              <Text style={[styles.chipSymbol, { color: isSelected ? colors.accent : colors.text }]}>
+              <Text
+                style={[
+                  styles.chipSymbol,
+                  { color: isSelected ? colors.accent : colors.text },
+                ]}
+              >
                 {item.symbol}
               </Text>
               <Text style={[styles.chipPrice, { color: colors.textMuted }]}>
@@ -438,33 +479,52 @@ export function TradeInstrumentView({
               <Text style={[styles.activeSymbol, { color: colors.text }]}>
                 {activeInstrument.symbol}
               </Text>
-              <Text style={[styles.categoryBadge, { color: colors.accent, borderColor: colors.accent }]}>
+              <Text
+                style={[
+                  styles.categoryBadge,
+                  { color: colors.accent, borderColor: colors.accent },
+                ]}
+              >
                 {activeInstrument.categoryLabel}
               </Text>
             </View>
-            <Text style={[styles.activeName, { color: colors.textMuted }]} numberOfLines={1}>
+            <Text
+              style={[styles.activeName, { color: colors.textMuted }]}
+              numberOfLines={1}
+            >
               {activeInstrument.name}
             </Text>
           </View>
 
           <View style={styles.activePriceCol}>
             <Text style={[styles.activePrice, { color: colors.text }]}>
-              {formatDisplayMoney(activeInstrument.price, activeInstrument.currency)}
+              {formatDisplayMoney(
+                activeInstrument.price,
+                activeInstrument.currency,
+              )}
             </Text>
             <View style={styles.marketStatusRow}>
               <View
                 style={[
                   styles.statusDot,
-                  { backgroundColor: activeInstrument.isMarketOpen ? '#10b981' : '#ef4444' },
+                  {
+                    backgroundColor: activeInstrument.isMarketOpen
+                      ? "#10b981"
+                      : "#ef4444",
+                  },
                 ]}
               />
               <Text
                 style={[
                   styles.marketStatusText,
-                  { color: activeInstrument.isMarketOpen ? '#10b981' : '#ef4444' },
+                  {
+                    color: activeInstrument.isMarketOpen
+                      ? "#10b981"
+                      : "#ef4444",
+                  },
                 ]}
               >
-                {activeInstrument.isMarketOpen ? 'Otwarty' : 'Zamknięty'}
+                {activeInstrument.isMarketOpen ? "Otwarty" : "Zamknięty"}
               </Text>
             </View>
           </View>
@@ -480,15 +540,21 @@ export function TradeInstrumentView({
         </View>
 
         {/* Informacja o posiadanych jednostkach i wolnych środkach */}
-        <View style={[styles.portfolioStatusRow, { borderTopColor: colors.border }]}>
+        <View
+          style={[styles.portfolioStatusRow, { borderTopColor: colors.border }]}
+        >
           <View>
-            <Text style={[styles.statusMiniLabel, { color: colors.textMuted }]}>Posiadasz:</Text>
+            <Text style={[styles.statusMiniLabel, { color: colors.textMuted }]}>
+              Posiadasz:
+            </Text>
             <Text style={[styles.statusMiniVal, { color: colors.text }]}>
               {ownedQuantity} szt.
             </Text>
           </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={[styles.statusMiniLabel, { color: colors.textMuted }]}>Wolne środki:</Text>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={[styles.statusMiniLabel, { color: colors.textMuted }]}>
+              Wolne środki:
+            </Text>
             <Text style={[styles.statusMiniVal, { color: colors.text }]}>
               {formatDisplayMoney(portfolio.cashBalance, portfolio.currency)}
             </Text>
@@ -502,12 +568,15 @@ export function TradeInstrumentView({
             onPress={handleToggleInputMode}
             accessibilityRole="button"
             accessibilityLabel={
-              inputMode === 'quantity'
-                ? 'Przełącz na kupowanie za kwotę'
-                : 'Przełącz na kupowanie za ilość'
+              inputMode === "quantity"
+                ? "Przełącz na kupowanie za kwotę"
+                : "Przełącz na kupowanie za ilość"
             }
             hitSlop={8}
-            style={({ pressed }) => [styles.modeToggle, { opacity: pressed ? 0.6 : 1 }]}
+            style={({ pressed }) => [
+              styles.modeToggle,
+              { opacity: pressed ? 0.6 : 1 },
+            ]}
           >
             <Reanimated.View style={modeRotationStyle}>
               <Ionicons name="sync-outline" size={17} color={colors.accent} />
@@ -521,16 +590,25 @@ export function TradeInstrumentView({
             <Ionicons name="remove" size={18} color={colors.text} />
           </Pressable>
 
-          <View style={[styles.quantityInputWrapper, { borderColor: colors.accent }]}>
+          <View
+            style={[
+              styles.quantityInputWrapper,
+              { borderColor: colors.accent },
+            ]}
+          >
             <TextInput
-              value={inputMode === 'quantity' ? quantityStr : amountStr}
-              onChangeText={inputMode === 'quantity' ? setQuantityStr : setAmountStr}
+              value={inputMode === "quantity" ? quantityStr : amountStr}
+              onChangeText={
+                inputMode === "quantity" ? setQuantityStr : setAmountStr
+              }
               keyboardType="numeric"
               style={[styles.quantityInput, { color: colors.text }]}
               textAlign="center"
             />
             <Text style={[styles.quantityUnit, { color: colors.textMuted }]}>
-              {inputMode === 'quantity' ? 'szt.' : displaySymbol(activeInstrument.currency)}
+              {inputMode === "quantity"
+                ? "szt."
+                : display.displaySymbol(activeInstrument.currency)}
             </Text>
           </View>
 
@@ -543,9 +621,10 @@ export function TradeInstrumentView({
         </View>
 
         {/* W trybie kwoty pokazujemy, ile jednostek zostanie kupionych */}
-        {inputMode === 'amount' && (
+        {inputMode === "amount" && (
           <Text style={[styles.derivedQuantity, { color: colors.textMuted }]}>
-            Otrzymasz: <Text style={{ color: colors.text, fontWeight: '700' }}>
+            Otrzymasz:{" "}
+            <Text style={{ color: colors.text, fontWeight: "700" }}>
               {parsedQuantity.toFixed(2)} szt.
             </Text>
           </Text>
@@ -556,21 +635,25 @@ export function TradeInstrumentView({
             onPress={handleSetMaxForBuy}
             style={[styles.shortcutBtn, { borderColor: colors.border }]}
           >
-            <Text style={[styles.shortcutBtnText, { color: colors.accent }]}>Maks. kupno</Text>
+            <Text style={[styles.shortcutBtnText, { color: colors.accent }]}>
+              Maks. kupno
+            </Text>
           </Pressable>
           {ownedQuantity > 0 && (
             <Pressable
               onPress={handleSetMaxForSell}
               style={[styles.shortcutBtn, { borderColor: colors.border }]}
             >
-              <Text style={[styles.shortcutBtnText, { color: colors.accent }]}>Całość ({ownedQuantity})</Text>
+              <Text style={[styles.shortcutBtnText, { color: colors.accent }]}>
+                Całość ({ownedQuantity})
+              </Text>
             </Pressable>
           )}
         </View>
 
         <View style={styles.totalCalcRow}>
           <Text style={[styles.totalCalcLabel, { color: colors.textMuted }]}>
-            {inputMode === 'quantity' ? 'Łącznie:' : 'Kwota:'}
+            {inputMode === "quantity" ? "Łącznie:" : "Kwota:"}
           </Text>
           <Text style={[styles.totalCalcVal, { color: colors.text }]}>
             {formatDisplayMoney(totalCost, activeInstrument.currency)}
@@ -579,55 +662,87 @@ export function TradeInstrumentView({
 
         {/* Przyciski Kup i Sprzedaj */}
         {/* Na desktopie przyciski stoją obok siebie, a komunikat jest pod swoim przyciskiem */}
-        <View style={[styles.actionButtonsCol, sideBySide && styles.actionButtonsRow]}>
+        <View
+          style={[
+            styles.actionButtonsCol,
+            sideBySide && styles.actionButtonsRow,
+          ]}
+        >
           <View style={[styles.actionCell, sideBySide && styles.actionCellRow]}>
-          <Pressable
-            onPress={handleExecuteBuy}
-            disabled={!hasEnoughCash}
-            style={({ pressed }) => [
-              styles.tradeBtn,
-              {
-                backgroundColor: hasEnoughCash ? '#10b981' : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                opacity: !hasEnoughCash ? 0.45 : pressed ? 0.8 : 1,
-              },
-            ]}
-          >
-            <Text style={[styles.tradeBtnText, { color: hasEnoughCash ? '#ffffff' : colors.textMuted }]}>
-              Kup (za {formatDisplayMoney(totalCost, activeInstrument.currency)})
-            </Text>
-          </Pressable>
+            <Pressable
+              onPress={handleExecuteBuy}
+              disabled={!hasEnoughCash}
+              style={({ pressed }) => [
+                styles.tradeBtn,
+                {
+                  backgroundColor: hasEnoughCash
+                    ? "#10b981"
+                    : isDark
+                      ? "rgba(255,255,255,0.08)"
+                      : "rgba(0,0,0,0.06)",
+                  opacity: !hasEnoughCash ? 0.45 : pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tradeBtnText,
+                  { color: hasEnoughCash ? "#ffffff" : colors.textMuted },
+                ]}
+              >
+                Kup (za{" "}
+                {formatDisplayMoney(totalCost, activeInstrument.currency)})
+              </Text>
+            </Pressable>
 
-          {!hasEnoughCash && parsedQuantity > 0 && (
-            <Text style={[styles.validationWarning, { color: '#ef4444' }]}>
-              Brak wystarczających środków ({formatDisplayMoney(Math.max(0, totalCost - portfolio.cashBalance), portfolio.currency)}).
-            </Text>
-          )}
+            {!hasEnoughCash && parsedQuantity > 0 && (
+              <Text style={[styles.validationWarning, { color: "#ef4444" }]}>
+                Brak wystarczających środków (
+                {formatDisplayMoney(
+                  Math.max(0, totalCost - portfolio.cashBalance),
+                  portfolio.currency,
+                )}
+                ).
+              </Text>
+            )}
           </View>
 
           <View style={[styles.actionCell, sideBySide && styles.actionCellRow]}>
-          <Pressable
-            onPress={handleExecuteSell}
-            disabled={!hasEnoughUnits}
-            style={({ pressed }) => [
-              styles.tradeBtn,
-              {
-                backgroundColor: hasEnoughUnits ? '#ef4444' : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                opacity: !hasEnoughUnits ? 0.45 : pressed ? 0.8 : 1,
-              },
-            ]}
-          >
-            <Text style={[styles.tradeBtnText, { color: hasEnoughUnits ? '#ffffff' : colors.textMuted }]}>
-              Sprzedaj (za {formatDisplayMoney(totalCost, activeInstrument.currency)})
-            </Text>
-          </Pressable>
+            <Pressable
+              onPress={handleExecuteSell}
+              disabled={!hasEnoughUnits}
+              style={({ pressed }) => [
+                styles.tradeBtn,
+                {
+                  backgroundColor: hasEnoughUnits
+                    ? "#ef4444"
+                    : isDark
+                      ? "rgba(255,255,255,0.08)"
+                      : "rgba(0,0,0,0.06)",
+                  opacity: !hasEnoughUnits ? 0.45 : pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tradeBtnText,
+                  { color: hasEnoughUnits ? "#ffffff" : colors.textMuted },
+                ]}
+              >
+                Sprzedaj (za{" "}
+                {formatDisplayMoney(totalCost, activeInstrument.currency)})
+              </Text>
+            </Pressable>
 
-          {!hasEnoughUnits && (
-            <Text style={[styles.validationWarning, { color: colors.textMuted }]}>
-              {ownedQuantity === 0
-                ? 'Brak pozycji w portfelu.'
-                : `Dostępne do sprzedaży: ${ownedQuantity} szt.`}
-            </Text>
-          )}
+            {!hasEnoughUnits && (
+              <Text
+                style={[styles.validationWarning, { color: colors.textMuted }]}
+              >
+                {ownedQuantity === 0
+                  ? "Brak pozycji w portfelu."
+                  : `Dostępne do sprzedaży: ${ownedQuantity} szt.`}
+              </Text>
+            )}
           </View>
         </View>
       </View>
@@ -646,8 +761,8 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 14,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -660,34 +775,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   filterPillsContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 6,
     marginBottom: 12,
   },
   filtersHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
   filtersLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.8,
   },
   filtersCount: {
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   emptyResults: {
     fontSize: 12,
-    textAlign: 'center',
+    textAlign: "center",
     paddingVertical: 14,
     marginBottom: 8,
   },
   filterPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -696,13 +811,13 @@ const styles = StyleSheet.create({
   },
   filterPillText: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   filterPillTextActive: {
-    fontWeight: '700',
+    fontWeight: "700",
   },
   resultsList: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     marginBottom: 16,
   },
@@ -711,11 +826,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    alignItems: 'center',
+    alignItems: "center",
   },
   chipSymbol: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   chipPrice: {
     fontSize: 10,
@@ -725,23 +840,23 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   instrumentMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 8,
   },
   symbolBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   activeSymbol: {
     fontSize: 19,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   categoryBadge: {
     fontSize: 9,
-    fontWeight: '600',
+    fontWeight: "600",
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 5,
@@ -749,19 +864,19 @@ const styles = StyleSheet.create({
   },
   activeName: {
     fontSize: 12,
-    fontWeight: '400',
+    fontWeight: "400",
     marginTop: 2,
   },
   activePriceCol: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   activePrice: {
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   marketStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     marginTop: 2,
   },
@@ -772,28 +887,28 @@ const styles = StyleSheet.create({
   },
   marketStatusText: {
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   chartWrapper: {
     height: 84,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
     marginVertical: 4,
   },
   portfolioStatusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   statusMiniLabel: {
     fontSize: 10,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   statusMiniVal: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   tradeControls: {
     paddingTop: 6,
@@ -801,19 +916,19 @@ const styles = StyleSheet.create({
   modeToggle: {
     width: 40,
     height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   derivedQuantity: {
     fontSize: 11,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: -2,
     marginBottom: 10,
   },
   quantitySelectorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 12,
     marginBottom: 10,
   },
@@ -822,13 +937,13 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 12,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   quantityInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     minWidth: 110,
     height: 40,
     borderRadius: 12,
@@ -837,18 +952,18 @@ const styles = StyleSheet.create({
   },
   quantityInput: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     minWidth: 44,
     // Na webie <input> ma domyślną szerokość ok. 20 znaków i rozpychał wiersz poza ekran telefonu
-    ...Platform.select({ web: { width: 96, textAlign: 'center' } }),
+    ...Platform.select({ web: { width: 96, textAlign: "center" } }),
   },
   quantityUnit: {
     fontSize: 12,
     marginLeft: 4,
   },
   quickShortcutsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     gap: 8,
     marginBottom: 12,
   },
@@ -860,29 +975,29 @@ const styles = StyleSheet.create({
   },
   shortcutBtnText: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   totalCalcRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 10,
     marginBottom: 12,
   },
   totalCalcLabel: {
     fontSize: 12,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   totalCalcVal: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   actionButtonsCol: {
     gap: 8,
   },
   actionButtonsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 12,
   },
   actionCell: {
@@ -892,19 +1007,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tradeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 12,
     borderRadius: 12,
   },
   tradeBtnText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   validationWarning: {
     fontSize: 11,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: -2,
     marginBottom: 2,
   },
