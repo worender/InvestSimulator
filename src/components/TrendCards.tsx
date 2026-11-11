@@ -12,7 +12,7 @@ import {
 } from "../api/marketService";
 import { currencySymbol, resolveCurrency } from "../currency";
 import { useDisplayCurrency } from "../displayCurrency";
-import { notify } from "../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { useTheme } from "../theme";
 import { CategorySelector } from "./CategorySelector";
 import { CHART_RANGES } from "./ChartFullscreenModal";
@@ -242,6 +242,7 @@ export function TrendCards() {
               notify({
                 variant: "error",
                 title: "Błąd ładowania trendów",
+                category: NOTIFICATION_GROUPS.marketTrends,
                 message:
                   "Nie udało się pobrać danych trendów. Spróbuj ponownie później.",
               });
@@ -352,13 +353,14 @@ function TrendCard({
   onPress: () => void;
 }) {
   const display = useDisplayCurrency();
+  const currency = resolveCurrency(asset);
   const latest = candles[candles.length - 1];
   const values = candles.map((item) => ({
     timestamp: item.timestamp,
     value: display.convertForDisplay(item.close, currency),
   }));
   const hasChart = values.length > 1;
-  const currency = resolveCurrency(asset);
+  
   const change = trendChangePercent(values, asset.changePercent);
   const tone = change >= 0 ? colors.positive : colors.negative;
   const changeLabel = `${change >= 0 ? "+" : ""}${change.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;

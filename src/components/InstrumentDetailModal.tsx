@@ -32,7 +32,8 @@ import {
 import { SearchableInstrument } from "../database/mockSearchableInstruments";
 import { useDisplayCurrency } from "../displayCurrency";
 import { useLockScreenWhileActive } from "../interactionLock";
-import { notify } from "../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
+import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
 import { useLayoutMode } from "../useLayoutMode";
 import { CategorySelector } from "./CategorySelector";
@@ -320,6 +321,7 @@ export function InstrumentDetailModal({
       notify({
         variant: "success",
         title: "Zlecenie oczekujące złożone",
+        category: NOTIFICATION_GROUPS.transactions,
         message: `Złożono zlecenie ${typeLabel} na ${noticeData.quantity} szt. ${noticeData.instrument.symbol}. Zostanie zrealizowane po wznowieniu handlu.`,
       });
     }
@@ -461,6 +463,7 @@ export function InstrumentDetailModal({
         onRequestClose={animateClose}
         statusBarTranslucent
       >
+        <NotificationHost />
         <View style={[styles.modalRoot, isDialog && styles.modalRootDialog]}>
           <Reanimated.View style={[styles.backdrop, backdropAnimatedStyle]}>
             <Pressable

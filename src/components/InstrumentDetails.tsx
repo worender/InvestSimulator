@@ -5,16 +5,16 @@ import {
   enrichFinancialData,
   getStockData,
   StockFinancialData,
-} from "../api/marketService";
+} from '../api/marketService';
+import { NOTIFICATION_GROUPS, notify } from '../notificationBus';
+import { useTheme } from '../theme';
+import { Section } from './Section';
+import { Skeleton } from './Skeleton';
 import {
   convertForDisplay,
   displaySymbol,
   useDisplayCurrency,
 } from "../displayCurrency";
-import { notify } from "../notificationBus";
-import { useTheme } from "../theme";
-import { Section } from "./Section";
-import { Skeleton } from "./Skeleton";
 
 // Funkcja formatująca wartość pieniężną w walucie wyświetlania wybranej w ustawieniach
 export const formatCurrency = (
@@ -110,8 +110,9 @@ export function useInstrumentFinancialData(
           setFinancialData(fallback);
         } else if (isMounted) {
           notify({
-            variant: "error",
-            title: "Brak danych finansowych",
+            variant: 'error',
+            title: 'Brak danych finansowych',
+            category: NOTIFICATION_GROUPS.marketFinancials,
             message: `Nie udało się pobrać danych dla ${instrument.stock}. Wykres pozostaje dostępny.`,
           });
         }

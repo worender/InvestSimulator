@@ -15,6 +15,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { InstrumentSearchResult, searchInstruments } from '../api/marketService';
+import { NotificationHost } from '../notifications';
 import { useTheme } from '../theme';
 import { Skeleton } from './Skeleton';
 
@@ -81,6 +82,7 @@ export function InstrumentSearchSheet({ visible, onClose, onSelect }: Instrument
       onRequestClose={onClose}
       statusBarTranslucent
     >
+      <NotificationHost />
       <KeyboardAvoidingView
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

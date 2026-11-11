@@ -27,12 +27,12 @@ import {
   InstrumentFilterCategory,
   SEARCHABLE_INSTRUMENTS,
   SearchableInstrument,
-} from "../database/mockSearchableInstruments";
+} from '../database/mockSearchableInstruments';
+import { NOTIFICATION_GROUPS, notify } from '../notificationBus';
+import { useTheme } from '../theme';
+import { useContainerWidth } from '../useContainerWidth';
+import { useLayoutMode } from '../useLayoutMode';
 import { useDisplayCurrency } from "../displayCurrency";
-import { notify } from "../notificationBus";
-import { useTheme } from "../theme";
-import { useContainerWidth } from "../useContainerWidth";
-import { useLayoutMode } from "../useLayoutMode";
 
 interface TradeInstrumentViewProps {
   portfolio: MockPortfolio;
@@ -288,9 +288,10 @@ export function TradeInstrumentView({
   const handleExecuteBuy = () => {
     if (!hasEnoughCash) {
       notify({
-        variant: "warning",
-        title: "Brak środków",
-        message: "Nie posiadasz wystarczających środków na zakup tej ilości.",
+        variant: 'warning',
+        title: 'Brak środków',
+        category: NOTIFICATION_GROUPS.transactions,
+        message: 'Nie posiadasz wystarczających środków na zakup tej ilości.',
       });
       return;
     }
@@ -301,8 +302,9 @@ export function TradeInstrumentView({
     }
 
     notify({
-      variant: "success",
-      title: "Zlecenie zrealizowane",
+      variant: 'success',
+      title: 'Zlecenie zrealizowane',
+      category: NOTIFICATION_GROUPS.transactions,
       message: `Pomyślnie kupiono ${parsedQuantity} szt. ${activeInstrument.symbol} za ${formatDisplayMoney(totalCost, activeInstrument.currency)}.`,
     });
   };
@@ -310,9 +312,10 @@ export function TradeInstrumentView({
   const handleExecuteSell = () => {
     if (!hasEnoughUnits) {
       notify({
-        variant: "warning",
-        title: "Brak jednostek",
-        message: "Nie posiadasz wystarczającej liczby jednostek do sprzedaży.",
+        variant: 'warning',
+        title: 'Brak jednostek',
+        category: NOTIFICATION_GROUPS.transactions,
+        message: 'Nie posiadasz wystarczającej liczby jednostek do sprzedaży.',
       });
       return;
     }
@@ -323,8 +326,9 @@ export function TradeInstrumentView({
     }
 
     notify({
-      variant: "success",
-      title: "Zlecenie sprzedaży zrealizowane",
+      variant: 'success',
+      title: 'Zlecenie sprzedaży zrealizowane',
+      category: NOTIFICATION_GROUPS.transactions,
       message: `Pomyślnie sprzedano ${parsedQuantity} szt. ${activeInstrument.symbol} za ${formatDisplayMoney(totalCost, activeInstrument.currency)}.`,
     });
   };

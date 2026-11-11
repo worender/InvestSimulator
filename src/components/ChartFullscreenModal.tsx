@@ -28,6 +28,7 @@ import { CandlestickChart } from "react-native-wagmi-charts";
 import { CandleData, getStockCandles } from "../api/marketService";
 import { useDisplayCurrency } from "../displayCurrency";
 import { useLockScreenWhileActive } from "../interactionLock";
+import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
 import {
   ChartCrosshair,
@@ -355,6 +356,7 @@ export function ChartFullscreenModal({
       onRequestClose={animateClose}
       statusBarTranslucent
     >
+      <NotificationHost />
       <View style={styles.modalRoot}>
         <Reanimated.View style={[styles.backdrop, backdropAnimatedStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} />

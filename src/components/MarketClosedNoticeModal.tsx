@@ -2,6 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurView } from "expo-blur";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SearchableInstrument } from "../database/mockSearchableInstruments";
+import { NotificationHost } from "../notifications";
 import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 
@@ -40,6 +41,7 @@ export function MarketClosedNoticeModal({
       animationType="fade"
       onRequestClose={onClose}
     >
+      <NotificationHost />
       <View style={styles.backdrop}>
         <BlurView
           intensity={isDark ? 50 : 35}

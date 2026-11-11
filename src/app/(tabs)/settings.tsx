@@ -36,7 +36,7 @@ import { SettingsToggle } from "../../components/settings/SettingsToggle";
 import { deleteLocalDatabase } from "../../database/database";
 import { hasPassword } from "../../database/passwords";
 import { FALLBACK_RATES } from "../../displayCurrency";
-import { notify } from "../../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../../notificationBus";
 import { pickAvatar } from "../../settings/avatars";
 import { NOTIFICATION_CATEGORY_OPTIONS } from "../../settings/notificationSettings";
 import {
@@ -46,6 +46,7 @@ import {
   type ThemeMode,
 } from "../../theme";
 import { useLayoutMode } from "../../useLayoutMode";
+import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 const THEME_OPTIONS: ChoiceOption<ThemeMode>[] = [
@@ -135,6 +136,12 @@ export default function SettingsScreen() {
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [resetDatabaseOpen, setResetDatabaseOpen] = useState(false);
 
+  // Po opuszczeniu zakładki listy w panelu wracają do stanu początkowego.
+  useResetOnPanelBlur(() => {
+    setAccountListOpen(false);
+    setRatesOpen(false);
+  });
+
   useEffect(() => {
     let active = true;
     if (!activeAccount) return;
@@ -207,6 +214,7 @@ export default function SettingsScreen() {
     notify({
       variant: "success",
       title: "Zdjęcie profilowe zmienione",
+      category: NOTIFICATION_GROUPS.account,
       message: "Nowe zdjęcie jest już widoczne na Twoim koncie.",
     });
   };
@@ -794,6 +802,7 @@ export default function SettingsScreen() {
             notify({
               variant: "success",
               title: "Konto utworzone",
+              category: NOTIFICATION_GROUPS.account,
               message: `${name} jest teraz aktywnym kontem.`,
             });
           }}
@@ -816,6 +825,7 @@ export default function SettingsScreen() {
             notify({
               variant: "success",
               title: "Profil zaktualizowany",
+              category: NOTIFICATION_GROUPS.account,
               message: "Zmiany zostały zapisane.",
             });
           }}

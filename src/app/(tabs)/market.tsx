@@ -53,10 +53,11 @@ import {
   type MarketInstrument,
   type MarketTabKey,
 } from "../../marketTabs";
-import { notify } from "../../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
 import { useKeyboardShortcut } from "../../useKeyboardShortcut";
 import { useLayoutMode } from "../../useLayoutMode";
+import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 import { useWatchlist } from "../../watchlist";
 
@@ -157,6 +158,15 @@ export default function MarketScreen() {
     exchange: string;
     financialData?: StockFinancialData;
   } | null>(null);
+
+  // Po opuszczeniu zakładki wyszukiwanie i jego lista wyników wracają do stanu początkowego.
+  useResetOnPanelBlur(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    setCompletedQuery("");
+    setSearchLoading(false);
+  });
 
   // Efekt wywoływany przy zmianie zapytania wyszukiwania; wprowadza opóźnienie 280ms przed wykonaniem wyszukiwania
   useEffect(() => {
@@ -323,6 +333,7 @@ export default function MarketScreen() {
         notify({
           variant: "warning",
           title: "Brak danych finansowych",
+          category: NOTIFICATION_GROUPS.marketFinancials,
           message: `Nie udało się pobrać szczegółów dla ${item.symbol}. Dostępne są tylko notowania.`,
         });
       }
@@ -331,6 +342,7 @@ export default function MarketScreen() {
       notify({
         variant: "error",
         title: "Błąd pobierania danych",
+        category: NOTIFICATION_GROUPS.marketFinancials,
         message: `Nie udało się pobrać danych dla ${item.symbol}. Spróbuj ponownie później.`,
       });
     }
