@@ -172,6 +172,7 @@ export default function DatabaseTestScreen() {
           );
       
           assert(defaultWallet !== undefined, "Brak domyślnego portfela");
+          if (defaultWallet === undefined) return;
       
           assertEqual(
             defaultWallet.balance,
@@ -275,6 +276,7 @@ export default function DatabaseTestScreen() {
           const wallet = await getWallet(userId, walletId);
 
           assert(wallet !== null, "Nie znaleziono utworzonego portfela");
+          if (wallet === null) return;
           assertEqual(wallet.id, walletId, "Niepoprawne ID portfela");
         },
       ],
@@ -290,6 +292,8 @@ export default function DatabaseTestScreen() {
           const wallet = await getWallet(userId, walletId);
 
           assert(wallet !== null, "Nie znaleziono portfela po aktualizacji");
+          if (wallet === null) return;
+
           assertEqual(wallet.name, "Zaktualizowany portfel", "Nazwa nie została zmieniona");
           assertEqual(wallet.balance, 2000, "Saldo nie zostało zmienione");
           assertEqual(wallet.currency, "EUR", "Waluta nie została zmieniona");
@@ -362,6 +366,7 @@ export default function DatabaseTestScreen() {
           const position = positions.find((item) => item.id === positionId);
 
           assert(position !== undefined, "Nie znaleziono pozycji");
+          if (position === undefined) return;
           assertEqual(
             position.remaining_quantity,
             3,
@@ -390,6 +395,8 @@ export default function DatabaseTestScreen() {
 
           assertEqual(transaction.type, "BUY", "Niepoprawny typ transakcji");
           assert(wallet !== null, "Nie znaleziono portfela");
+
+          if (wallet === null) return;
           assertEqual(wallet.balance, 800, "Kupno nie zmniejszyło salda");
         },
       ],
@@ -408,6 +415,7 @@ export default function DatabaseTestScreen() {
           const wallet = await getWallet(userId, walletId);
 
           assert(wallet !== null, "Nie znaleziono portfela");
+          if (wallet === null) return;
           assertEqual(wallet.balance, 950, "Sprzedaż nie zwiększyła salda");
         },
       ],
@@ -482,6 +490,7 @@ export default function DatabaseTestScreen() {
           );
       
           assert(walletAfter !== null, "Portfel nie istnieje po transakcji");
+          if (walletAfter === null) return;
           assertEqual(
             walletAfter.balance,
             700,
@@ -495,6 +504,8 @@ export default function DatabaseTestScreen() {
           );
       
           assert(position !== undefined, "Pozycja nie została utworzona");
+          if (position === undefined) return;
+
           assertEqual(
             position.remaining_quantity,
             3,
@@ -518,6 +529,8 @@ export default function DatabaseTestScreen() {
           );
       
           assert(categoryAfter !== undefined, "Kategoria zniknęła po transakcji");
+          if (categoryAfter === undefined) return;
+          if (categoryBefore === undefined) return;
           assertEqual(
             categoryAfter.id,
             categoryBefore.id,
@@ -569,6 +582,7 @@ export default function DatabaseTestScreen() {
           );
       
           assert(categoryBefore !== undefined, "Brak kategorii przed sprzedażą");
+          if (categoryBefore === undefined) return;
       
           const walletBeforeBuy = await getWallet(userId, walletId);
           assert(walletBeforeBuy !== null, "Brak portfela przed zakupem");
@@ -587,6 +601,7 @@ export default function DatabaseTestScreen() {
           const transactionsBeforeSell = await getTransactions(walletId);
       
           assert(walletBeforeSell !== null, "Brak portfela przed sprzedażą");
+          if (walletBeforeSell === null) return;
       
           const positionBeforeSell = positionsBeforeSell.find(
             (position) =>
@@ -595,6 +610,7 @@ export default function DatabaseTestScreen() {
           );
       
           assert(positionBeforeSell !== undefined, "Brak pozycji przed sprzedażą");
+          if (positionBeforeSell === undefined) return;
       
           const sellTransaction = await createTransaction({
             id_wallet: walletId,
@@ -613,6 +629,8 @@ export default function DatabaseTestScreen() {
       
           assert(walletAfterSell !== null, "Brak portfela po sprzedaży");
           assert(categoryAfter !== undefined, "Kategoria zniknęła po sprzedaży");
+
+          if (walletAfterSell === null || categoryAfter === undefined) return;
       
           // wallet: saldo wzrosło o wartość sprzedaży
           assertEqual(
@@ -627,6 +645,8 @@ export default function DatabaseTestScreen() {
           );
       
           assert(positionAfterSell !== undefined, "Pozycja zniknęła po sprzedaży");
+          if (positionAfterSell === undefined) return;
+          
       
           assertEqual(
             positionAfterSell.remaining_quantity,
@@ -733,7 +753,8 @@ export default function DatabaseTestScreen() {
       
           assert(firstPosition !== undefined, "Brak pierwszej pozycji");
           assert(secondPosition !== undefined, "Brak drugiej pozycji");
-      
+          if (firstPosition === undefined || secondPosition === undefined) return;
+
           assertEqual(
             firstPosition.remaining_quantity,
             2,
@@ -774,7 +795,9 @@ export default function DatabaseTestScreen() {
           );
       
           assert(firstPositionAfterSell !== undefined, "Pierwsza pozycja zniknęła");
+          if (firstPositionAfterSell === undefined) return;
           assert(secondPositionAfterSell !== undefined, "Druga pozycja zniknęła");
+          if (secondPositionAfterSell === undefined) return;
       
           assertEqual(
             firstPositionAfterSell.remaining_quantity,
@@ -808,6 +831,7 @@ export default function DatabaseTestScreen() {
           const item = portfolio.find((entry) => entry.symbol === "AAPL");
 
           assert(item !== undefined, "Brak AAPL w portfolio");
+          if (item === undefined) return;
           assertEqual(item.quantity, 1, "Niepoprawna ilość w portfolio");
           assertEqual(item.average_price, 100, "Niepoprawna średnia cena");
         },
