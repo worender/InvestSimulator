@@ -123,7 +123,7 @@ export default function DatabaseTestScreen() {
     let categoryId = 0;
     let positionId = 0;
 
-    const tests: Array<[string, TestFunction]> = [
+    const tests: [string, TestFunction][] = [
       [
         "Inicjalizacja bazy i dane domyślne",
         async () => {

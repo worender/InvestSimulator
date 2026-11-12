@@ -22,26 +22,33 @@ export function SidebarTabBar({ state, descriptors, navigateToTab, compact = fal
   const display = useDisplayCurrency();
   const { top, bottom } = useSafeAreaInsets();
   const [wallet, setWallet] = useState<Wallet | null>(null);
+  
 
   useEffect(() => {
   let active = true;
+  
 
   if (!activeAccount) {
-    setWallet(null);
+    
     return () => {
       active = false;
     };
   }
 
-  getWallets(activeAccount.id)
+  const userId = activeAccount.id;
+
+  getWallets(userId)
     .then((wallets) => {
       if (active) {
         setWallet(wallets[0] ?? null);
+       
       }
     })
     .catch((error) => {
       console.error('Nie udało się wczytać portfeli:', error);
-      if (active) setWallet(null);
+      if (!active) return; 
+      setWallet(null);
+      
     });
 
   return () => {
