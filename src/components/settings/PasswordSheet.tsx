@@ -13,7 +13,7 @@ import {
   setPassword,
   verifyPassword,
 } from "../../database/passwords";
-import { notify } from "../../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
 import { SettingsSheet } from "./SettingsSheet";
 
@@ -114,6 +114,7 @@ export function PasswordSheet({
       notify({
         variant: "warning",
         title: "Hasło jest za krótkie",
+        category: NOTIFICATION_GROUPS.account,
         message: "Ustaw hasło składające się z co najmniej 6 znaków.",
       });
       return;
@@ -123,6 +124,7 @@ export function PasswordSheet({
       notify({
         variant: "warning",
         title: "Hasła nie są identyczne",
+        category: NOTIFICATION_GROUPS.account,
         message: "Wpisz ponownie to samo hasło w obu polach.",
       });
       return;
@@ -136,6 +138,7 @@ export function PasswordSheet({
           notify({
             variant: "error",
             title: "Nieprawidłowe hasło",
+            category: NOTIFICATION_GROUPS.account,
             message: "Obecne hasło nie jest poprawne. Spróbuj ponownie.",
           });
           return;
@@ -146,6 +149,7 @@ export function PasswordSheet({
       notify({
         variant: "success",
         title: configured ? "Hasło zmienione" : "Hasło ustawione",
+        category: NOTIFICATION_GROUPS.account,
         message: "Od teraz możesz logować się hasłem do swojego konta.",
       });
       onSaved?.();
@@ -154,6 +158,7 @@ export function PasswordSheet({
       notify({
         variant: "error",
         title: "Nie udało się zapisać hasła",
+        category: NOTIFICATION_GROUPS.account,
         message: "Spróbuj ponownie za chwilę.",
       });
     } finally {

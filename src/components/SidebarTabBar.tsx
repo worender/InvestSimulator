@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getWallet, type Wallet } from '../database/database';
+import { useDisplayCurrency } from '../displayCurrency';
 import { useTheme } from '../theme';
-import { formatCurrency } from './InstrumentDetails';
 
 type SidebarTabBarProps = Pick<BottomTabBarProps, 'state' | 'descriptors' | 'navigateToTab'> & {
   // Wąska wersja (tablet): same ikony, bez etykiet i salda
@@ -19,6 +19,7 @@ export const SIDEBAR_COMPACT_WIDTH = 72;
 // Boczny pasek nawigacji dla szerokich ekranów webowych (wzorowany na xStation)
 export function SidebarTabBar({ state, descriptors, navigateToTab, compact = false, tabIcon }: SidebarTabBarProps) {
   const { colors } = useTheme();
+  const display = useDisplayCurrency();
   const { top, bottom } = useSafeAreaInsets();
   const [wallet, setWallet] = useState<Wallet | null>(null);
 
@@ -58,7 +59,14 @@ export function SidebarTabBar({ state, descriptors, navigateToTab, compact = fal
         <View style={[styles.account, { borderColor: colors.border }]}>
           <Text style={[styles.accountLabel, { color: colors.textMuted }]}>Konto demo</Text>
           <Text style={[styles.accountBalance, { color: colors.text }]}>
-            {wallet ? formatCurrency(wallet.balance, wallet.currency) : '—'}
+            {wallet
+              ? `${display
+                  .convertForDisplay(wallet.balance, wallet.currency)
+                  .toLocaleString('pl-PL', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })} ${display.displaySymbol(wallet.currency)}`
+              : '—'}
           </Text>
         </View>
       )}

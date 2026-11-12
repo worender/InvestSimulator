@@ -1,6 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurView } from "expo-blur";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { NotificationHost } from "../../notifications";
 import { useTheme } from "../../theme";
 
 type ConfirmDialogProps = {
@@ -30,6 +31,7 @@ export function ConfirmDialog({
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <NotificationHost />
       <View style={styles.backdrop}>
         <BlurView
           intensity={isDark ? 50 : 35}

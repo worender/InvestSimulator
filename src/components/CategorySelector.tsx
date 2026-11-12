@@ -11,7 +11,9 @@ import {
   Text,
   View,
 } from "react-native";
+import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
+import { useResetOnPanelBlur } from "../useResetOnPanelBlur";
 
 type CategoryOption<T extends string> = {
   key: T;
@@ -41,6 +43,14 @@ export function CategorySelector<T extends string>({
   } | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const progress = useState(() => new Animated.Value(0))[0];
+
+  // Zmiana panelu zamyka listę, która jest tylko nakładką nad treścią
+  useResetOnPanelBlur(() => {
+    if (!isMenuOpen) return;
+    progress.stopAnimation();
+    progress.setValue(0);
+    setIsMenuOpen(false);
+  });
 
   const [activeSlots, setActiveSlots] = useState<{
     first: T;
@@ -285,6 +295,7 @@ export function CategorySelector<T extends string>({
           statusBarTranslucent
           onRequestClose={() => closeMenu()}
         >
+          <NotificationHost />
           <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
             <Animated.View
               style={[

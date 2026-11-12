@@ -39,7 +39,7 @@ import {
   type ExchangeRates,
 } from "./displayCurrency";
 import { setGlobalFontScale } from "./fontScale";
-import { notify } from "./notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "./notificationBus";
 import {
   DEFAULT_NOTIFICATION_CATEGORIES,
   type NotificationCategories,
@@ -383,6 +383,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         notify({
           variant: "error",
           title: "Nie udało się utworzyć konta",
+          category: NOTIFICATION_GROUPS.account,
           message:
             error instanceof Error
               ? error.message
@@ -409,6 +410,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         notify({
           variant: "error",
           title: "Nie udało się zaktualizować konta",
+          category: NOTIFICATION_GROUPS.account,
           message:
             error instanceof Error
               ? error.message
@@ -546,11 +548,16 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   const fontSizeScale = FONT_SCALES[fontSizePreference];
   setGlobalFontScale(fontSizeScale);
-  setDisplayCurrencyState({
-    multiCurrency,
-    currency: defaultCurrency,
-    rates,
-  });
+
+  // Aktualizacja stanu podczas renderowania powiadamiałaby subskrybentów w trakcie renderu i mogła
+  // zostawić część komponentów ze starymi wartościami
+  useEffect(() => {
+    setDisplayCurrencyState({
+      multiCurrency,
+      currency: defaultCurrency,
+      rates,
+    });
+  }, [defaultCurrency, multiCurrency, rates]);
 
   const value = useMemo(
     () => ({

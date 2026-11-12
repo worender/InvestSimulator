@@ -31,7 +31,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { YahooNewsItem } from "../api/newsService";
 import type { EducationalArticle } from "../database/educationalArticles";
 import { useLockScreenWhileActive } from "../interactionLock";
-import { notify } from "../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
+import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
 
 export type ReadableArticle = YahooNewsItem | EducationalArticle;
@@ -245,6 +246,7 @@ export function NewsArticleModal({
       notify({
         variant: "error",
         title: "Nie udało się otworzyć artykułu",
+        category: NOTIFICATION_GROUPS.newsFeed,
         message: "Sprawdź połączenie z internetem i spróbuj ponownie.",
       });
     }
@@ -258,6 +260,7 @@ export function NewsArticleModal({
       onRequestClose={animateClose}
       statusBarTranslucent
     >
+      <NotificationHost />
       <GestureHandlerRootView style={styles.gestureRoot}>
         <View style={styles.modalRoot}>
           <Reanimated.View

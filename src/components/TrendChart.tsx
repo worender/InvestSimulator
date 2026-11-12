@@ -1,7 +1,21 @@
-import { useId, useMemo, useState } from 'react';
-import { LayoutChangeEvent, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
-import { useTheme } from '../theme';
+import { useId, useMemo, useState } from "react";
+import {
+  LayoutChangeEvent,
+  StyleProp,
+  StyleSheet,
+  Text,
+  View,
+  ViewStyle,
+} from "react-native";
+import Svg, {
+  Circle,
+  Defs,
+  Line,
+  LinearGradient,
+  Path,
+  Stop,
+} from "react-native-svg";
+import { useTheme } from "../theme";
 
 export type TrendPoint = {
   timestamp: number;
@@ -29,7 +43,8 @@ export function trendChangePercent(data: TrendPoint[], fallback = 0): number {
   if (data.length < 2) return fallback;
   const first = data[0]?.value;
   const last = data[data.length - 1]?.value;
-  if (!Number.isFinite(first) || !Number.isFinite(last) || first === 0) return fallback;
+  if (!Number.isFinite(first) || !Number.isFinite(last) || first === 0)
+    return fallback;
   return ((last - first) / first) * 100;
 }
 
@@ -46,11 +61,13 @@ export function TrendChart({
   const { colors } = useTheme();
   const [width, setWidth] = useState(0);
   const rawGradientId = useId();
-  const gradientId = `trend-${rawGradientId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const gradientId = `trend-${rawGradientId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const nextWidth = event.nativeEvent.layout.width;
-    setWidth((current) => (Math.abs(current - nextWidth) > 0.5 ? nextWidth : current));
+    setWidth((current) =>
+      Math.abs(current - nextWidth) > 0.5 ? nextWidth : current,
+    );
   };
 
   const chart = useMemo(() => {
@@ -71,9 +88,12 @@ export function TrendChart({
 
     const plotWidth = Math.max(width - AXIS_WIDTH, 1);
     const plotHeight = Math.max(height - TOP_PADDING, 1);
-    const toY = (change: number) => TOP_PADDING + ((max - change) / (max - min)) * plotHeight;
+    const toY = (change: number) =>
+      TOP_PADDING + ((max - change) / (max - min)) * plotHeight;
     const toX = (index: number) =>
-      data.length === 1 ? plotWidth / 2 : (index / (data.length - 1)) * plotWidth;
+      data.length === 1
+        ? plotWidth / 2
+        : (index / (data.length - 1)) * plotWidth;
 
     const points = changes.map((change, index) => ({
       x: toX(index),
@@ -94,16 +114,20 @@ export function TrendChart({
       seriesMax,
       changePercent,
       latestTimestamp,
-      spanDays: Math.max(1, Math.round((latestTimestamp - data[0].timestamp) / DAY_MS)),
+      spanDays: Math.max(
+        1,
+        Math.round((latestTimestamp - data[0].timestamp) / DAY_MS),
+      ),
     };
   }, [data, height, width]);
 
-  const tone = (chart?.changePercent ?? 0) >= 0 ? colors.positive : colors.negative;
+  const tone =
+    (chart?.changePercent ?? 0) >= 0 ? colors.positive : colors.negative;
   const label =
     accessibilityLabel ??
     (chart
       ? `Zmiana ${formatSignedPercent(chart.changePercent)} w ciągu ${chart.spanDays} dni`
-      : 'Brak danych do wykresu');
+      : "Brak danych do wykresu");
 
   return (
     <View
@@ -212,7 +236,8 @@ function buildAxisMarks(
     return Math.abs(candidate.value) >= span * 0.08;
   });
 
-  const marks: { key: string; label: string; top: number; strong: boolean }[] = [];
+  const marks: { key: string; label: string; top: number; strong: boolean }[] =
+    [];
   let previousTop = Number.NEGATIVE_INFINITY;
 
   for (const candidate of candidates) {
@@ -220,14 +245,19 @@ function buildAxisMarks(
     if (marks.some((mark) => mark.key === `axis-${value}`)) continue;
 
     const top = Math.max(
-      Math.min(chart.toY(candidate.value) - AXIS_LABEL_HEIGHT / 2, height - AXIS_LABEL_HEIGHT),
+      Math.min(
+        chart.toY(candidate.value) - AXIS_LABEL_HEIGHT / 2,
+        height - AXIS_LABEL_HEIGHT,
+      ),
       0,
     );
     if (top - previousTop < AXIS_LABEL_HEIGHT - 1) continue;
 
     marks.push({
       key: `axis-${value}`,
-      label: candidate.strong ? '0%' : formatSignedPercent(candidate.value, true),
+      label: candidate.strong
+        ? "0%"
+        : formatSignedPercent(candidate.value, true),
       top,
       strong: candidate.strong,
     });
@@ -239,7 +269,7 @@ function buildAxisMarks(
 
 // Gładka krzywa bez przestrzeliwania
 function buildSmoothPath(points: { x: number; y: number }[]) {
-  if (points.length === 0) return '';
+  if (points.length === 0) return "";
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
 
   let path = `M ${points[0].x} ${points[0].y}`;
@@ -253,19 +283,25 @@ function buildSmoothPath(points: { x: number; y: number }[]) {
 }
 
 function formatSignedPercent(value: number, compact = false) {
-  if (!Number.isFinite(value)) return '0%';
-  if (Math.abs(value) < 0.05) return '0%';
+  if (!Number.isFinite(value)) return "0%";
+  if (Math.abs(value) < 0.05) return "0%";
 
-  const digits = compact ? (Math.abs(value) < 100 ? 1 : 0) : (Math.abs(value) < 10 ? 2 : 1);
-  const formatted = Math.abs(value).toLocaleString('pl-PL', {
+  const digits = compact
+    ? Math.abs(value) < 100
+      ? 1
+      : 0
+    : Math.abs(value) < 10
+      ? 2
+      : 1;
+  const formatted = Math.abs(value).toLocaleString("pl-PL", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
-  return `${value > 0 ? '+' : '−'}${formatted}%`;
+  return `${value > 0 ? "+" : "−"}${formatted}%`;
 }
 
 function formatStartLabel(days: number) {
-  if (days <= 1) return '1 dzień temu';
+  if (days <= 1) return "1 dzień temu";
   return `${days} dni temu`;
 }
 
@@ -277,28 +313,28 @@ function formatEndLabel(timestamp: number) {
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate();
 
-  if (isToday) return 'dziś';
-  return date.toLocaleDateString('pl-PL', { day: '2-digit', month: 'short' });
+  if (isToday) return "dziś";
+  return date.toLocaleDateString("pl-PL", { day: "2-digit", month: "short" });
 }
 
 const styles = StyleSheet.create({
-  root: { width: '100%' },
-  body: { flexDirection: 'row', alignItems: 'stretch' },
-  plot: { flex: 1, overflow: 'hidden' },
-  axis: { width: AXIS_WIDTH, position: 'relative' },
+  root: { width: "100%" },
+  body: { flexDirection: "row", alignItems: "stretch" },
+  plot: { flex: 1, overflow: "hidden" },
+  axis: { width: AXIS_WIDTH, position: "relative" },
   axisLabel: {
-    position: 'absolute',
+    position: "absolute",
     right: 0,
     fontSize: 9,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
     lineHeight: AXIS_LABEL_HEIGHT,
   },
-  axisLabelZero: { fontWeight: '700' },
+  axisLabelZero: { fontWeight: "700" },
   period: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: 4,
   },
-  periodLabel: { fontSize: 9, fontWeight: '500' },
+  periodLabel: { fontSize: 9, fontWeight: "500" },
 });

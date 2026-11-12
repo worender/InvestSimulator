@@ -4,10 +4,7 @@ import {
   AssetCategoryKey,
   PortfolioCategory,
 } from "../database/mockPortfolioData";
-import {
-  convertForDisplay,
-  displaySymbol,
-} from "../displayCurrency";
+import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 import { GlassBackground } from "./GlassBackground";
 
@@ -31,6 +28,7 @@ export function AssetCategoryCard({
   onPress,
 }: AssetCategoryCardProps) {
   const { colors, mode } = useTheme();
+  const display = useDisplayCurrency();
   const isDark = mode === "dark";
 
   const isPositive = category.profitCurrency >= 0;
@@ -44,9 +42,15 @@ export function AssetCategoryCard({
     });
 
   const sign = isPositive ? "+" : "-";
-  const displayedProfit = convertForDisplay(category.profitCurrency, currency);
-  const displayedTotal = convertForDisplay(category.totalValue, currency);
-  const symbol = displaySymbol(currency);
+  const displayedProfit = display.convertForDisplay(
+    category.profitCurrency,
+    currency,
+  );
+  const displayedTotal = display.convertForDisplay(
+    category.totalValue,
+    currency,
+  );
+  const symbol = display.displaySymbol(currency);
   const formattedProfitVal = `${sign}${formatNumber(displayedProfit)} ${symbol}`;
   const formattedProfitPct = `${sign}${Math.abs(category.profitPercent).toFixed(2)}%`;
   const formattedTotal = `${formatNumber(displayedTotal)} ${symbol}`;

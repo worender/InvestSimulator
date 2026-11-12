@@ -35,9 +35,10 @@ import {
   PortfolioAssetItem,
   PortfolioCategory,
 } from "../../database/mockPortfolioData";
-import { notify } from "../../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
 import { useLayoutMode } from "../../useLayoutMode";
+import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 export default function PortfolioScreen() {
@@ -146,6 +147,12 @@ export default function PortfolioScreen() {
     });
   };
 
+  // Po opuszczeniu zakładki menu i wyszukiwanie wracają do stanu początkowego.
+  useResetOnPanelBlur(() => {
+    setSearchSheetOpen(false);
+    closeMenu();
+  });
+
   // Przełączanie menu przycisku "+"
   const toggleMenu = () => {
     if (menuMounted) {
@@ -162,6 +169,7 @@ export default function PortfolioScreen() {
       notify({
         variant: "info",
         title: "Limit osiągnięty",
+        category: NOTIFICATION_GROUPS.portfolio,
         message: "Maksymalna liczba portfeli (5) została osiągnięta.",
       });
       return;
@@ -176,6 +184,7 @@ export default function PortfolioScreen() {
     notify({
       variant: "success",
       title: "Utworzono nowy portfel",
+      category: NOTIFICATION_GROUPS.portfolio,
       message: `${newPortfolio.name} jest gotowy do inwestowania.`,
     });
   };
@@ -263,6 +272,7 @@ export default function PortfolioScreen() {
                 notify({
                   variant: "info",
                   title: "Edycja/Usuwanie",
+                  category: NOTIFICATION_GROUPS.portfolio,
                   message:
                     "Obecnie wybrane portfolio nie może być usunięte ani edytowane.",
                 });

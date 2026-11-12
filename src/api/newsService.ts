@@ -8,7 +8,7 @@
  * Moduł nie zależy od Reacta — można go używać w dowolnym miejscu aplikacji.
  */
 
-import { notify } from "../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { authenticatedFetch } from "./marketService";
 
 export type NewsLanguage = "pl" | "en";
@@ -262,6 +262,7 @@ export async function getYahooNews(
       notify({
         variant: "warning",
         title: "Brak newsów",
+        category: NOTIFICATION_GROUPS.newsFeed,
         message:
           "Nie udało się pobrać newsów z Yahoo Finance. Spróbuj ponownie za chwilę.",
       });
@@ -286,6 +287,7 @@ export async function getYahooNewsByTopic(
     notify({
       variant: "warning",
       title: "Brak newsów",
+      category: NOTIFICATION_GROUPS.newsFeed,
       message:
         "Nie udało się pobrać newsów z Yahoo Finance. Spróbuj ponownie za chwilę.",
     });
