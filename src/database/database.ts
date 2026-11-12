@@ -208,7 +208,7 @@ export async function initializeDatabase(): Promise<void> {
           title TEXT,
           text TEXT,              -- Treść; akapity rozdzielone pustą linią
           category_id INTEGER,
-          slug TEXT,              -- Stały identyfikator artykułu (np. 'edu-01')
+          slug TEXT NOT NULL UNIQUE, -- Stały identyfikator artykułu (np. 'edu-01')
           summary TEXT,           -- Krótkie podsumowanie wyświetlane na liście
           read_minutes INTEGER,   -- Szacowany czas czytania w minutach
           language TEXT DEFAULT 'pl',
@@ -217,18 +217,25 @@ export async function initializeDatabase(): Promise<void> {
           FOREIGN KEY (category_id) REFERENCES category_article (id)
         );
 
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_article_slug ON article (slug);
-
-        CREATE TABLE IF NOT EXISTS article_source (
+        -- Literatura i dokumenty cytowane w artykułach (każda pozycja raz)
+        CREATE TABLE IF NOT EXISTS source (
           id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-          article_id INTEGER NOT NULL,
-          author TEXT NOT NULL,
-          title TEXT NOT NULL,
+          author TEXT NOT NULL,     -- Autor książki / instytucja, nie autor artykułu
+          title TEXT NOT NULL,      -- Tytuł książki lub dokumentu
           publisher TEXT NOT NULL,
           year INTEGER NOT NULL,
           url TEXT,
+          UNIQUE (author, title, year)
+        );
+
+        -- Powiązanie artykułu ze źródłami (relacja wiele do wielu)
+        CREATE TABLE IF NOT EXISTS article_source (
+          article_id INTEGER NOT NULL,
+          source_id INTEGER NOT NULL,
           position INTEGER NOT NULL DEFAULT 0, -- Kolejność źródeł w artykule
-          FOREIGN KEY (article_id) REFERENCES article (id)
+          PRIMARY KEY (article_id, source_id),
+          FOREIGN KEY (article_id) REFERENCES article (id),
+          FOREIGN KEY (source_id) REFERENCES source (id)
         );
 
         CREATE TABLE IF NOT EXISTS saved_article (
@@ -331,35 +338,57 @@ async function syncEducationalArticles(
       );
       for (const [position, source] of article.sources.entries()) {
         await database.runAsync(
-          `INSERT INTO article_source
-             (article_id, author, title, publisher, year, url, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          row.id,
+          `INSERT INTO source (author, title, publisher, year, url)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(author, title, year) DO UPDATE SET
+             publisher = excluded.publisher,
+             url = excluded.url`,
           source.author,
           source.title,
           source.publisher,
           source.year,
           source.url ?? null,
+        );
+        await database.runAsync(
+          `INSERT INTO article_source (article_id, source_id, position)
+           SELECT ?, id, ? FROM source
+           WHERE author = ? AND title = ? AND year = ?`,
+          row.id,
           position,
+          source.author,
+          source.title,
+          source.year,
         );
       }
     }
 
-    // Usuwa artykuły wycofane z aplikacji (najpierw rekordy zależne)
-    const slugs = EDUCATIONAL_ARTICLE_SEED.map((article) => article.id);
-    const placeholders = slugs.map(() => "?").join(", ");
-    const removed = `SELECT id FROM article WHERE slug IS NOT NULL AND slug NOT IN (${placeholders})`;
-    await database.runAsync(
-      `DELETE FROM saved_article WHERE saved_article_id IN (${removed})`,
-      ...slugs,
+    // Usuwa artykuły wycofane z aplikacji (najpierw rekordy zależne).
+    // Lista do usunięcia liczona w JS, aby każde zapytanie miało tylko parametry `?`.
+    const currentSlugs = new Set(
+      EDUCATIONAL_ARTICLE_SEED.map((article) => article.id),
     );
+    const storedArticles = await database.getAllAsync<{
+      id: number;
+      slug: string;
+    }>("SELECT id, slug FROM article");
+
+    for (const { id, slug } of storedArticles) {
+      if (currentSlugs.has(slug)) continue;
+      await database.runAsync(
+        "DELETE FROM saved_article WHERE saved_article_id = ?",
+        id,
+      );
+      await database.runAsync(
+        "DELETE FROM article_source WHERE article_id = ?",
+        id,
+      );
+      await database.runAsync("DELETE FROM article WHERE id = ?", id);
+    }
+
+    // Źródła, których nie cytuje już żaden artykuł
     await database.runAsync(
-      `DELETE FROM article_source WHERE article_id IN (${removed})`,
-      ...slugs,
-    );
-    await database.runAsync(
-      `DELETE FROM article WHERE slug IS NOT NULL AND slug NOT IN (${placeholders})`,
-      ...slugs,
+      `DELETE FROM source
+       WHERE id NOT IN (SELECT source_id FROM article_source)`,
     );
   });
 }
@@ -693,6 +722,7 @@ export async function clearLocalDatabase(): Promise<void> {
   await database.withTransactionAsync(async () => {
     await database.runAsync("DELETE FROM saved_article");
     await database.runAsync("DELETE FROM article_source");
+    await database.runAsync("DELETE FROM source");
     await database.runAsync("DELETE FROM article");
     await database.runAsync("DELETE FROM category_article");
 
@@ -743,7 +773,7 @@ interface ArticleSourceRow extends ArticleSource {
   url: string | undefined;
 }
 
-/// Artykuły edukacyjne z tabel `article`, `category_article` i `article_source`.
+/// Artykuły edukacyjne z tabel `article`, `category_article`, `article_source` i `source`.
 export async function getEducationalArticles(): Promise<EducationalArticle[]> {
   const database = await getReadyDatabase();
 
@@ -752,13 +782,13 @@ export async function getEducationalArticles(): Promise<EducationalArticle[]> {
             a.language, a.author, c.category
      FROM article a
      JOIN category_article c ON c.id = a.category_id
-     WHERE a.slug IS NOT NULL
      ORDER BY a.sort_order ASC, a.id ASC`,
   );
   const sources = await database.getAllAsync<ArticleSourceRow>(
-    `SELECT article_id, author, title, publisher, year, url
-     FROM article_source
-     ORDER BY article_id ASC, position ASC`,
+    `SELECT l.article_id, s.author, s.title, s.publisher, s.year, s.url
+     FROM article_source l
+     JOIN source s ON s.id = l.source_id
+     ORDER BY l.article_id ASC, l.position ASC`,
   );
 
   const sourcesByArticle = new Map<number, ArticleSource[]>();
