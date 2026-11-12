@@ -1,6 +1,13 @@
 import { Platform } from "expo";
 import * as SQLite from "expo-sqlite";
 import { ValidateAvatarUrl, ValidateUserName } from "./checkSecurityParam";
+import {
+  ARTICLE_PARAGRAPH_SEPARATOR,
+  EDUCATIONAL_ARTICLE_SEED,
+  estimateReadMinutes,
+  type ArticleSource,
+  type EducationalArticle,
+} from "./educationalArticles";
 import { acquireDbLock } from "./dbLock";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -199,9 +206,36 @@ export async function initializeDatabase(): Promise<void> {
         CREATE TABLE IF NOT EXISTS article (
           id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
           title TEXT,
-          text TEXT,
+          text TEXT,              -- Treść; akapity rozdzielone pustą linią
           category_id INTEGER,
+          slug TEXT NOT NULL UNIQUE, -- Stały identyfikator artykułu (np. 'edu-01')
+          summary TEXT,           -- Krótkie podsumowanie wyświetlane na liście
+          read_minutes INTEGER,   -- Szacowany czas czytania w minutach
+          language TEXT DEFAULT 'pl',
+          author TEXT,
+          sort_order INTEGER DEFAULT 0,
           FOREIGN KEY (category_id) REFERENCES category_article (id)
+        );
+
+        -- Literatura i dokumenty cytowane w artykułach (każda pozycja raz)
+        CREATE TABLE IF NOT EXISTS source (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          author TEXT NOT NULL,     -- Autor książki / instytucja, nie autor artykułu
+          title TEXT NOT NULL,      -- Tytuł książki lub dokumentu
+          publisher TEXT NOT NULL,
+          year INTEGER NOT NULL,
+          url TEXT,
+          UNIQUE (author, title, year)
+        );
+
+        -- Powiązanie artykułu ze źródłami (relacja wiele do wielu)
+        CREATE TABLE IF NOT EXISTS article_source (
+          article_id INTEGER NOT NULL,
+          source_id INTEGER NOT NULL,
+          position INTEGER NOT NULL DEFAULT 0, -- Kolejność źródeł w artykule
+          PRIMARY KEY (article_id, source_id),
+          FOREIGN KEY (article_id) REFERENCES article (id),
+          FOREIGN KEY (source_id) REFERENCES source (id)
         );
 
         CREATE TABLE IF NOT EXISTS saved_article (
@@ -213,6 +247,7 @@ export async function initializeDatabase(): Promise<void> {
         );
   `);
     await seedDefaultData(database);
+    await syncEducationalArticles(database);
   })();
 
   return initializationPromise;
@@ -245,6 +280,117 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
        portfolio, market, news, transactions, reminders)
      VALUES (1, 0, 0, 0, 0, 0, 0, 0)`,
   );
+}
+
+// Zapisuje artykuły edukacyjne dostarczane z aplikacją do tabel
+// `category_article`, `article` i `article_source`. Artykuły są
+// dopasowywane po `slug`, więc ich `id` (i zapisane zakładki) się nie zmienia.
+// Artykuły usunięte z aplikacji znikają z bazy razem ze źródłami i zakładkami.
+async function syncEducationalArticles(
+  database: SQLite.SQLiteDatabase,
+): Promise<void> {
+  await database.withTransactionAsync(async () => {
+    for (const category of new Set(
+      EDUCATIONAL_ARTICLE_SEED.map((article) => article.category),
+    )) {
+      await database.runAsync(
+        "INSERT OR IGNORE INTO category_article (category) VALUES (?)",
+        category,
+      );
+    }
+
+    for (const [index, article] of EDUCATIONAL_ARTICLE_SEED.entries()) {
+      await database.runAsync(
+        `INSERT INTO article
+           (slug, title, text, summary, read_minutes, language, author,
+            sort_order, category_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+           (SELECT id FROM category_article WHERE category = ?))
+         ON CONFLICT(slug) DO UPDATE SET
+           title = excluded.title,
+           text = excluded.text,
+           summary = excluded.summary,
+           read_minutes = excluded.read_minutes,
+           language = excluded.language,
+           author = excluded.author,
+           sort_order = excluded.sort_order,
+           category_id = excluded.category_id`,
+        article.id,
+        article.title,
+        article.content.join(ARTICLE_PARAGRAPH_SEPARATOR),
+        article.summary,
+        estimateReadMinutes(article),
+        article.language,
+        article.author,
+        index,
+        article.category,
+      );
+
+      const row = await database.getFirstAsync<{ id: number }>(
+        "SELECT id FROM article WHERE slug = ?",
+        article.id,
+      );
+      if (!row) throw new Error(`Nie udało się zapisać artykułu ${article.id}`);
+
+      await database.runAsync(
+        "DELETE FROM article_source WHERE article_id = ?",
+        row.id,
+      );
+      for (const [position, source] of article.sources.entries()) {
+        await database.runAsync(
+          `INSERT INTO source (author, title, publisher, year, url)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(author, title, year) DO UPDATE SET
+             publisher = excluded.publisher,
+             url = excluded.url`,
+          source.author,
+          source.title,
+          source.publisher,
+          source.year,
+          source.url ?? null,
+        );
+        await database.runAsync(
+          `INSERT INTO article_source (article_id, source_id, position)
+           SELECT ?, id, ? FROM source
+           WHERE author = ? AND title = ? AND year = ?`,
+          row.id,
+          position,
+          source.author,
+          source.title,
+          source.year,
+        );
+      }
+    }
+
+    // Usuwa artykuły wycofane z aplikacji (najpierw rekordy zależne).
+    // Lista do usunięcia liczona w JS, aby każde zapytanie miało tylko parametry `?`.
+    const currentSlugs = new Set(
+      EDUCATIONAL_ARTICLE_SEED.map((article) => article.id),
+    );
+    const storedArticles = await database.getAllAsync<{
+      id: number;
+      slug: string;
+    }>("SELECT id, slug FROM article");
+
+    for (const { id, slug } of storedArticles) {
+      if (currentSlugs.has(slug)) continue;
+      await database.runAsync(
+        "DELETE FROM saved_article WHERE saved_article_id = ?",
+        id,
+      );
+      await database.runAsync(
+        "DELETE FROM article_source WHERE article_id = ?",
+        id,
+      );
+      await database.runAsync("DELETE FROM article WHERE id = ?", id);
+    }
+
+    // Źródła, których nie cytuje już żaden artykuł
+    await database.runAsync(
+      `DELETE FROM source
+       WHERE id NOT IN (SELECT source_id FROM article_source)`,
+    );
+  });
 }
 
 async function getReadyDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -575,6 +721,8 @@ export async function clearLocalDatabase(): Promise<void> {
   const database = await getReadyDatabase();
   await database.withTransactionAsync(async () => {
     await database.runAsync("DELETE FROM saved_article");
+    await database.runAsync("DELETE FROM article_source");
+    await database.runAsync("DELETE FROM source");
     await database.runAsync("DELETE FROM article");
     await database.runAsync("DELETE FROM category_article");
 
@@ -606,4 +754,107 @@ export async function deleteLocalDatabase(): Promise<void> {
 
   databasePromise = null;
   initializationPromise = null;
+}
+
+interface ArticleRow {
+  id: number;
+  slug: string;
+  title: string;
+  text: string;
+  summary: string;
+  read_minutes: number;
+  language: "pl" | "en";
+  author: string;
+  category: string;
+}
+
+interface ArticleSourceRow extends ArticleSource {
+  article_id: number;
+  url: string | undefined;
+}
+
+/// Artykuły edukacyjne z tabel `article`, `category_article`, `article_source` i `source`.
+export async function getEducationalArticles(): Promise<EducationalArticle[]> {
+  const database = await getReadyDatabase();
+
+  const rows = await database.getAllAsync<ArticleRow>(
+    `SELECT a.id, a.slug, a.title, a.text, a.summary, a.read_minutes,
+            a.language, a.author, c.category
+     FROM article a
+     JOIN category_article c ON c.id = a.category_id
+     ORDER BY a.sort_order ASC, a.id ASC`,
+  );
+  const sources = await database.getAllAsync<ArticleSourceRow>(
+    `SELECT l.article_id, s.author, s.title, s.publisher, s.year, s.url
+     FROM article_source l
+     JOIN source s ON s.id = l.source_id
+     ORDER BY l.article_id ASC, l.position ASC`,
+  );
+
+  const sourcesByArticle = new Map<number, ArticleSource[]>();
+  for (const { article_id, url, ...source } of sources) {
+    const list = sourcesByArticle.get(article_id) ?? [];
+    list.push(url ? { ...source, url } : source);
+    sourcesByArticle.set(article_id, list);
+  }
+
+  return rows.map((row) => ({
+    id: row.slug,
+    title: row.title,
+    summary: row.summary,
+    content: row.text.split(ARTICLE_PARAGRAPH_SEPARATOR),
+    readMinutes: row.read_minutes,
+    language: row.language,
+    author: row.author,
+    category: row.category,
+    sources: sourcesByArticle.get(row.id) ?? [],
+  }));
+}
+
+/// Identyfikatory (slug) artykułów zapisanych przez użytkownika, od najnowszych.
+export async function getSavedArticleSlugs(userId = 1): Promise<string[]> {
+  const database = await getReadyDatabase();
+
+  const rows = await database.getAllAsync<{ slug: string }>(
+    `SELECT a.slug
+     FROM saved_article s
+     JOIN article a ON a.id = s.saved_article_id
+     WHERE s.user_id = ? AND a.slug IS NOT NULL
+     ORDER BY s.rowid DESC`,
+    userId,
+  );
+  return rows.map((row) => row.slug);
+}
+
+/// Dodaje lub usuwa artykuł z listy „do przeczytania później”.
+export async function setArticleSaved(
+  slug: string,
+  saved: boolean,
+  userId = 1,
+): Promise<void> {
+  const database = await getReadyDatabase();
+
+  if (saved) {
+    const article = await database.getFirstAsync<{ id: number }>(
+      "SELECT id FROM article WHERE slug = ?",
+      slug,
+    );
+    if (!article) throw new Error("Nie znaleziono artykułu do zapisania");
+
+    await database.runAsync(
+      `INSERT OR IGNORE INTO saved_article (user_id, saved_article_id)
+       VALUES (?, ?)`,
+      userId,
+      article.id,
+    );
+    return;
+  }
+
+  await database.runAsync(
+    `DELETE FROM saved_article
+     WHERE user_id = ?
+       AND saved_article_id IN (SELECT id FROM article WHERE slug = ?)`,
+    userId,
+    slug,
+  );
 }

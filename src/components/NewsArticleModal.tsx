@@ -40,7 +40,8 @@ export type ReadableArticle = YahooNewsItem | EducationalArticle;
 type NewsArticleModalProps = {
   article: ReadableArticle;
   saved: boolean;
-  onToggleSaved: (article: ReadableArticle) => void;
+  // Brak funkcji ukrywa przycisk zakładki (np. dla newsów spoza bazy)
+  onToggleSaved?: (article: ReadableArticle) => void;
   onClose: () => void;
 };
 
@@ -209,6 +210,10 @@ export function NewsArticleModal({
       ? "Polska"
       : "Świat"
     : "Edukacja";
+  const eyebrowLabel = educationalArticle
+    ? `${topicLabel} · ${educationalArticle.category}`
+    : topicLabel;
+  const sources = educationalArticle?.sources ?? [];
   const languageLabel = article.language === "pl" ? "Polski" : "Angielski";
   const publishedLabel = newsArticle
     ? formatArticleDate(newsArticle.publishedAt)
@@ -218,6 +223,19 @@ export function NewsArticleModal({
   const metaLine = newsArticle
     ? `${newsArticle.publisher}${publishedLabel ? ` · ${publishedLabel}` : ""}`
     : `${educationalArticle?.author ?? ""}${educationalArticle ? ` · ${educationalArticle.readMinutes} min czytania` : ""}`;
+
+  const openLink = async (url: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(url);
+    } catch (error) {
+      console.error("Nie udało się otworzyć odnośnika:", error);
+      notify({
+        variant: "error",
+        title: "Nie udało się otworzyć strony",
+        message: "Sprawdź połączenie z internetem i spróbuj ponownie.",
+      });
+    }
+  };
 
   const openFullArticle = async () => {
     if (!newsArticle) return;
@@ -281,20 +299,22 @@ export function NewsArticleModal({
 
               <View style={styles.headerRow}>
                 <View style={styles.side}>
-                  <Pressable
-                    onPress={() => onToggleSaved(article)}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      isSaved ? "Usuń z zapisanych" : "Zapisz artykuł"
-                    }
-                  >
-                    <Ionicons
-                      name={isSaved ? "bookmark" : "bookmark-outline"}
-                      size={22}
-                      color={isSaved ? colors.accent : colors.textMuted}
-                    />
-                  </Pressable>
+                  {onToggleSaved && (
+                    <Pressable
+                      onPress={() => onToggleSaved(article)}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        isSaved ? "Usuń z zapisanych" : "Zapisz artykuł"
+                      }
+                    >
+                      <Ionicons
+                        name={isSaved ? "bookmark" : "bookmark-outline"}
+                        size={22}
+                        color={isSaved ? colors.accent : colors.textMuted}
+                      />
+                    </Pressable>
+                  )}
                 </View>
 
                 <GestureDetector gesture={headerDragGesture}>
@@ -356,7 +376,7 @@ export function NewsArticleModal({
             >
               <View style={styles.metaRow}>
                 <Text style={[styles.eyebrow, { color: colors.accent }]}>
-                  {topicLabel.toUpperCase()}
+                  {eyebrowLabel.toUpperCase()}
                 </Text>
                 <View
                   style={[styles.languageBadge, { borderColor: colors.accent }]}
@@ -383,19 +403,111 @@ export function NewsArticleModal({
               />
 
               {paragraphs.length > 0 ? (
-                paragraphs.map((paragraph, index) => (
-                  <Text
-                    key={`${article.id}-paragraph-${index}`}
-                    style={[styles.paragraph, { color: colors.text }]}
-                  >
-                    {paragraph}
-                  </Text>
-                ))
+                paragraphs.map((paragraph, index) => {
+                  const key = `${article.id}-paragraph-${index}`;
+
+                  if (paragraph.startsWith("## ")) {
+                    return (
+                      <Text
+                        key={key}
+                        accessibilityRole="header"
+                        style={[styles.subheading, { color: colors.text }]}
+                      >
+                        {paragraph.slice(3)}
+                      </Text>
+                    );
+                  }
+
+                  if (paragraph.startsWith("• ")) {
+                    return (
+                      <View key={key} style={styles.bulletRow}>
+                        <Text style={[styles.bullet, { color: colors.accent }]}>
+                          •
+                        </Text>
+                        <Text
+                          style={[
+                            styles.paragraph,
+                            styles.bulletText,
+                            { color: colors.text },
+                          ]}
+                        >
+                          {paragraph.slice(2)}
+                        </Text>
+                      </View>
+                    );
+                  }
+
+                  return (
+                    <Text
+                      key={key}
+                      style={[styles.paragraph, { color: colors.text }]}
+                    >
+                      {paragraph}
+                    </Text>
+                  );
+                })
               ) : (
                 <Text style={[styles.paragraph, { color: colors.textMuted }]}>
                   Ten materiał nie zawiera jeszcze pełnej treści. Wróć do niego
                   później.
                 </Text>
+              )}
+
+              {sources.length > 0 && (
+                <View
+                  style={[
+                    styles.sources,
+                    { borderTopColor: colors.borderGlass },
+                  ]}
+                >
+                  <Text
+                    accessibilityRole="header"
+                    style={[styles.sourcesTitle, { color: colors.accent }]}
+                  >
+                    ŹRÓDŁA I LITERATURA
+                  </Text>
+                  {sources.map((source, index) => {
+                    const { url } = source;
+                    const label = (
+                      <Text
+                        style={[styles.sourceText, { color: colors.textMuted }]}
+                      >
+                        <Text style={{ color: colors.text }}>
+                          {source.author}
+                        </Text>
+                        {`, „${source.title}”, ${source.publisher}, ${source.year}`}
+                        {url ? (
+                          <Text style={{ color: colors.accent }}>
+                            {"  "}
+                            <Ionicons name="open-outline" size={12} />
+                          </Text>
+                        ) : null}
+                      </Text>
+                    );
+
+                    return url ? (
+                      <Pressable
+                        key={`${article.id}-source-${index}`}
+                        onPress={() => openLink(url)}
+                        accessibilityRole="link"
+                        accessibilityLabel={`Otwórz źródło: ${source.title}`}
+                        style={({ pressed }) => [
+                          styles.sourceRow,
+                          { opacity: pressed ? 0.6 : 1 },
+                        ]}
+                      >
+                        {label}
+                      </Pressable>
+                    ) : (
+                      <View
+                        key={`${article.id}-source-${index}`}
+                        style={styles.sourceRow}
+                      >
+                        {label}
+                      </View>
+                    );
+                  })}
+                </View>
               )}
 
               <Text style={[styles.footerNote, { color: colors.textMuted }]}>
@@ -519,6 +631,46 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 24,
     marginBottom: 14,
+  },
+  subheading: {
+    fontSize: 17,
+    fontWeight: "700",
+    lineHeight: 23,
+    letterSpacing: -0.2,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  bulletRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingLeft: 4,
+  },
+  bullet: {
+    fontSize: 15,
+    lineHeight: 24,
+    fontWeight: "700",
+  },
+  bulletText: {
+    flex: 1,
+    marginBottom: 8,
+  },
+  sources: {
+    marginTop: 12,
+    paddingTop: 18,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  sourcesTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    marginBottom: 10,
+  },
+  sourceRow: {
+    paddingVertical: 6,
+  },
+  sourceText: {
+    fontSize: 13,
+    lineHeight: 19,
   },
   footerNote: {
     marginTop: 18,

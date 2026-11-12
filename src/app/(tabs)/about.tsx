@@ -18,7 +18,7 @@ import {
 } from "../../components/NewsArticleModal";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import { Skeleton } from "../../components/Skeleton";
-import { EDUCATIONAL_ARTICLES } from "../../database/educationalArticles";
+import type { EducationalArticle } from "../../database/educationalArticles";
 import { notify } from "../../notificationBus";
 import { useSavedArticles } from "../../savedArticles";
 import { useTheme } from "../../theme";
@@ -40,11 +40,37 @@ const formatNewsMeta = (item: YahooNewsItem): string => {
   return [item.publisher, dateLabel].filter(Boolean).join(" · ");
 };
 
-// Metadane artykułu zapisanego
-const formatSavedMeta = (item: ReadableArticle): string =>
-  "readMinutes" in item
-    ? `Edukacja · ${item.readMinutes} min czytania`
-    : `${formatNewsMeta(item)} · ${item.topic === "poland" ? "Polska" : "Świat"}`;
+// Metadane artykułu edukacyjnego: kategoria i czas czytania
+const formatEducationalMeta = (item: EducationalArticle): string =>
+  `${item.category} · ${item.readMinutes} min czytania`;
+
+const isEducationalArticle = (
+  article: ReadableArticle,
+): article is EducationalArticle => "readMinutes" in article;
+
+// Szkielet listy wyświetlany podczas ładowania artykułów
+function ArticleListSkeleton({ borderColor }: { borderColor: string }) {
+  return (
+    <View>
+      {[0, 1, 2].map((item) => (
+        <View
+          key={item}
+          style={[
+            styles.skeletonRow,
+            item < 2 && {
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: borderColor,
+            },
+          ]}
+        >
+          <Skeleton width="84%" height={16} />
+          <Skeleton width="100%" height={12} />
+          <Skeleton width="36%" height={10} />
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export default function AboutScreen() {
   const { colors } = useTheme();
@@ -71,6 +97,7 @@ export default function AboutScreen() {
     useState<ReadableArticle | null>(null);
 
   const {
+    educationalArticles,
     articles: savedArticles,
     isSaved,
     toggle: toggleSaved,
@@ -93,12 +120,11 @@ export default function AboutScreen() {
   }, []);
 
   useEffect(() => {
-    if (!articleId) return;
+    // Czeka na artykuły z bazy, aby nie zgubić parametru podczas ładowania
+    if (!articleId || educationalArticles === null) return;
 
     const article =
-      savedArticles.find((item) => item.id === articleId) ??
-      EDUCATIONAL_ARTICLES.find((item) => item.id === articleId) ??
-      null;
+      educationalArticles.find((item) => item.id === articleId) ?? null;
 
     const timeout = setTimeout(() => {
       if (article) {
@@ -113,7 +139,7 @@ export default function AboutScreen() {
     }, 0);
 
     return () => clearTimeout(timeout);
-  }, [articleId, router, savedArticles]);
+  }, [articleId, educationalArticles, router, savedArticles]);
 
   const toggleCategory = (category: string) => {
     setExpandedCategory((current) => (current === category ? null : category));
@@ -131,7 +157,7 @@ export default function AboutScreen() {
                 variant: "info",
                 title: "Zapisane artykuły",
                 message:
-                  "Otwórz artykuł i dotknij ikony zakładki, aby dodać go do kategorii „Zapisane”.",
+                  "Otwórz artykuł edukacyjny i dotknij ikony zakładki, aby dodać go do kategorii „Zapisane”.",
               })
             }
             accessibilityLabel="Zapisane artykuły"
@@ -180,16 +206,34 @@ export default function AboutScreen() {
         >
           <ExpandableCategoryBlock
             title="Artykuły edukacyjne"
-            count={EDUCATIONAL_ARTICLES.length}
+            count={educationalArticles?.length}
             expanded={expandedCategory === "educational"}
             onToggle={() => toggleCategory("educational")}
           >
-            <ArticleList
-              items={EDUCATIONAL_ARTICLES}
-              previewCount={3}
-              getMeta={(item) => `${item.readMinutes} min czytania`}
-              onSelect={setSelectedArticle}
-            />
+            {educationalArticles === null ? (
+              <ArticleListSkeleton borderColor={colors.borderGlass} />
+            ) : educationalArticles.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons
+                  name="school-outline"
+                  size={28}
+                  color={colors.textMuted}
+                />
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                  Brak artykułów
+                </Text>
+                <Text style={[styles.emptyCopy, { color: colors.textMuted }]}>
+                  Nie udało się wczytać artykułów edukacyjnych z bazy danych.
+                </Text>
+              </View>
+            ) : (
+              <ArticleList
+                items={educationalArticles}
+                previewCount={3}
+                getMeta={formatEducationalMeta}
+                onSelect={setSelectedArticle}
+              />
+            )}
           </ExpandableCategoryBlock>
 
           {savedArticles.length > 0 && (
@@ -202,7 +246,7 @@ export default function AboutScreen() {
               <ArticleList
                 items={savedArticles}
                 previewCount={3}
-                getMeta={formatSavedMeta}
+                getMeta={formatEducationalMeta}
                 onSelect={setSelectedArticle}
               />
             </ExpandableCategoryBlock>
@@ -220,24 +264,7 @@ export default function AboutScreen() {
                 onToggle={() => toggleCategory(topic.id)}
               >
                 {loadingNews ? (
-                  <View>
-                    {[0, 1, 2].map((item) => (
-                      <View
-                        key={`${topic.id}-skeleton-${item}`}
-                        style={[
-                          styles.skeletonRow,
-                          item < 2 && {
-                            borderBottomWidth: StyleSheet.hairlineWidth,
-                            borderBottomColor: colors.borderGlass,
-                          },
-                        ]}
-                      >
-                        <Skeleton width="84%" height={16} />
-                        <Skeleton width="100%" height={12} />
-                        <Skeleton width="36%" height={10} />
-                      </View>
-                    ))}
-                  </View>
+                  <ArticleListSkeleton borderColor={colors.borderGlass} />
                 ) : topicArticles.length === 0 ? (
                   <View style={styles.emptyState}>
                     <Ionicons
@@ -274,7 +301,10 @@ export default function AboutScreen() {
           key={selectedArticle.id}
           article={selectedArticle}
           saved={isSaved(selectedArticle.id)}
-          onToggleSaved={toggleSaved}
+          // Zakładki dotyczą artykułów z bazy; newsy Yahoo nie są w niej zapisywane
+          onToggleSaved={
+            isEducationalArticle(selectedArticle) ? toggleSaved : undefined
+          }
           onClose={() => setSelectedArticle(null)}
         />
       )}
