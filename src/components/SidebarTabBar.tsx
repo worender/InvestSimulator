@@ -3,7 +3,7 @@ import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getWallet, type Wallet } from '../database/database';
+import { getWallets, type Wallet } from '../database/database';
 import { useDisplayCurrency } from '../displayCurrency';
 import { useTheme } from '../theme';
 
@@ -18,22 +18,36 @@ export const SIDEBAR_COMPACT_WIDTH = 72;
 
 // Boczny pasek nawigacji dla szerokich ekranów webowych (wzorowany na xStation)
 export function SidebarTabBar({ state, descriptors, navigateToTab, compact = false, tabIcon }: SidebarTabBarProps) {
-  const { colors } = useTheme();
+  const { colors, activeAccount } = useTheme();
   const display = useDisplayCurrency();
   const { top, bottom } = useSafeAreaInsets();
   const [wallet, setWallet] = useState<Wallet | null>(null);
 
   useEffect(() => {
-    let active = true;
-    getWallet()
-      .then((result) => {
-        if (active) setWallet(result);
-      })
-      .catch((error) => console.error('Nie udało się wczytać portfela:', error));
+  let active = true;
+
+  if (!activeAccount) {
+    setWallet(null);
     return () => {
       active = false;
     };
-  }, []);
+  }
+
+  getWallets(activeAccount.id)
+    .then((wallets) => {
+      if (active) {
+        setWallet(wallets[0] ?? null);
+      }
+    })
+    .catch((error) => {
+      console.error('Nie udało się wczytać portfeli:', error);
+      if (active) setWallet(null);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [activeAccount]);
 
   return (
     <View
