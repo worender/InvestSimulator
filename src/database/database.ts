@@ -328,38 +328,6 @@ export async function getPortfolio(): Promise<PortfolioItem[]> {
   );
 }
 
-// // TO IMPLEMENT
-// const requirePositive = (value: number, fieldName: string): void => {
-//   if (!Number.isFinite(value) || value <= 0) {
-//     throw new Error(`${fieldName} musi być większe od zera`);
-//   }
-// };
-
-// const requireNonNegative = (value: number, fieldName: string): void => {
-//   if (!Number.isFinite(value) || value < 0) {
-//     throw new Error(`${fieldName} nie może być ujemne`);
-//   }
-// };
-
-///Get the user's wallet (balance shown in the web sidebar), returns null if not found. Default userId is 1.
-export async function getWallet(userId = 1): Promise<Wallet | null> {
-  if (userId <= 0 || !Number.isInteger(userId)) {
-    throw new Error("Nieprawidłowy identyfikator użytkownika");
-  }
-
-  const database = await getReadyDatabase();
-
-  return (
-    (await database.getFirstAsync<Wallet>(
-      `SELECT id, balance, currency, id_user, name, icon
-     FROM wallet
-     WHERE id_user = ?
-     ORDER BY id
-     LIMIT 1`,
-      userId,
-    )) ?? null
-  );
-}
 
 ///Get user profile by userId, returns null if not found. Default userId is 1.
 export async function getUserProfile(userId = 1): Promise<UserProfile | null> {
