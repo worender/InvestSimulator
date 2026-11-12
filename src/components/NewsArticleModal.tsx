@@ -28,6 +28,7 @@ import Reanimated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { splitIntoSentences } from "../api/newsQuality";
 import type { YahooNewsItem } from "../api/newsService";
 import type { EducationalArticle } from "../database/educationalArticles";
 import { useLockScreenWhileActive } from "../interactionLock";
@@ -45,15 +46,9 @@ type NewsArticleModalProps = {
   onClose: () => void;
 };
 
-// Dzieli opis artykułu na akapity
+// Dzieli opis artykułu na akapity po 3 zdania
 const buildParagraphs = (summary: string): string[] => {
-  const normalized = summary.replace(/\s+/g, " ").trim();
-  if (!normalized) return [];
-
-  const sentences = normalized
-    .match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g)
-    ?.map((sentence) => sentence.trim()) ?? [normalized];
-
+  const sentences = splitIntoSentences(summary);
   const paragraphs: string[] = [];
   for (let index = 0; index < sentences.length; index += 3) {
     const paragraph = sentences.slice(index, index + 3).join(" ");
