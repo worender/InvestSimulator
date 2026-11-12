@@ -30,10 +30,12 @@ import {
   TransactionHistoryItem,
 } from "../database/mockPortfolioData";
 import { SearchableInstrument } from "../database/mockSearchableInstruments";
-import { convertForDisplay, displaySymbol } from "../displayCurrency";
+import { useDisplayCurrency } from "../displayCurrency";
 import { useLockScreenWhileActive } from "../interactionLock";
-import { notify } from "../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
+import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
+import { useLayoutMode } from "../useLayoutMode";
 import { CategorySelector } from "./CategorySelector";
 import { MarketClosedNoticeModal } from "./MarketClosedNoticeModal";
 import { StockCandleChart } from "./StockCandleChart";
@@ -41,6 +43,8 @@ import { TradeInstrumentView } from "./TradeInstrumentView";
 
 export type ModalTab = "details" | "trade";
 
+// Szerokość okna dialogowego na desktopie
+const DIALOG_MAX_WIDTH = 720;
 const DETAIL_TABS = [
   { key: "details", label: "Szczegóły" },
   { key: "trade", label: "Kup / Sprzedaj" },
@@ -89,9 +93,16 @@ export function InstrumentDetailModal({
   modalInstrument,
 }: InstrumentDetailModalProps) {
   const { colors, mode } = useTheme();
+  const display = useDisplayCurrency();
   const { bottom } = useSafeAreaInsets();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const isDark = mode === "dark";
+  // Na dużym ekranie w przeglądarce zamiast wysuwanej od dołu karty jest wyśrodkowane okno dialogowe
+  const { isDesktop } = useLayoutMode();
+  const isDialog = isDesktop;
+  const pageWidth = isDialog
+    ? Math.min(DIALOG_MAX_WIDTH, windowWidth - 48)
+    : windowWidth;
 
   // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(visible);
@@ -100,7 +111,7 @@ export function InstrumentDetailModal({
   const activeTab = userSelectedTab ?? initialTab;
 
   const activeTabIndex = activeTab === "trade" ? 1 : 0;
-  const pagerX = useSharedValue(-activeTabIndex * windowWidth);
+  const pagerX = useSharedValue(-activeTabIndex * pageWidth);
   const wasVisibleRef = useRef(visible);
 
   const [selectedAssetIndex, setSelectedAssetIndex] = useState(0);
@@ -128,7 +139,7 @@ export function InstrumentDetailModal({
   }, [onClose]);
 
   useEffect(() => {
-    const target = -activeTabIndex * windowWidth;
+    const target = -activeTabIndex * pageWidth;
     if (!visible || !wasVisibleRef.current) {
       pagerX.value = target;
     } else {
@@ -138,7 +149,7 @@ export function InstrumentDetailModal({
       });
     }
     wasVisibleRef.current = visible;
-  }, [activeTabIndex, visible, windowWidth, pagerX]);
+  }, [activeTabIndex, visible, pageWidth, pagerX]);
 
   const closeThreshold = Math.max(windowHeight * 0.12, 96);
 
@@ -169,6 +180,7 @@ export function InstrumentDetailModal({
   const createDragGesture = useCallback(
     () =>
       Gesture.Pan()
+        .enabled(!isDialog)
         .activeOffsetY(12)
         .onStart(() => {
           cancelAnimation(translateY);
@@ -206,7 +218,14 @@ export function InstrumentDetailModal({
             });
           }
         }),
-    [closeThreshold, finishClose, translateY, dragStart, windowHeight],
+    [
+      closeThreshold,
+      finishClose,
+      translateY,
+      dragStart,
+      windowHeight,
+      isDialog,
+    ],
   );
 
   const dragGesture = useMemo(() => createDragGesture(), [createDragGesture]);
@@ -219,6 +238,7 @@ export function InstrumentDetailModal({
   const tabSwipeGesture = useMemo(
     () =>
       Gesture.Pan()
+        .enabled(!isDialog)
         .activeOffsetX([-32, 32])
         .failOffsetY([-20, 20])
         .onEnd((event) => {
@@ -228,16 +248,27 @@ export function InstrumentDetailModal({
             runOnJS(setUserSelectedTab)("details");
           }
         }),
-    [],
+    [isDialog],
   );
 
   const pagerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: pagerX.value }],
   }));
 
-  const sheetAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-  }));
+  // Okno dialogowe tylko lekko się przesuwa i pojawia przez zanikanie; karta wysuwa się na całą wysokość
+  const sheetAnimatedStyle = useAnimatedStyle(() =>
+    isDialog
+      ? {
+          opacity: interpolate(
+            translateY.value,
+            [0, Math.max(windowHeight * 0.4, 1)],
+            [1, 0],
+            Extrapolation.CLAMP,
+          ),
+          transform: [{ translateY: translateY.value * 0.08 }],
+        }
+      : { transform: [{ translateY: translateY.value }] },
+  );
 
   const backdropAnimatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
@@ -290,6 +321,7 @@ export function InstrumentDetailModal({
       notify({
         variant: "success",
         title: "Zlecenie oczekujące złożone",
+        category: NOTIFICATION_GROUPS.transactions,
         message: `Złożono zlecenie ${typeLabel} na ${noticeData.quantity} szt. ${noticeData.instrument.symbol}. Zostanie zrealizowane po wznowieniu handlu.`,
       });
     }
@@ -304,7 +336,7 @@ export function InstrumentDetailModal({
 
   // Wartość przeliczona na walutę wyświetlania (gdy wyłączono wiele walut).
   const formatMoney = (value: number, currency?: string) =>
-    `${formatNumber(convertForDisplay(value, currency))} ${displaySymbol(currency)}`;
+    `${formatNumber(display.convertForDisplay(value, currency))} ${display.displaySymbol(currency)}`;
 
   // Wszystkie instrumenty w kategorii
   const categoryItems = useMemo(
@@ -431,25 +463,36 @@ export function InstrumentDetailModal({
         onRequestClose={animateClose}
         statusBarTranslucent
       >
-        <View style={styles.modalRoot}>
+        <NotificationHost />
+        <View style={[styles.modalRoot, isDialog && styles.modalRootDialog]}>
           <Reanimated.View style={[styles.backdrop, backdropAnimatedStyle]}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} />
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={animateClose}
+              accessibilityLabel="Zamknij"
+              tabIndex={-1}
+            />
           </Reanimated.View>
 
           <Reanimated.View
             style={[
               styles.sheet,
+              isDialog && [styles.dialog, { width: pageWidth }],
               { backgroundColor: colors.background },
               sheetAnimatedStyle,
             ]}
           >
-            <GestureDetector gesture={dragGesture}>
-              <View style={styles.dragArea}>
-                <Reanimated.View
-                  style={[styles.dragHandle, handleAnimatedStyle]}
-                />
-              </View>
-            </GestureDetector>
+            {isDialog ? (
+              <View style={styles.dialogTopSpacer} />
+            ) : (
+              <GestureDetector gesture={dragGesture}>
+                <View style={styles.dragArea}>
+                  <Reanimated.View
+                    style={[styles.dragHandle, handleAnimatedStyle]}
+                  />
+                </View>
+              </GestureDetector>
+            )}
 
             {/* Nagłówek z możliwością przeciągania */}
             <GestureDetector gesture={headerDragGesture}>
@@ -519,7 +562,7 @@ export function InstrumentDetailModal({
                 <Reanimated.View
                   style={[
                     styles.pager,
-                    { width: windowWidth * 2 },
+                    { width: pageWidth * 2 },
                     pagerAnimatedStyle,
                   ]}
                 >
@@ -1255,6 +1298,20 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255, 255, 255, 0.12)",
     overflow: "hidden",
+  },
+  modalRootDialog: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  dialog: {
+    height: "90%",
+    maxHeight: 860,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    boxShadow: "0 24px 64px rgba(0, 0, 0, 0.45)",
+  },
+  dialogTopSpacer: {
+    height: 18,
   },
   dragArea: {
     alignItems: "center",

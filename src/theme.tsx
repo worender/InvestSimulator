@@ -22,15 +22,15 @@ import {
 } from "./database/activeAccount";
 import {
   createUserProfile,
+  getNotificationSettings,
+  getSettings,
   getUserProfile,
   getUserProfiles,
-  getSettings,
-  getNotificationSettings,
-  type NotificationSettings,
-  type Settings,
   updateNotificationSettings,
   updateSettings,
   updateUserProfile,
+  type NotificationSettings,
+  type Settings,
   type UserProfile,
 } from "./database/database";
 import {
@@ -39,12 +39,12 @@ import {
   type ExchangeRates,
 } from "./displayCurrency";
 import { setGlobalFontScale } from "./fontScale";
+import { NOTIFICATION_GROUPS, notify } from "./notificationBus";
 import {
   DEFAULT_NOTIFICATION_CATEGORIES,
   type NotificationCategories,
   type NotificationCategoryKey,
 } from "./settings/notificationSettings";
-import { notify } from "./notificationBus";
 
 export type ThemeMode = "dark" | "light";
 export type ThemeAccent = string;
@@ -254,18 +254,17 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     // setBiometricEnabledState(profile.biometric_enabled === 1);
   }, []);
 
-  const applySettings = useCallback(
-    (settings: Settings) => {
-      setModeState(settings.dark_mode === 1 ? "dark" : "light");
-      setAccentState(resolveThemeAccent(settings.color_mode));
+  const applySettings = useCallback((settings: Settings) => {
+    setModeState(settings.dark_mode === 1 ? "dark" : "light");
+    setAccentState(resolveThemeAccent(settings.color_mode));
 
-      const currency = isCurrency(settings.currency) ? settings.currency : "PLN";
+    const currency = isCurrency(settings.currency) ? settings.currency : "PLN";
 
-      setDefaultCurrencyState(currency);
-      setMultiCurrencyState(settings.multi_currency === 1);
-      setFontSizePreferenceState(resolveFontSize(settings.font_size));
-      setBiometricEnabledState(settings.biometric_enabled === 1);
-    }, []);
+    setDefaultCurrencyState(currency);
+    setMultiCurrencyState(settings.multi_currency === 1);
+    setFontSizePreferenceState(resolveFontSize(settings.font_size));
+    setBiometricEnabledState(settings.biometric_enabled === 1);
+  }, []);
 
   const applyNotificationSettings = useCallback(
     (settings: NotificationSettings) => {
@@ -277,7 +276,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         transactions: settings.transactions === 1,
         reminders: settings.reminders === 1,
       });
-    }, []);
+    },
+    [],
+  );
 
   const refreshRates = useCallback(async () => {
     const requestId = rateRequest.current + 1;
@@ -285,8 +286,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setRatesLoading(true);
 
     try {
+      // Stary adres api.frankfurter.app przekierowuje tutaj (301) bez nagłówków CORS, przez co na webie fetch był blokowany
       const response = await fetch(
-        "https://api.frankfurter.app/latest?from=PLN&to=EUR,USD",
+        "https://api.frankfurter.dev/v1/latest?from=PLN&to=EUR,USD",
       );
       if (!response.ok) throw new Error("Nie udało się pobrać kursów");
 
@@ -326,11 +328,14 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         if (profile) {
           applyProfile(profile);
 
-        const settings = await getSettings(profile.id);
-        const notificationSettings = await getNotificationSettings(profile.id);
+          const settings = await getSettings(profile.id);
+          const notificationSettings = await getNotificationSettings(
+            profile.id,
+          );
 
-        if (settings) applySettings(settings);
-        if (notificationSettings) applyNotificationSettings(notificationSettings);
+          if (settings) applySettings(settings);
+          if (notificationSettings)
+            applyNotificationSettings(notificationSettings);
         }
       } catch (error) {
         console.error("Nie udało się wczytać profilu z SQLite:", error);
@@ -344,7 +349,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     return () => {
       active = false;
     };
-  }, [applyProfile, refreshRates]);
+  }, [applyNotificationSettings, applyProfile, applySettings, refreshRates]);
 
   const reloadAccounts = useCallback(async () => {
     const profiles = await getUserProfiles();
@@ -365,28 +370,30 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const addAccount = useCallback(
     async (input: { username: string; avatarUri?: string | null }) => {
       try {
-      const profile = await createUserProfile({
-        username: input.username,
-        avatar_uri: input.avatarUri ?? null,
-      });
-      const profiles = await getUserProfiles();
-      setAccounts(profiles);
-      setActiveAccountId(profile.id);
-      applyProfile(profile);
-      return profile;
-    }catch (error) {
-      notify({
-        variant: "error",
-        title: "Nie udało się utworzyć konta",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Spróbuj ponownie za chwilę.",
-      });
+        const profile = await createUserProfile({
+          username: input.username,
+          avatar_uri: input.avatarUri ?? null,
+        });
+        const profiles = await getUserProfiles();
+        setAccounts(profiles);
+        setActiveAccountId(profile.id);
+        applyProfile(profile);
+        return profile;
+      } catch (error) {
+        notify({
+          variant: "error",
+          title: "Nie udało się utworzyć konta",
+          category: NOTIFICATION_GROUPS.account,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Spróbuj ponownie za chwilę.",
+        });
 
-      return null;
-    }
-  },[applyProfile],
+        return null;
+      }
+    },
+    [applyProfile],
   );
 
   const updateAccount = useCallback(
@@ -403,6 +410,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         notify({
           variant: "error",
           title: "Nie udało się zaktualizować konta",
+          category: NOTIFICATION_GROUPS.account,
           message:
             error instanceof Error
               ? error.message
@@ -424,7 +432,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       setModeState(nextMode);
       await updateSettings({
         user_id: requireAccount(),
-        dark_mode: nextMode === "dark" ? 1 : 0 
+        dark_mode: nextMode === "dark" ? 1 : 0,
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -435,7 +443,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     async (nextAccent: ThemeAccent) => {
       const resolved = resolveThemeAccent(nextAccent);
       setAccentState(resolved);
-      await updateSettings({ color_mode: resolved , user_id: requireAccount() });
+      await updateSettings({ color_mode: resolved, user_id: requireAccount() });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAccount],
@@ -448,12 +456,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       startTransition(() => {
         setDefaultCurrencyState(nextCurrency);
       });
-      await updateSettings(
-        { currency: nextCurrency,
-          user_id: requireAccount()
-        }
-        
-      );
+      await updateSettings({
+        currency: nextCurrency,
+        user_id: requireAccount(),
+      });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAccount],
@@ -465,14 +471,11 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         setMultiCurrencyState(enabled);
         if (!enabled) setDefaultCurrencyState("PLN");
       });
-      await updateSettings(
-        {
-          multi_currency: enabled ? 1 : 0,
-          ...(enabled ? {} : { currency: "PLN" }),
-          user_id: requireAccount(),
-        }
-        
-      );
+      await updateSettings({
+        multi_currency: enabled ? 1 : 0,
+        ...(enabled ? {} : { currency: "PLN" }),
+        user_id: requireAccount(),
+      });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAccount],
@@ -494,10 +497,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const changeNotificationsEnabled = useCallback(
     async (enabled: boolean) => {
       setNotificationsEnabledState(enabled);
-      await updateNotificationSettings(
-        { notifications_enabled: enabled ? 1 : 0, user_id: requireAccount() },
-        
-      );
+      await updateNotificationSettings({
+        notifications_enabled: enabled ? 1 : 0,
+        user_id: requireAccount(),
+      });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAccount],
@@ -509,8 +512,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       await updateNotificationSettings({
         [key]: enabled ? 1 : 0,
         user_id: requireAccount(),
-      }
-       );
+      });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAccount, notificationCategories],
@@ -519,10 +521,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const changeBiometricEnabled = useCallback(
     async (enabled: boolean) => {
       setBiometricEnabledState(enabled);
-      await updateSettings(
-        { biometric_enabled: enabled ? 1 : 0, 
-          user_id: requireAccount() },
-      );
+      await updateSettings({
+        biometric_enabled: enabled ? 1 : 0,
+        user_id: requireAccount(),
+      });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAccount],
@@ -546,11 +548,16 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   const fontSizeScale = FONT_SCALES[fontSizePreference];
   setGlobalFontScale(fontSizeScale);
-  setDisplayCurrencyState({
-    multiCurrency,
-    currency: defaultCurrency,
-    rates,
-  });
+
+  // Aktualizacja stanu podczas renderowania powiadamiałaby subskrybentów w trakcie renderu i mogła
+  // zostawić część komponentów ze starymi wartościami
+  useEffect(() => {
+    setDisplayCurrencyState({
+      multiCurrency,
+      currency: defaultCurrency,
+      rates,
+    });
+  }, [defaultCurrency, multiCurrency, rates]);
 
   const value = useMemo(
     () => ({

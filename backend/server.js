@@ -50,8 +50,10 @@ const financialsCache = new Map();
 const performanceCache = new Map();
 const quoteDetailsCache = new Map();
 const newsCache = new Map();
+const trendsCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minut
 const NEWS_CACHE_TTL = 10 * 60 * 1000; // 10 minut
+const TRENDS_CACHE_TTL = 10 * 60 * 1000; // 10 minut
 
 const NEWS_FEEDS = {
   poland: ["EPOL", "PKO.WA", "PKN.WA", "PZU.WA", "CDR.WA", "KGH.WA"],
@@ -174,13 +176,70 @@ const orderNewsForTopic = (items, topic) => {
 };
 
 const KNOWN_US_SYMBOLS = new Set([
-  "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "TSLA", "META",
-  "NFLX", "AMD", "INTC", "IBM", "ORCL", "CRM", "ADBE", "QCOM", "TXN",
-  "AVGO", "CSCO", "PYPL", "UBER", "ABNB", "DIS", "BA", "KO", "PEP",
-  "MCD", "NKE", "SBUX", "WMT", "COST", "TGT", "JNJ", "PFE", "MRK",
-  "UNH", "ABBV", "JPM", "BAC", "WFC", "C", "GS", "MS", "V", "MA",
-  "AXP", "XOM", "CVX", "COP", "SLB", "EOG", "CAT", "DE", "GE", "HON",
-  "MMM", "LMT", "RTX", "SPY", "QQQ", "IWM", "DIA", "VOO", "VTI"
+  "AAPL",
+  "MSFT",
+  "GOOGL",
+  "GOOG",
+  "AMZN",
+  "NVDA",
+  "TSLA",
+  "META",
+  "NFLX",
+  "AMD",
+  "INTC",
+  "IBM",
+  "ORCL",
+  "CRM",
+  "ADBE",
+  "QCOM",
+  "TXN",
+  "AVGO",
+  "CSCO",
+  "PYPL",
+  "UBER",
+  "ABNB",
+  "DIS",
+  "BA",
+  "KO",
+  "PEP",
+  "MCD",
+  "NKE",
+  "SBUX",
+  "WMT",
+  "COST",
+  "TGT",
+  "JNJ",
+  "PFE",
+  "MRK",
+  "UNH",
+  "ABBV",
+  "JPM",
+  "BAC",
+  "WFC",
+  "C",
+  "GS",
+  "MS",
+  "V",
+  "MA",
+  "AXP",
+  "XOM",
+  "CVX",
+  "COP",
+  "SLB",
+  "EOG",
+  "CAT",
+  "DE",
+  "GE",
+  "HON",
+  "MMM",
+  "LMT",
+  "RTX",
+  "SPY",
+  "QQQ",
+  "IWM",
+  "DIA",
+  "VOO",
+  "VTI",
 ]);
 
 const normalizeYahooSymbol = (value, exchange) => {
@@ -316,21 +375,29 @@ app.get("/api/trends", authenticateToken, async (req, res) => {
     technology: "growth_technology_stocks",
     undervalued: "undervalued_large_caps",
   };
-  const category = String(req.query.category || "gainers");
-  const screen = screens[category] || screens.gainers;
+  const requestedCategory = String(req.query.category || "gainers");
+  const category = screens[requestedCategory] ? requestedCategory : "gainers";
+  const screen = screens[category];
+  const cacheKey = `trends_${category}`;
+  const now = Date.now();
+
+  const cached = trendsCache.get(cacheKey);
+  if (cached && now - cached.timestamp < TRENDS_CACHE_TTL) {
+    return res.json(cached.data);
+  }
 
   try {
-    const result = await yahooFinance.screener(screen, { count: 5 });
-    res.json(
-      (result.quotes || []).slice(0, 5).map((quote) => ({
-        symbol: quote.symbol,
-        name: quote.shortName || quote.longName || quote.symbol,
-        exchange: quote.exchange || "",
-        exchangeName:
-          quote.fullExchangeName || quote.exchange || "Yahoo Finance",
-        changePercent: quote.regularMarketChangePercent ?? 0,
-      })),
-    );
+    const result = await yahooFinance.screener(screen, { count: 10 });
+    const data = (result.quotes || []).slice(0, 10).map((quote) => ({
+      symbol: quote.symbol,
+      name: quote.shortName || quote.longName || quote.symbol,
+      exchange: quote.exchange || "",
+      exchangeName: quote.fullExchangeName || quote.exchange || "Yahoo Finance",
+      changePercent: quote.regularMarketChangePercent ?? 0,
+    }));
+
+    trendsCache.set(cacheKey, { timestamp: now, data });
+    res.json(data);
   } catch (error) {
     console.error(`Błąd pobierania trendów ${category}:`, error.message);
     res
@@ -735,6 +802,28 @@ app.get("/api/instruments/performance", authenticateToken, async (req, res) => {
   }
 });
 
+const mapQuoteToDetails = (quote, requestedSymbol) => ({
+  symbol: requestedSymbol,
+  currency: quote.currency || "USD",
+  price: quote.regularMarketPrice ?? 0,
+  change: quote.regularMarketChange ?? 0,
+  changePercent: quote.regularMarketChangePercent ?? 0,
+  volume: quote.regularMarketVolume ?? 0,
+  averageVolume:
+    quote.averageDailyVolume10Day ?? quote.averageDailyVolume3Month ?? 0,
+  marketCap: quote.marketCap ?? 0,
+  trailingPE: quote.trailingPE ?? 0,
+  forwardPE: quote.forwardPE ?? 0,
+  priceToBook: quote.priceToBook ?? 0,
+  sharesOutstanding: quote.sharesOutstanding ?? 0,
+  bookValue: quote.bookValue ?? 0,
+  dividendRate: quote.dividendRate ?? quote.trailingAnnualDividendRate ?? 0,
+  dividendYield: quote.dividendYield ?? quote.trailingAnnualDividendYield ?? 0,
+  fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? 0,
+  fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? 0,
+  fiftyTwoWeekChangePercent: quote.fiftyTwoWeekChangePercent ?? 0,
+});
+
 app.get(
   "/api/instruments/quote-details",
   authenticateToken,
@@ -761,29 +850,7 @@ app.get(
         return res.status(404).json({ error: "Brak szczegółów notowania" });
       }
 
-      const data = {
-        symbol: requestedSymbol,
-        currency: quote.currency || "USD",
-        price: quote.regularMarketPrice ?? 0,
-        change: quote.regularMarketChange ?? 0,
-        changePercent: quote.regularMarketChangePercent ?? 0,
-        volume: quote.regularMarketVolume ?? 0,
-        averageVolume:
-          quote.averageDailyVolume10Day ?? quote.averageDailyVolume3Month ?? 0,
-        marketCap: quote.marketCap ?? 0,
-        trailingPE: quote.trailingPE ?? 0,
-        forwardPE: quote.forwardPE ?? 0,
-        priceToBook: quote.priceToBook ?? 0,
-        sharesOutstanding: quote.sharesOutstanding ?? 0,
-        bookValue: quote.bookValue ?? 0,
-        dividendRate:
-          quote.dividendRate ?? quote.trailingAnnualDividendRate ?? 0,
-        dividendYield:
-          quote.dividendYield ?? quote.trailingAnnualDividendYield ?? 0,
-        fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? 0,
-        fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? 0,
-        fiftyTwoWeekChangePercent: quote.fiftyTwoWeekChangePercent ?? 0,
-      };
+      const data = mapQuoteToDetails(quote, requestedSymbol);
 
       quoteDetailsCache.set(cacheKey, { timestamp: now, data });
       res.json(data);
@@ -796,6 +863,97 @@ app.get(
     }
   },
 );
+
+// Pobiera notowania wielu instrumentów jednym zapytaniem do Yahoo Finance
+app.post("/api/instruments/quotes", authenticateToken, async (req, res) => {
+  const rawInstruments = Array.isArray(req.body?.instruments)
+    ? req.body.instruments
+    : [];
+  const instruments = rawInstruments
+    .slice(0, 40)
+    .map((item) => ({
+      symbol: String(item?.symbol || "").trim(),
+      exchange: item?.exchange ? String(item.exchange) : undefined,
+    }))
+    .filter((item) => item.symbol);
+
+  if (instruments.length === 0) {
+    return res.status(400).json({ error: "Brak instrumentów" });
+  }
+
+  const now = Date.now();
+  const quotes = {};
+  const pending = [];
+
+  for (const instrument of instruments) {
+    const key = `${instrument.symbol}_${instrument.exchange || ""}`;
+    const yahooSymbol = normalizeYahooSymbol(
+      instrument.symbol,
+      instrument.exchange,
+    );
+    const cacheKey = `quote_details_${yahooSymbol}`;
+    const cached = quoteDetailsCache.get(cacheKey);
+
+    if (cached && now - cached.timestamp < CACHE_TTL) {
+      quotes[key] = cached.data;
+    } else {
+      pending.push({ ...instrument, key, yahooSymbol, cacheKey });
+    }
+  }
+
+  if (pending.length > 0) {
+    const fetched = new Map();
+
+    try {
+      const result = await yahooFinance.quote(
+        pending.map((item) => item.yahooSymbol),
+        {},
+        { validate: false },
+      );
+      for (const quote of Array.isArray(result) ? result : [result]) {
+        if (quote?.symbol) fetched.set(quote.symbol.toUpperCase(), quote);
+      }
+    } catch (error) {
+      console.warn("Błąd wsadowego pobierania notowań:", error.message);
+    }
+
+    const missing = pending.filter(
+      (item) => !fetched.has(item.yahooSymbol.toUpperCase()),
+    );
+    if (missing.length > 0) {
+      await Promise.allSettled(
+        missing.map(async (item) => {
+          try {
+            const quote = await yahooFinance.quote(
+              item.yahooSymbol,
+              {},
+              { validate: false },
+            );
+            if (quote?.symbol) fetched.set(quote.symbol.toUpperCase(), quote);
+          } catch (error) {
+            console.warn(
+              `Błąd pobierania notowania ${item.yahooSymbol}:`,
+              error.message,
+            );
+          }
+        }),
+      );
+    }
+
+    for (const item of pending) {
+      const quote = fetched.get(item.yahooSymbol.toUpperCase());
+      if (!quote) {
+        quotes[item.key] = null;
+        continue;
+      }
+      const data = mapQuoteToDetails(quote, item.symbol);
+      quoteDetailsCache.set(item.cacheKey, { timestamp: now, data });
+      quotes[item.key] = data;
+    }
+  }
+
+  res.json({ quotes });
+});
 
 app.get("/api/quote", authenticateToken, async (req, res) => {
   const requestedSymbol = String(req.query.symbol || "").trim();

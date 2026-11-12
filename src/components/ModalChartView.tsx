@@ -34,13 +34,18 @@ import {
   getStockData,
   StockFinancialData,
 } from "../api/marketService";
-import { convertForDisplay, displaySymbol } from "../displayCurrency";
+import {
+  convertForDisplay,
+  displaySymbol,
+  useDisplayCurrency,
+} from "../displayCurrency";
 import { useLockScreenWhileActive } from "../interactionLock";
-import { notify } from "../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
+import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
 import { useWatchlist } from "../watchlist";
-import type { ChartInterval } from "./ChartFullscreenModal";
 import { CategorySelector } from "./CategorySelector";
+import type { ChartInterval } from "./ChartFullscreenModal";
 import { Section } from "./Section";
 import { Skeleton } from "./Skeleton";
 import { StockCandleChart } from "./StockCandleChart";
@@ -196,6 +201,14 @@ export function ModalChartView({
   initialInterval,
 }: ModalChartViewProps) {
   const theme = useTheme();
+  const display = useDisplayCurrency();
+  // Wersja formatowania powiązana z bieżącymi ustawieniami waluty
+  const formatCurrency = (value?: number, currencyCode?: string): string => {
+    if (value === undefined || currencyCode === undefined) return "-";
+    const converted = display.convertForDisplay(value, currencyCode);
+    const symbol = display.displaySymbol(currencyCode);
+    return `${converted.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
+  };
 
   // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(true);
@@ -394,6 +407,7 @@ export function ModalChartView({
           notify({
             variant: "error",
             title: "Brak danych finansowych",
+            category: NOTIFICATION_GROUPS.marketFinancials,
             message: `Nie udało się pobrać danych dla ${instrument.stock}. Wykres pozostaje dostępny.`,
           });
         }
@@ -551,6 +565,7 @@ export function ModalChartView({
       animationType="none"
       onRequestClose={animateClose}
     >
+      <NotificationHost />
       <GestureHandlerRootView style={styles.gestureRoot}>
         <View style={styles.modalRoot}>
           <Reanimated.View

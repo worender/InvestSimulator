@@ -32,6 +32,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLockScreenWhileActive } from "../../interactionLock";
+import { NotificationHost } from "../../notifications";
 import { useTheme } from "../../theme";
 
 type SettingsSheetProps = PropsWithChildren<{
@@ -197,6 +198,7 @@ export function SettingsSheet({
       onRequestClose={animateClose}
       statusBarTranslucent
     >
+      <NotificationHost />
       <GestureHandlerRootView style={styles.gestureRoot}>
         <KeyboardAvoidingView
           style={styles.gestureRoot}

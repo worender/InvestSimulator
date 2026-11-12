@@ -2,7 +2,7 @@ import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
-import { notify } from "../notificationBus";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 
 const API_PORT = 3000;
 const LOCAL_BASE_URL = `http://localhost:${API_PORT}`;
@@ -328,6 +328,7 @@ const fetchStockCandlesFromApi = async (
       notify({
         variant: "error",
         title: "Opóźnione pobieranie danych",
+        category: NOTIFICATION_GROUPS.marketChart,
         message: `Oczekiwanie na ponowną próbę pobrania danych świec dla ${symbol}. Próba za ${elapsedSeconds} sekund...`,
       });
       return null;
@@ -365,6 +366,7 @@ const fetchStockCandlesFromApi = async (
     notify({
       variant: "warning",
       title: "Brak notowań",
+      category: NOTIFICATION_GROUPS.marketChart,
       message: `Nie udało się pobrać danych wykresu dla ${symbol}. Spróbuj ponownie za chwilę.`,
     });
     return null;
@@ -440,6 +442,7 @@ export const searchInstruments = async (
     notify({
       variant: "error",
       title: "Wyszukiwanie nie powiodło się",
+      category: NOTIFICATION_GROUPS.marketSearch,
       message:
         "Nie udało się pobrać wyników. Sprawdź połączenie z internetem i spróbuj ponownie.",
     });
@@ -513,6 +516,7 @@ const fetchDynamicTrendsFromApi = async (
     notify({
       variant: "warning",
       title: "Brak trendów",
+      category: NOTIFICATION_GROUPS.marketTrends,
       message:
         "Nie udało się pobrać danych trendów. Spróbuj ponownie za chwilę.",
     });
@@ -617,12 +621,17 @@ export interface StockFinancialData {
 // Funkcja autentyfikująca żądania do API z użyciem tokenu JWT
 export const authenticatedFetch = async (
   endpointPath: string,
+  init?: RequestInit,
 ): Promise<Response | null> => {
   try {
     const baseUrl = await getApiBaseUrl();
     const request = (token: string) =>
       fetch(`${baseUrl}${endpointPath}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        ...init,
+        headers: {
+          ...((init?.headers as Record<string, string> | undefined) ?? {}),
+          Authorization: `Bearer ${token}`,
+        },
       });
 
     let token = await getValidToken();
@@ -675,6 +684,7 @@ const fetchStockDataFromApi = async (
     notify({
       variant: "error",
       title: "Błąd danych finansowych",
+      category: NOTIFICATION_GROUPS.marketFinancials,
       message: `Nie udało się pobrać danych finansowych dla ${symbol}. Sprawdź połączenie i spróbuj ponownie.`,
     });
     return null;
@@ -731,6 +741,7 @@ const fetchStockPerformanceFromApi = async (
     notify({
       variant: "warning",
       title: "Brak danych wyników",
+      category: NOTIFICATION_GROUPS.marketEarnings,
       message: `Nie udało się pobrać wyników historycznych dla ${symbol}. Dane mogą być niepełne.`,
     });
     return null;
@@ -785,6 +796,7 @@ const fetchStockQuoteDetailsFromApi = async (
     notify({
       variant: "error",
       title: "Błąd danych notowań",
+      category: NOTIFICATION_GROUPS.marketQuotes,
       message: `Nie udało się pobrać szczegółów notowań dla ${symbol}. Dane mogą być niepełne.`,
     });
     return null;
@@ -813,6 +825,75 @@ export const getStockQuoteDetails = async (
   return withInFlight(`quote_${cacheKey}`, () =>
     fetchStockQuoteDetailsFromApi(symbol, exchange),
   );
+};
+
+const quoteBatchKey = (symbol: string, exchange?: string) =>
+  `${symbol}_${exchange || ""}`;
+
+// Funkcja pobierająca notowania wielu instrumentów jednym żądaniem (lista rynku).
+// Wynik jest kluczowany tak samo jak cache pojedynczych notowań.
+export const getStockQuotesBatch = async (
+  instruments: { symbol: string; exchange?: string }[],
+  options?: { forceRefresh?: boolean },
+): Promise<Record<string, StockQuoteDetails | null>> => {
+  const results: Record<string, StockQuoteDetails | null> = {};
+  if (instruments.length === 0) return results;
+
+  const pending: { symbol: string; exchange?: string }[] = [];
+  const now = Date.now();
+
+  for (const instrument of instruments) {
+    const key = quoteBatchKey(instrument.symbol, instrument.exchange);
+    const cached = quoteDetailsCache.get(key);
+
+    if (cached && !options?.forceRefresh) {
+      results[key] = cached.data;
+      if (now - cached.timestamp >= QUOTES_CACHE_TTL) {
+        void withInFlight(`quote_${key}`, () =>
+          fetchStockQuoteDetailsFromApi(instrument.symbol, instrument.exchange),
+        );
+      }
+      continue;
+    }
+
+    pending.push(instrument);
+  }
+
+  if (pending.length === 0) return results;
+
+  try {
+    const response = await authenticatedFetch("/api/instruments/quotes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instruments: pending }),
+    });
+
+    if (!response || !response.ok) {
+      throw new Error(`Błąd serwera: ${response?.status ?? "brak odpowiedzi"}`);
+    }
+
+    const payload = (await response.json()) as {
+      quotes?: Record<string, StockQuoteDetails | null>;
+    };
+    const quotes = payload.quotes ?? {};
+
+    for (const instrument of pending) {
+      const key = quoteBatchKey(instrument.symbol, instrument.exchange);
+      const data = quotes[key] ?? null;
+      results[key] = data;
+      if (data) {
+        quoteDetailsCache.set(key, { data, timestamp: Date.now() });
+      }
+    }
+  } catch (error) {
+    console.error("Błąd wsadowego pobierania notowań:", error);
+    for (const instrument of pending) {
+      const key = quoteBatchKey(instrument.symbol, instrument.exchange);
+      if (!(key in results)) results[key] = null;
+    }
+  }
+
+  return results;
 };
 
 // Funkcja pobierająca dane dotyczące instrumentu giełdowego (łączy dane finansowe, notowania i wyniki historyczne)
@@ -865,6 +946,7 @@ export const enrichFinancialData = async (
           notify({
             variant: "warning",
             title: "Brak danych wyników",
+            category: NOTIFICATION_GROUPS.marketEarnings,
             message:
               "Nie udało się uzupełnić danych o wyniki historyczne. Wyświetlona zostanie podstawowa wersja.",
           });
@@ -903,6 +985,7 @@ export const enrichFinancialData = async (
           notify({
             variant: "warning",
             title: "Brak danych notowań",
+            category: NOTIFICATION_GROUPS.marketQuotes,
             message:
               "Nie udało się uzupełnić danych o szczegóły notowań. Wyświetlona zostanie podstawowa wersja.",
           });
@@ -983,6 +1066,7 @@ export const buildFallbackFinancialData = async (
     notify({
       variant: "error",
       title: "Brak danych finansowych",
+      category: NOTIFICATION_GROUPS.marketFinancials,
       message:
         "Nie udało się pobrać żadnych danych finansowych. Sprawdź połączenie z internetem.",
     });

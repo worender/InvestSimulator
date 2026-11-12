@@ -12,10 +12,7 @@ import Reanimated, {
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
-import {
-  convertForDisplay,
-  displaySymbol,
-} from "../displayCurrency";
+import { useDisplayCurrency } from "../displayCurrency";
 import { Currency, useTheme } from "../theme";
 import { GlassBackground } from "./GlassBackground";
 import {
@@ -138,6 +135,7 @@ function PortfolioCard({
   onPress,
 }: PortfolioCardProps) {
   const { colors } = useTheme();
+  const display = useDisplayCurrency();
   const animatedStyle = useAnimatedStyle(() => {
     const pos = phase.value;
     return {
@@ -160,11 +158,11 @@ function PortfolioCard({
   const arrowIcon = isPositive ? "arrow-up" : "arrow-down";
   const sign = isPositive ? "+" : "-";
 
-  const symbol = displaySymbol(data.currency);
-  const totalFormatted = `${formatNumber(convertForDisplay(data.totalValue, data.currency))} ${symbol}`;
-  const activeFormatted = `${formatNumber(convertForDisplay(Math.max(0, data.totalValue - data.cashBalance), data.currency))} ${symbol}`;
-  const inactiveFormatted = `${formatNumber(convertForDisplay(data.cashBalance, data.currency))} ${symbol}`;
-  const profitFormatted = `${sign}${formatNumber(convertForDisplay(data.profitCurrency, data.currency))} ${symbol}`;
+  const symbol = display.displaySymbol(data.currency);
+  const totalFormatted = `${formatNumber(display.convertForDisplay(data.totalValue, data.currency))} ${symbol}`;
+  const activeFormatted = `${formatNumber(display.convertForDisplay(Math.max(0, data.totalValue - data.cashBalance), data.currency))} ${symbol}`;
+  const inactiveFormatted = `${formatNumber(display.convertForDisplay(data.cashBalance, data.currency))} ${symbol}`;
+  const profitFormatted = `${sign}${formatNumber(display.convertForDisplay(data.profitCurrency, data.currency))} ${symbol}`;
   const profitPctFormatted = `${sign}${Math.abs(data.profitPercent).toFixed(2)}%`;
 
   // Punkty wykresu dla 3 miesięcy
@@ -172,13 +170,11 @@ function PortfolioCard({
     const baseVal = data.totalValue - data.profitCurrency;
     const midVal = baseVal + data.profitCurrency * 0.45;
     const endVal = data.totalValue;
-    return buildPortfolioSeries([baseVal, midVal, endVal], 90).map(
-      (point) => ({
-        ...point,
-        value: convertForDisplay(point.value, data.currency),
-      }),
-    );
-  }, [data]);
+    return buildPortfolioSeries([baseVal, midVal, endVal], 90).map((point) => ({
+      ...point,
+      value: display.convertForDisplay(point.value, data.currency),
+    }));
+  }, [data, display]);
 
   const cardAccent = data.accent;
 
@@ -259,7 +255,12 @@ function PortfolioCard({
 export function PortfolioOverviewCard({
   onStockChange,
 }: {
-  onStockChange?: (stock: string, title: string, currency: Currency, exchange?: string) => void;
+  onStockChange?: (
+    stock: string,
+    title: string,
+    currency: Currency,
+    exchange?: string,
+  ) => void;
 }) {
   const { defaultCurrency, multiCurrency } = useTheme();
   // Kolejność talii: [wierzch, środek, spód]. Zmieniana dopiero po zakończeniu animacji
@@ -315,8 +316,12 @@ export function PortfolioOverviewCard({
     );
   }, [commitShuffle, deckOrder, multiCurrency, opacities, phases]);
 
-  // Funkcja obsługująca naciśnięcie karty portfela: podwójne dotknięcie zmienia walutę
+  // Funkcja obsługująca naciśnięcie karty portfela: na webie zmienia walutę jedno kliknięcie, na mobile podwójne dotknięcie
   const handleCardPress = () => {
+    if (Platform.OS === "web") {
+      changeCurrency();
+      return;
+    }
     const now = Date.now();
     if (now - lastTap.current < 320) {
       lastTap.current = 0;
@@ -350,6 +355,8 @@ const styles = StyleSheet.create({
   backSlot: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   card: {
     borderRadius: 18,
+    // Kliknięcia karty na webie nie zaznaczają jej tekstu
+    userSelect: "none",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,

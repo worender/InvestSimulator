@@ -1,7 +1,7 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { usePathname, useRouter } from 'expo-router';
-import { Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { usePathname, useRouter } from "expo-router";
+import { Tabs, type BottomTabBarProps } from "expo-router/js-tabs";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Animated,
   Easing,
@@ -11,23 +11,46 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
-} from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+} from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useInteractionLock } from '../../interactionLock';
-import { isNavigationSwipeLocked } from '../../navigationSwipeLock';
-import { useNavigationVisibility } from '../../navigationVisibility';
-import { useTheme } from '../../theme';
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SidebarTabBar } from "../../components/SidebarTabBar";
+import { useInteractionLock } from "../../interactionLock";
+import { isNavigationSwipeLocked } from "../../navigationSwipeLock";
+import { useNavigationVisibility } from "../../navigationVisibility";
+import { useTheme } from "../../theme";
+import { useLayoutMode } from "../../useLayoutMode";
 
 // Stałe określające dostępne zakładki w aplikacji
-const TAB_ROUTES = ['index', 'market', 'portfolio', 'about', 'settings'] as const;
+const TAB_ROUTES = [
+  "index",
+  "market",
+  "portfolio",
+  "about",
+  "settings",
+] as const;
+
+// Ikony zakładek wspólne dla dolnego paska (mobile) i bocznego (web)
+function tabIcon(
+  routeName: string,
+  focused: boolean,
+): keyof typeof Ionicons.glyphMap {
+  const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
+    index: focused ? "home" : "home-outline",
+    market: focused ? "trending-up" : "trending-up-outline",
+    portfolio: focused ? "wallet" : "wallet-outline",
+    about: focused ? "newspaper" : "newspaper-outline",
+    settings: focused ? "settings" : "settings-outline",
+  };
+  return icons[routeName] || "ellipse-outline";
+}
 
 // Komponent obsługujący układ zakładek w aplikacji, z możliwością przełączania między nimi gestami przesuwania
 export default function TabLayout() {
@@ -37,14 +60,15 @@ export default function TabLayout() {
   const { width } = useWindowDimensions();
   const { setVisible } = useNavigationVisibility();
   const { locked } = useInteractionLock();
+  const { isWeb, isMobile, isTablet } = useLayoutMode();
 
   const currentTab = useMemo(() => {
-    if (pathname === '/' || pathname === '/index') return 'index';
-    if (pathname.includes('market')) return 'market';
-    if (pathname.includes('portfolio')) return 'portfolio';
-    if (pathname.includes('about')) return 'about';
-    if (pathname.includes('settings')) return 'settings';
-    return 'index';
+    if (pathname === "/" || pathname === "/index") return "index";
+    if (pathname.includes("market")) return "market";
+    if (pathname.includes("portfolio")) return "portfolio";
+    if (pathname.includes("about")) return "about";
+    if (pathname.includes("settings")) return "settings";
+    return "index";
   }, [pathname]);
 
   // Każda zmiana zakładki startuje z widocznym navbar'em
@@ -52,7 +76,9 @@ export default function TabLayout() {
     setVisible(true);
   }, [pathname, setVisible]);
 
-  const currentIndex = TAB_ROUTES.indexOf(currentTab as (typeof TAB_ROUTES)[number]);
+  const currentIndex = TAB_ROUTES.indexOf(
+    currentTab as (typeof TAB_ROUTES)[number],
+  );
   const swipeThreshold = Math.min(Math.max(width * 0.2, 64), 128);
 
   // Pełnoekranowy suwak między zakładkami (zamiast dotychczasowego braku animacji).
@@ -75,7 +101,7 @@ export default function TabLayout() {
 
   const transitionSpec = useMemo(
     () => ({
-      animation: 'timing' as const,
+      animation: "timing" as const,
       config: { duration: 260, easing: Easing.out(Easing.cubic) },
     }),
     [],
@@ -87,20 +113,26 @@ export default function TabLayout() {
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gestureState) => {
           if (isNavigationSwipeLocked()) return false;
-          return Math.abs(gestureState.dx) > 22 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.6;
+          return (
+            Math.abs(gestureState.dx) > 22 &&
+            Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.6
+          );
         },
         onPanResponderRelease: (_, gestureState) => {
           if (currentIndex === -1) return;
-          const dir = gestureState.dx < 0 ? 'next' : 'prev';
-          const targetIndex = dir === 'next' ? currentIndex + 1 : currentIndex - 1;
-          const targetExists = targetIndex >= 0 && targetIndex < TAB_ROUTES.length;
+          const dir = gestureState.dx < 0 ? "next" : "prev";
+          const targetIndex =
+            dir === "next" ? currentIndex + 1 : currentIndex - 1;
+          const targetExists =
+            targetIndex >= 0 && targetIndex < TAB_ROUTES.length;
           const passedThreshold =
             Math.abs(gestureState.dx) >= swipeThreshold ||
-            (Math.abs(gestureState.dx) > 24 && Math.abs(gestureState.vx) > 0.45);
+            (Math.abs(gestureState.dx) > 24 &&
+              Math.abs(gestureState.vx) > 0.45);
 
           if (targetExists && passedThreshold) {
             const nextRoute = TAB_ROUTES[targetIndex];
-            router.navigate(nextRoute === 'index' ? '/' : `/${nextRoute}`);
+            router.navigate(nextRoute === "index" ? "/" : `/${nextRoute}`);
           }
         },
       }),
@@ -110,70 +142,106 @@ export default function TabLayout() {
   return (
     // Gdy otwarte jest okno modalne, nie podpinamy gestów przełączania zakładek,
     // aby gesty wykonane na modalu nie były przechwytywane przez ekran pod spodem.
-    <View style={styles.tabLayoutRoot} {...(locked ? {} : panResponder.panHandlers)}>
+    // Na webie zakładki zmienia się kliknięciem, nie przeciąganiem myszą.
+    <View
+      style={styles.tabLayoutRoot}
+      {...(locked || isWeb ? {} : panResponder.panHandlers)}
+    >
       <Tabs
         backBehavior="history"
-        tabBar={(props) => <FloatingTabBar {...props} />}
+        tabBar={(props) =>
+          isMobile ? (
+            <FloatingTabBar {...props} />
+          ) : (
+            <SidebarTabBar {...props} compact={isTablet} tabIcon={tabIcon} />
+          )
+        }
         screenOptions={{
           headerShown: false,
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
-          headerTitleStyle: { fontWeight: '700' },
+          headerTitleStyle: { fontWeight: "700" },
           sceneStyle: { backgroundColor: colors.background },
-          animation: 'shift',
-          sceneStyleInterpolator,
-          transitionSpec,
+          tabBarPosition: isMobile ? "bottom" : "left",
+          // Przesuwanie ekranów pasuje do dolnego paska; przy sidebarze ekran zmienia się od razu
+          ...(isMobile
+            ? {
+                animation: "shift" as const,
+                sceneStyleInterpolator,
+                transitionSpec,
+              }
+            : { animation: "none" as const }),
         }}
       >
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Start',
-            headerTitle: 'Panel inwestora',
+            title: "Start",
+            headerTitle: "Panel inwestora",
             headerShown: false,
             tabBarIcon: ({ focused }) => (
-              <Ionicons name={focused ? 'home' : 'home-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
+              <Ionicons
+                name={focused ? "home" : "home-outline"}
+                size={21}
+                color={focused ? colors.accent : colors.textMuted}
+              />
             ),
           }}
         />
         <Tabs.Screen
           name="market"
           options={{
-            title: 'Rynek',
-            headerTitle: 'Rynek giełdowy',
+            title: "Rynek",
+            headerTitle: "Rynek giełdowy",
             headerShown: false,
             tabBarIcon: ({ focused }) => (
-              <Ionicons name={focused ? 'trending-up' : 'trending-up-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
+              <Ionicons
+                name={focused ? "trending-up" : "trending-up-outline"}
+                size={21}
+                color={focused ? colors.accent : colors.textMuted}
+              />
             ),
           }}
         />
         <Tabs.Screen
           name="portfolio"
           options={{
-            title: 'Portfolio',
-            headerTitle: 'Moje portfolio',
+            title: "Portfolio",
+            headerTitle: "Moje portfolio",
             tabBarIcon: ({ focused }) => (
-              <Ionicons name={focused ? 'wallet' : 'wallet-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
+              <Ionicons
+                name={focused ? "wallet" : "wallet-outline"}
+                size={21}
+                color={focused ? colors.accent : colors.textMuted}
+              />
             ),
           }}
         />
         <Tabs.Screen
           name="about"
           options={{
-            title: 'Nauka',
-            headerTitle: 'O inwestowaniu',
+            title: "Nauka",
+            headerTitle: "O inwestowaniu",
             tabBarIcon: ({ focused }) => (
-              <Ionicons name={focused ? 'newspaper' : 'newspaper-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
+              <Ionicons
+                name={focused ? "newspaper" : "newspaper-outline"}
+                size={21}
+                color={focused ? colors.accent : colors.textMuted}
+              />
             ),
           }}
         />
         <Tabs.Screen
           name="settings"
           options={{
-            title: 'Ustawienia',
-            headerTitle: 'Ustawienia',
+            title: "Ustawienia",
+            headerTitle: "Ustawienia",
             tabBarIcon: ({ focused }) => (
-              <Ionicons name={focused ? 'settings' : 'settings-outline'} size={21} color={focused ? colors.accent : colors.textMuted} />
+              <Ionicons
+                name={focused ? "settings" : "settings-outline"}
+                size={21}
+                color={focused ? colors.accent : colors.textMuted}
+              />
             ),
           }}
         />
@@ -182,14 +250,15 @@ export default function TabLayout() {
   );
 }
 
-type FloatingTabBarProps = Pick<BottomTabBarProps, 'state' | 'navigateToTab'>;
-
+type FloatingTabBarProps = Pick<BottomTabBarProps, "state" | "navigateToTab">;
 
 // Komponent obsługujący pasek zakładek, który jest wyświetlany na dole ekranu i umożliwia przełączanie między zakładkami
 function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
   const { colors } = useTheme();
   const { bottom } = useSafeAreaInsets();
-  const { visible } = useNavigationVisibility();
+  const { isWeb } = useLayoutMode();
+  // Chowanie paska przy przewijaniu to zachowanie mobilne — na webie pasek zostaje na miejscu
+  const visible = useNavigationVisibility().visible || isWeb;
   const [barWidth, setBarWidth] = useState(0);
 
   // Animacje Reanimated: chowanie paska, pozycja bąbelka i skala podczas przeciągania.
@@ -238,22 +307,33 @@ function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
         .activeOffsetX([-6, 6])
         .failOffsetY([-28, 28])
         .onStart(() => {
-          'worklet';
+          "worklet";
           // eslint-disable-next-line react-hooks/immutability
           dragStartX.value = selectionX.value;
           // eslint-disable-next-line react-hooks/immutability
-          dragScale.value = withSpring(1.03, { damping: 26, stiffness: 220, overshootClamping: true });
+          dragScale.value = withSpring(1.03, {
+            damping: 26,
+            stiffness: 220,
+            overshootClamping: true,
+          });
         })
         .onUpdate((event) => {
-          'worklet';
+          "worklet";
           const max = itemWidth * (state.routes.length - 1);
           // eslint-disable-next-line react-hooks/immutability
-          selectionX.value = Math.min(Math.max(dragStartX.value + event.translationX, 0), max);
+          selectionX.value = Math.min(
+            Math.max(dragStartX.value + event.translationX, 0),
+            max,
+          );
         })
         .onEnd(() => {
-          'worklet';
+          "worklet";
           // eslint-disable-next-line react-hooks/immutability
-          dragScale.value = withSpring(1, { damping: 26, stiffness: 220, overshootClamping: true });
+          dragScale.value = withSpring(1, {
+            damping: 26,
+            stiffness: 220,
+            overshootClamping: true,
+          });
           if (!itemWidth) return;
 
           const target = Math.min(
@@ -262,13 +342,26 @@ function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
           );
 
           // eslint-disable-next-line react-hooks/immutability
-          selectionX.value = withSpring(target * itemWidth, { damping: 28, stiffness: 190, mass: 1, overshootClamping: true });
+          selectionX.value = withSpring(target * itemWidth, {
+            damping: 28,
+            stiffness: 190,
+            mass: 1,
+            overshootClamping: true,
+          });
 
           if (target !== state.index) {
             runOnJS(handleSelectIndex)(target);
           }
         }),
-    [dragScale, dragStartX, handleSelectIndex, itemWidth, selectionX, state.index, state.routes.length],
+    [
+      dragScale,
+      dragStartX,
+      handleSelectIndex,
+      itemWidth,
+      selectionX,
+      state.index,
+      state.routes.length,
+    ],
   );
 
   const barAnimatedStyle = useAnimatedStyle(() => ({
@@ -288,7 +381,9 @@ function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
   }));
 
   return (
-    <View style={[styles.wrapper, { bottom: Math.max(Math.ceil(bottom / 2), 4) }]}>
+    <View
+      style={[styles.wrapper, { bottom: Math.max(Math.ceil(bottom / 2), 4) }]}
+    >
       <GestureDetector gesture={dragGesture}>
         <Reanimated.View
           onLayout={handleBarLayout}
@@ -318,13 +413,6 @@ function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
 
           {state.routes.map((route, index) => {
             const focused = state.index === index;
-            const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
-              index: focused ? 'home' : 'home-outline',
-              market: focused ? 'trending-up' : 'trending-up-outline',
-              portfolio: focused ? 'wallet' : 'wallet-outline',
-              about: focused ? 'newspaper' : 'newspaper-outline',
-              settings: focused ? 'settings' : 'settings-outline',
-            };
 
             return (
               <Pressable
@@ -335,7 +423,7 @@ function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
                 style={styles.item}
               >
                 <Ionicons
-                  name={icons[route.name] || 'ellipse-outline'}
+                  name={tabIcon(route.name, focused)}
                   size={22}
                   color={focused ? colors.accent : colors.textMuted}
                 />
@@ -364,40 +452,40 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   wrapper: {
-    position: 'absolute',
+    position: "absolute",
     left: 20,
     right: 20,
-    alignItems: 'center',
+    alignItems: "center",
     zIndex: 10,
   },
   bar: {
-    width: '100%',
+    width: "100%",
     height: 56,
     borderWidth: 1,
     borderRadius: 28,
     paddingHorizontal: 6,
     paddingVertical: 5,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
     shadowOpacity: 0.25,
     shadowRadius: 16,
     elevation: 10,
-    position: 'relative',
-    overflow: 'hidden',
+    position: "relative",
+    overflow: "hidden",
   },
   item: {
     flex: 1,
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 2,
-    position: 'relative',
+    position: "relative",
     zIndex: 2,
   },
   selection: {
-    position: 'absolute',
+    position: "absolute",
     top: 5,
     bottom: 5,
     left: 6,
@@ -405,7 +493,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: 22,
     zIndex: 1,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18,
     shadowRadius: 10,
@@ -415,7 +503,7 @@ const styles = StyleSheet.create({
     width: 86,
     height: 5,
     borderRadius: 5,
-    position: 'absolute',
+    position: "absolute",
     bottom: -6,
   },
 });

@@ -19,6 +19,11 @@ import { useTheme } from '../theme';
 type NotificationCardProps = {
   notification: AppNotification;
   onDismiss: () => void;
+  // Pozostały czas wyświetlania. Pozwala kontynuować odliczanie po przejściu
+  // powiadomienia do warstwy modala zamiast zaczynać je od nowa.
+  duration?: number;
+  // Powiadomienie było już widoczne przed otwarciem modala — nie animujemy go ponownie.
+  alreadyShown?: boolean;
 };
 
 const SPRING_CONFIG = {
@@ -38,12 +43,17 @@ const VARIANT_ICONS: Record<NotificationVariant, keyof typeof Ionicons.glyphMap>
 };
 
 // Komponent karty powiadomienia, wyświetlany w górnej części ekranu
-export function NotificationCard({ notification, onDismiss }: NotificationCardProps) {
+export function NotificationCard({
+  notification,
+  onDismiss,
+  duration,
+  alreadyShown = false,
+}: NotificationCardProps) {
   const { colors } = useTheme();
   const [paused, setPaused] = useState(false);
 
-  const translateY = useSharedValue(-EXIT_DISTANCE);
-  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(alreadyShown ? 0 : -EXIT_DISTANCE);
+  const opacity = useSharedValue(alreadyShown ? 1 : 0);
   const isClosing = useSharedValue(0);
 
   const variantColor = {
@@ -57,11 +67,17 @@ export function NotificationCard({ notification, onDismiss }: NotificationCardPr
     onDismiss();
   }, [onDismiss]);
 
-  // Animacja wejścia
+  // Animacja wejścia. Powiadomienie przeniesione do warstwy modala jest już
+  // widoczne, więc od razu ustawiamy stan końcowy bez ponownego wywołania.
   useEffect(() => {
+    if (alreadyShown) {
+      translateY.value = 0;
+      opacity.value = 1;
+      return;
+    }
     translateY.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) });
     opacity.value = withTiming(1, { duration: 200 });
-  }, [opacity, translateY]);
+  }, [alreadyShown, opacity, translateY]);
 
   const closeUp = useCallback(() => {
     if (isClosing.value) return;
@@ -85,9 +101,9 @@ export function NotificationCard({ notification, onDismiss }: NotificationCardPr
   // Automatyczne zwijanie
   useEffect(() => {
     if (paused) return;
-    const timeout = setTimeout(() => closeUp(), notification.duration);
+    const timeout = setTimeout(() => closeUp(), duration ?? notification.duration);
     return () => clearTimeout(timeout);
-  }, [closeUp, notification.duration, paused]);
+  }, [closeUp, duration, notification.duration, paused]);
 
   // Gest przeciągania w górę, aby zamknąć powiadomienie
   const createGesture = useCallback(
