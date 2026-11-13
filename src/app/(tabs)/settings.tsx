@@ -769,6 +769,31 @@ export default function SettingsScreen() {
                 Usuń lokalną bazę danych
               </Text>
             </Pressable>
+                        {__DEV__ ? (
+              <Pressable
+                onPress={() => router.push("../database-test")}
+                accessibilityRole="button"
+                accessibilityLabel="Testuj bazę danych"
+                style={({ pressed }) => [
+                  styles.logoutButton,
+                  {
+                    borderColor: colors.accent,
+                    backgroundColor: pressed
+                      ? colors.accentGlass
+                      : "transparent",
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="flask-outline"
+                  size={19}
+                  color={colors.accent}
+                />
+                <Text style={[styles.logoutText, { color: colors.accent }]}>
+                  Testuj bazę danych
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
 
           <View>
