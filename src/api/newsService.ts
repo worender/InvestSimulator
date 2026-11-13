@@ -10,6 +10,7 @@
 
 import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { authenticatedFetch } from "./marketService";
+import { filterNewsWithContent } from "./newsQuality";
 
 export type NewsLanguage = "pl" | "en";
 export type NewsTopic = "poland" | "world";
@@ -253,9 +254,12 @@ export async function getYahooNews(
       throw new Error("Nieprawidłowy format listy newsów");
     }
 
-    return items
-      .map((item) => toNewsItem(item, topic))
-      .filter((item): item is YahooNewsItem => item !== null);
+    // Backend już filtruje, ale starszy backend albo jego cache mogą zwrócić newsy bez treści
+    return filterNewsWithContent(
+      items
+        .map((item) => toNewsItem(item, topic))
+        .filter((item): item is YahooNewsItem => item !== null),
+    );
   } catch (error) {
     console.error(`Błąd getYahooNews (${topic}):`, error);
     if (!silent) {
@@ -274,16 +278,19 @@ export async function getYahooNews(
 /**
  * Pobiera obie kategorie newsów równolegle.
  * Zwraca obiekt z gotowymi listami
+ *
+ * @param silent gdy `true`, brak newsów nie pokazuje powiadomienia (np. przy odświeżaniu w tle)
  */
 export async function getYahooNewsByTopic(
   limit = 15,
+  { silent = false }: { silent?: boolean } = {},
 ): Promise<Record<NewsTopic, YahooNewsItem[]>> {
   const [poland, world] = await Promise.all([
     getYahooNews("poland", limit, { silent: true }),
     getYahooNews("world", limit, { silent: true }),
   ]);
 
-  if (poland.length === 0 && world.length === 0) {
+  if (!silent && poland.length === 0 && world.length === 0) {
     notify({
       variant: "warning",
       title: "Brak newsów",

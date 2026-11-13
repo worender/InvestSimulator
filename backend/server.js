@@ -6,6 +6,7 @@ const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const YahooFinance = require("yahoo-finance2").default;
+const { filterNewsWithContent } = require("./newsQuality");
 const yahooFinance = new YahooFinance();
 
 const app = express();
@@ -425,8 +426,9 @@ app.get("/api/news", authenticateToken, async (req, res) => {
   }
 
   try {
+    // Filtr przed `slice`, żeby odrzucone newsy nie zmniejszały listy poniżej limitu
     const items = orderNewsForTopic(
-      await fetchNewsForTopic(topic),
+      filterNewsWithContent(await fetchNewsForTopic(topic)),
       topic,
     ).slice(0, limit);
     const data = { topic, fetchedAt: new Date(now).toISOString(), items };
