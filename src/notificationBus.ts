@@ -15,6 +15,7 @@ export type NotificationVariant = "error" | "success" | "info" | "warning";
  */
 export const NOTIFICATION_GROUPS = {
   account: "account",
+  appearance: "appearance",
   marketChart: "market-chart",
   marketSearch: "market-search",
   marketTrends: "market-trends",

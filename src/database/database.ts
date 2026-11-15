@@ -1,5 +1,20 @@
 import { Platform } from "expo";
 import * as SQLite from "expo-sqlite";
+import { MAX_CUSTOM_ACCENTS, normalizeHexColor } from "../settings/color";
+import {
+  normalizeAndValidateSymbol,
+  validateAvatarUrl,
+  validateCurrencyCode,
+  validateDate,
+  validateIconWallet,
+  validateNumberReal,
+  validateId,
+  validateUserId,
+  validateUserName,
+  validateWalletId,
+  validateWalletName,
+} from "./checkSecurityParam";
+import { acquireDbLock } from "./dbLock";
 import {
   ARTICLE_PARAGRAPH_SEPARATOR,
   EDUCATIONAL_ARTICLE_SEED,
@@ -7,8 +22,6 @@ import {
   type ArticleSource,
   type EducationalArticle,
 } from "./educationalArticles";
-import { normalizeAndValidateSymbol ,validateAvatarUrl, validateCurrencyCode, validateDate, validateIconWallet, validateNumberReal, validateUserName, validateWalletName } from "./checkSecurityParam";
-import { acquireDbLock } from "./dbLock";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initializationPromise: Promise<void> | null = null;
@@ -136,6 +149,13 @@ export interface Settings {
   currency: string;
 }
 
+export interface CustomAccentColor {
+  id: number;
+  user_id: number;
+  color: string;
+  position: number;
+}
+
 export interface NotificationSettings {
   id: number;
   user_id: number;
@@ -254,6 +274,15 @@ export async function initializeDatabase(): Promise<void> {
           font_size TEXT DEFAULT 'medium',
           biometric_enabled INTEGER DEFAULT '0',
           currency TEXT DEFAULT 'PLN',
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS custom_accent_colors (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          user_id INTEGER NOT NULL,
+          color TEXT NOT NULL,
+          position INTEGER NOT NULL DEFAULT 0,
+          UNIQUE (user_id, color),
           FOREIGN KEY (user_id) REFERENCES users (id)
         );
 
@@ -474,12 +503,9 @@ export async function getPortfolio(): Promise<PortfolioItem[]> {
   );
 }
 
-
 ///Get user profile by userId, returns null if not found. Default userId is 1.
 export async function getUserProfile(userId = 1): Promise<UserProfile | null> {
-  if (userId <= 0 || !Number.isInteger(userId)) {
-    throw new Error("Nieprawidłowy identyfikator użytkownika");
-  }
+  validateUserId(userId);
 
   const database = await getReadyDatabase();
 
@@ -537,7 +563,7 @@ export async function createUserProfile(input: {
       10000,
       "Główny portfel",
       "PLN",
-      "wallet-outline"
+      "wallet-outline",
     );
 
     await database.runAsync(
@@ -573,6 +599,7 @@ export async function updateUserProfile(
   changes: Partial<Omit<UserProfile, "id">>,
   userId = 1,
 ): Promise<UserProfile> {
+  validateUserId(userId);
   const database = await getReadyDatabase();
   const current = await getUserProfile(userId);
   if (!current) throw new Error("Nie znaleziono profilu użytkownika");
@@ -614,9 +641,10 @@ export async function updateSettings(
 ): Promise<void> {
   const database = await getReadyDatabase();
 
-  if (!settings.user_id) {
+  if (settings.user_id === undefined) {
     throw new Error("Nieprawidłowy identyfikator użytkownika");
   }
+  validateUserId(settings.user_id);
 
   const currentSettings = await database.getFirstAsync<Settings>(
     `SELECT * FROM settings WHERE user_id = ?`,
@@ -658,9 +686,7 @@ export async function updateSettings(
 }
 
 export async function getSettings(userId = 1): Promise<Settings | null> {
-  if (userId <= 0 || !Number.isInteger(userId)) {
-    throw new Error("Nieprawidłowy identyfikator użytkownika");
-  }
+  validateUserId(userId);
 
   const database = await getReadyDatabase();
 
@@ -672,14 +698,107 @@ export async function getSettings(userId = 1): Promise<Settings | null> {
   );
 }
 
+async function selectCustomAccentColors(
+  userId: number,
+): Promise<CustomAccentColor[]> {
+  validateUserId(userId);
+  const database = await getReadyDatabase();
+  return database.getAllAsync<CustomAccentColor>(
+    `SELECT id, user_id, color, position
+     FROM custom_accent_colors
+     WHERE user_id = ?
+     ORDER BY position ASC, id ASC`,
+    userId,
+  );
+}
+
+/// Własne kolory motywu zapisane na koncie
+export async function getCustomAccentColors(
+  userId = 1,
+): Promise<CustomAccentColor[]> {
+  validateUserId(userId);
+  return selectCustomAccentColors(userId);
+}
+
+export async function addCustomAccentColor(
+  userId: number,
+  color: string,
+): Promise<CustomAccentColor> {
+  validateUserId(userId);
+
+  const normalized = normalizeHexColor(color);
+  if (!normalized) throw new Error("Nieprawidłowy kolor");
+
+  const existing = await selectCustomAccentColors(userId);
+
+  if (existing.length >= MAX_CUSTOM_ACCENTS) {
+    throw new Error(
+      `Możesz zapisać maksymalnie ${MAX_CUSTOM_ACCENTS} własne kolory`,
+    );
+  }
+
+  if (existing.some((item) => item.color === normalized)) {
+    throw new Error("Ten kolor jest już zapisany");
+  }
+
+  const database = await getReadyDatabase();
+  const position = existing.length;
+  const result = await database.runAsync(
+    `INSERT INTO custom_accent_colors (user_id, color, position)
+     VALUES (?, ?, ?)`,
+    userId,
+    normalized,
+    position,
+  );
+
+  return {
+    id: result.lastInsertRowId,
+    user_id: userId,
+    color: normalized,
+    position,
+  };
+}
+
+export async function updateCustomAccentColor(
+  userId: number,
+  id: number,
+  color: string,
+): Promise<CustomAccentColor> {
+  validateUserId(userId);
+  validateId(id, "identyfikator koloru");
+
+  const normalized = normalizeHexColor(color);
+  if (!normalized) throw new Error("Nieprawidłowy kolor");
+
+  const existing = await selectCustomAccentColors(userId);
+  const target = existing.find((item) => item.id === id);
+
+  if (!target) throw new Error("Nie znaleziono zapisanego koloru");
+
+  if (existing.some((item) => item.id !== id && item.color === normalized)) {
+    throw new Error("Ten kolor jest już zapisany");
+  }
+
+  const database = await getReadyDatabase();
+  await database.runAsync(
+    `UPDATE custom_accent_colors SET color = ? WHERE id = ? AND user_id = ?`,
+    normalized,
+    id,
+    userId,
+  );
+
+  return { ...target, color: normalized };
+}
+
 export async function updateNotificationSettings(
   settings: Partial<NotificationSettings>,
 ): Promise<void> {
   const database = await getReadyDatabase();
 
-  if (!settings.user_id) {
+  if (settings.user_id === undefined) {
     throw new Error("Nieprawidłowy identyfikator użytkownika");
   }
+  validateUserId(settings.user_id);
 
   const currentSettings = await database.getFirstAsync<NotificationSettings>(
     `SELECT * FROM notification_settings WHERE user_id = ?`,
@@ -731,9 +850,7 @@ export async function updateNotificationSettings(
 export async function getNotificationSettings(
   userId = 1,
 ): Promise<NotificationSettings | null> {
-  if (userId <= 0 || !Number.isInteger(userId)) {
-    throw new Error("Nieprawidłowy identyfikator użytkownika");
-  }
+  validateUserId(userId);
 
   const database = await getReadyDatabase();
 
@@ -745,30 +862,26 @@ export async function getNotificationSettings(
   );
 }
 
-export async function getWallet(userId : number, walletId : number): Promise<Wallet | null> {
-  if (userId <= 0 || !Number.isInteger(userId)) {
-    throw new Error("Nieprawidłowy identyfikator użytkownika");
-  }
+export async function getWallet(
+  userId: number,
+  walletId: number,
+): Promise<Wallet | null> {
+  validateUserId(userId);
+  validateWalletId(walletId);
 
-  if (walletId <= 0 || !Number.isInteger(walletId)) {
-    throw new Error("Nieprawidłowy identyfikator portfela");
-  }
-  
   const database = await getReadyDatabase();
 
   return (
     (await database.getFirstAsync<Wallet>(
       `SELECT * FROM wallet WHERE id_user = ? AND id = ?`,
       userId,
-      walletId
+      walletId,
     )) ?? null
   );
 }
 
 export async function getWallets(userId: number): Promise<Wallet[]> {
-  if (userId <= 0 || !Number.isInteger(userId)) {
-    throw new Error("Nieprawidłowy identyfikator użytkownika");
-  }
+  validateUserId(userId);
 
   const database = await getReadyDatabase();
 
@@ -783,21 +896,12 @@ export async function updateWallet(
   userId: number,
   changes: Partial<Omit<Wallet, "id" | "id_user">>,
 ): Promise<void> {
-  
-
-
-  if (walletId <= 0 || !Number.isInteger(walletId)) {
-    throw new Error("Nieprawidłowy identyfikator portfela");
-  }
-
-  if (userId <= 0 || !Number.isInteger(userId)) {
-    throw new Error("Nieprawidłowy identyfikator użytkownika");
-  }
+  validateWalletId(walletId);
+  validateUserId(userId);
 
   const database = await getReadyDatabase();
 
   await database.withTransactionAsync(async () => {
-
     const currentWallet = await database.getFirstAsync<Wallet>(
       `SELECT * FROM wallet WHERE id = ? AND id_user = ?`,
       walletId,
@@ -839,35 +943,28 @@ export async function updateWallet(
       userId,
     );
 
-    
-
     const updatedWallet = await database.getFirstAsync<Wallet>(
       `SELECT * FROM wallet WHERE id_user = ? AND id = ?`,
       userId,
-      walletId
+      walletId,
     );
 
     if (!updatedWallet) {
       throw new Error("Nie udało się odczytać zaktualizowanego portfela");
     }
   });
-  
 }
 
 export async function createWallet(
   userId: number,
   data: CreateWalletInput,
 ): Promise<Wallet> {
-  if (userId <= 0 || !Number.isInteger(userId)) {
-    throw new Error("Nieprawidłowy identyfikator użytkownika");
-  }
+  validateUserId(userId);
 
   const name = validateWalletName(data.name);
   const currency = validateCurrencyCode(data.currency);
   const balance = data.balance ?? 10000;
-  const icon = data.icon
-    ? validateIconWallet(data.icon)
-    : "wallet-outline";
+  const icon = data.icon ? validateIconWallet(data.icon) : "wallet-outline";
 
   validateNumberReal(balance);
 
@@ -902,6 +999,8 @@ export async function deleteWallet(
   walletId: number,
   userId: number,
 ): Promise<void> {
+  validateWalletId(walletId);
+  validateUserId(userId);
   const database = await getReadyDatabase();
 
   await database.withTransactionAsync(async () => {
@@ -949,9 +1048,7 @@ export async function deleteWallet(
 export async function getCategories(
   walletId: number,
 ): Promise<AssetCategory[]> {
-  if (walletId <= 0 || !Number.isInteger(walletId)) {
-    throw new Error("Nieprawidłowy identyfikator portfela");
-  }
+  validateWalletId(walletId);
 
   const database = await getReadyDatabase();
 
@@ -967,9 +1064,7 @@ export async function createCategory(
   walletId: number,
   data: CreateCategoryInput,
 ): Promise<AssetCategory> {
-  if (walletId <= 0 || !Number.isInteger(walletId)) {
-    throw new Error("Nieprawidłowy identyfikator portfela");
-  }
+  validateWalletId(walletId);
 
   const name = data.name.trim();
 
@@ -1005,9 +1100,7 @@ export async function createCategory(
 }
 
 async function databaseWalletExists(walletId: number): Promise<boolean> {
-  if (walletId <= 0 || !Number.isInteger(walletId)) {
-    throw new Error("Nieprawidłowy identyfikator portfela");
-  }
+  validateWalletId(walletId);
 
   const database = await getReadyDatabase();
 
@@ -1020,10 +1113,8 @@ async function databaseWalletExists(walletId: number): Promise<boolean> {
 }
 
 export async function getPositions(walletId: number): Promise<Position[]> {
-  if (walletId <= 0 || !Number.isInteger(walletId)) {
-    throw new Error("Nieprawidłowy identyfikator portfela");
-  }
-  
+  validateWalletId(walletId);
+
   const database = await getReadyDatabase();
 
   return database.getAllAsync<Position>(
@@ -1049,9 +1140,7 @@ export async function createPosition(
   categoryId: number,
   data: CreatePositionInput,
 ): Promise<Position> {
-  if (categoryId <= 0 || !Number.isInteger(categoryId)) {
-    throw new Error("Nieprawidłowy identyfikator kategorii");
-  }
+  validateId(categoryId, "identyfikator kategorii");
 
   const quantity = validateNumberReal(data.quantity);
   const buyPrice = validateNumberReal(data.buy_price);
@@ -1104,17 +1193,13 @@ export async function updatePosition(
   positionId: number,
   changes: UpdatePositionInput,
 ): Promise<void> {
-  if (positionId <= 0 || !Number.isInteger(positionId)) {
-    throw new Error("Nieprawidłowy identyfikator pozycji");
-  }
+  validateId(positionId, "identyfikator pozycji");
 
   if (changes.remaining_quantity === undefined) {
     throw new Error("Brak danych do aktualizacji pozycji");
   }
 
-  const remainingQuantity = validateNumberReal(
-    changes.remaining_quantity,
-  );
+  const remainingQuantity = validateNumberReal(changes.remaining_quantity);
 
   if (remainingQuantity < 0) {
     throw new Error("Pozostała ilość nie może być ujemna");
@@ -1138,9 +1223,7 @@ export async function updatePosition(
 export async function getTransactions(
   walletId: number,
 ): Promise<Transaction[]> {
-  if (walletId <= 0 || !Number.isInteger(walletId)) {
-    throw new Error("Nieprawidłowy identyfikator portfela");
-  }
+  validateWalletId(walletId);
 
   const database = await getReadyDatabase();
 
@@ -1157,9 +1240,7 @@ export async function getTransactions(
 export async function createTransaction(
   input: CreateTransactionInput,
 ): Promise<Transaction> {
-  if (input.id_wallet <= 0 || !Number.isInteger(input.id_wallet)) {
-    throw new Error("Nieprawidłowy identyfikator portfela");
-  }
+  validateWalletId(input.id_wallet);
 
   if (input.type !== "BUY" && input.type !== "SELL") {
     throw new Error("Nieprawidłowy typ transakcji");
@@ -1169,24 +1250,19 @@ export async function createTransaction(
   const quantity = validateNumberReal(input.quantity);
   const price = validateNumberReal(input.price);
   const createdAt =
-    input.createdAt !== undefined
-      ? validateDate(input.createdAt)
-      : Date.now();
+    input.createdAt !== undefined ? validateDate(input.createdAt) : Date.now();
 
   if (quantity <= 0 || price <= 0) {
     throw new Error("Ilość i cena muszą być większe od zera");
   }
 
   if (input.type === "BUY") {
-    if (
-      input.category_id === undefined ||
-      input.category_id <= 0 ||
-      !Number.isInteger(input.category_id)
-    ) {
+    if (input.category_id === undefined) {
       throw new Error(
         "Dla transakcji kupna wymagany jest identyfikator kategorii",
       );
     }
+    validateId(input.category_id, "identyfikator kategorii");
   }
 
   const database = await getReadyDatabase();
@@ -1208,18 +1284,17 @@ export async function createTransaction(
       if (wallet.balance < totalValue) {
         throw new Error("Niewystarczające środki w portfelu");
       }
-      
+
       let categoryId: number;
-      if (
-        input.category_id === undefined ||
-        input.category_id <= 0 ||
-        !Number.isInteger(input.category_id)
-      ) {
+      if (input.category_id === undefined) {
         throw new Error(
           "Dla transakcji kupna wymagany jest identyfikator kategorii",
         );
       }
-      categoryId = input.category_id;
+      categoryId = validateId(
+        input.category_id,
+        "identyfikator kategorii",
+      );
 
       const category = await database.getFirstAsync<AssetCategory>(
         `SELECT id, name, wallet_id
@@ -1341,9 +1416,7 @@ export async function createTransaction(
 export async function getPortfolioSnapshots(
   walletId: number,
 ): Promise<PortfolioSnapshot[]> {
-  if (walletId <= 0 || !Number.isInteger(walletId)) {
-    throw new Error("Nieprawidłowy identyfikator portfela");
-  }
+  validateWalletId(walletId);
 
   const database = await getReadyDatabase();
 
@@ -1355,7 +1428,6 @@ export async function getPortfolioSnapshots(
   );
 }
 
-
 function getCurrentDayNumber(): number {
   return Math.floor(Date.now() / 86_400_000);
 }
@@ -1363,12 +1435,7 @@ function getCurrentDayNumber(): number {
 export async function createPortfolioSnapshot(
   input: CreateSnapshotInput,
 ): Promise<PortfolioSnapshot> {
-  if (
-    input.wallet_id <= 0 ||
-    !Number.isInteger(input.wallet_id)
-  ) {
-    throw new Error("Nieprawidłowy identyfikator portfela");
-  }
+  validateWalletId(input.wallet_id);
 
   const cashBalance = validateNumberReal(input.cash_balance);
   const assetsValue = validateNumberReal(input.assets_value);
@@ -1428,17 +1495,13 @@ export async function createDailySnapshots(
   userId: number,
   values: DailySnapshotValue[],
 ): Promise<PortfolioSnapshot[]> {
-  if (userId <= 0 || !Number.isInteger(userId)) {
-    throw new Error("Nieprawidłowy identyfikator użytkownika");
-  }
+  validateUserId(userId);
 
   const wallets = await getWallets(userId);
   const snapshots: PortfolioSnapshot[] = [];
 
   for (const wallet of wallets) {
-    const value = values.find(
-      (item) => item.wallet_id === wallet.id,
-    );
+    const value = values.find((item) => item.wallet_id === wallet.id);
 
     if (!value) {
       throw new Error(
@@ -1476,6 +1539,7 @@ export async function clearLocalDatabase(): Promise<void> {
     await database.runAsync("DELETE FROM favorite_assets");
     await database.runAsync("DELETE FROM notification_settings");
     await database.runAsync("DELETE FROM settings");
+    await database.runAsync("DELETE FROM custom_accent_colors");
     await database.runAsync("DELETE FROM users");
   });
 }
@@ -1554,6 +1618,7 @@ export async function getEducationalArticles(): Promise<EducationalArticle[]> {
 
 /// Identyfikatory (slug) artykułów zapisanych przez użytkownika, od najnowszych.
 export async function getSavedArticleSlugs(userId = 1): Promise<string[]> {
+  validateUserId(userId);
   const database = await getReadyDatabase();
 
   const rows = await database.getAllAsync<{ slug: string }>(
@@ -1573,6 +1638,7 @@ export async function setArticleSaved(
   saved: boolean,
   userId = 1,
 ): Promise<void> {
+  validateUserId(userId);
   const database = await getReadyDatabase();
 
   if (saved) {
