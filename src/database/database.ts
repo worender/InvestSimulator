@@ -701,6 +701,7 @@ export async function getSettings(userId = 1): Promise<Settings | null> {
 async function selectCustomAccentColors(
   userId: number,
 ): Promise<CustomAccentColor[]> {
+  validateUserId(userId);
   const database = await getReadyDatabase();
   return database.getAllAsync<CustomAccentColor>(
     `SELECT id, user_id, color, position
