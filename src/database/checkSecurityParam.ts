@@ -1,4 +1,3 @@
-
 export function normalizeAndValidateSymbol(value: string): string {
   const symbol = value.trim().toUpperCase();
 
@@ -15,24 +14,28 @@ export function normalizeAndValidateSymbol(value: string): string {
 }
 
 export function validateUserName(value: string): string {
-  const userName = value.trim(); 
+  const userName = value.trim();
 
   if (userName.length === 0 || userName.length > 30) {
     throw new Error("Nieprawidłowa nazwa użytkownika");
-  }else if (!/^[a-zA-Z0-9._ -]+$/.test(userName)) {
-    throw new Error("Nazwa użytkownika może zawierać tylko litery, cyfry, kropki, podkreślenia i myślniki");
+  } else if (!/^[a-zA-Z0-9._ -]+$/.test(userName)) {
+    throw new Error(
+      "Nazwa użytkownika może zawierać tylko litery, cyfry, kropki, podkreślenia i myślniki",
+    );
   }
 
   return userName;
 }
 
 export function validateWalletName(value: string): string {
-  const userName = value.trim(); 
+  const userName = value.trim();
 
   if (userName.length === 0 || userName.length > 30) {
     throw new Error("Nieprawidłowa nazwa portfela");
-  }else if (!/^[a-zA-Z0-9._ -]+$/.test(userName)) {
-    throw new Error("Nazwa portfela może zawierać tylko litery, cyfry, kropki, podkreślenia i myślniki");
+  } else if (!/^[a-zA-Z0-9._ -]+$/.test(userName)) {
+    throw new Error(
+      "Nazwa portfela może zawierać tylko litery, cyfry, kropki, podkreślenia i myślniki",
+    );
   }
 
   return userName;
@@ -47,7 +50,7 @@ export function validateAvatarUrl(value: string): string {
   }
 
   if (/[<>"'`]/.test(avatarUrl)) {
-  throw new Error("Nieprawidłowy URL avatara");
+    throw new Error("Nieprawidłowy URL avatara");
   }
 
   let parsedUrl: URL;
@@ -75,7 +78,7 @@ export function validateNumberReal(value: number): number {
 
 export function validateCurrencyCode(value: string): string {
   const currencyCode = value.trim().toUpperCase();
-  
+
   if (!/^[A-Z]{3}$/.test(currencyCode)) {
     throw new Error("Nieprawidłowy kod waluty");
   }
@@ -103,4 +106,21 @@ export function validateDate(value: number): number {
   }
 
   return value;
+}
+
+// Wspólna walidacja dodatnich identyfikatorów całkowitych
+export function validateId(value: number, label: string): number {
+  if (value <= 0 || !Number.isInteger(value)) {
+    throw new Error(`Nieprawidłowy ${label}`);
+  }
+
+  return value;
+}
+
+export function validateUserId(value: number): number {
+  return validateId(value, "identyfikator użytkownika");
+}
+
+export function validateWalletId(value: number): number {
+  return validateId(value, "identyfikator portfela");
 }
