@@ -27,25 +27,25 @@ export const NOTIFICATION_CATEGORY_OPTIONS: {
   {
     key: 'market',
     label: 'Rynek',
-    description: 'Ważne ruchy indeksów i notowań',
+    description: 'Ważne ruchy indeksów i notowań (wkrótce)',
     icon: 'trending-up-outline',
   },
   {
     key: 'news',
     label: 'Newsy',
-    description: 'Nowe materiały i informacje rynkowe',
+    description: 'Nowe materiały i informacje rynkowe (wkrótce)',
     icon: 'newspaper-outline',
   },
   {
     key: 'transactions',
-    label: 'Transakcje',
-    description: 'Realizacja zleceń kupna i sprzedaży',
+    label: 'Transakcje (alerty)',
+    description: 'Alerty realizacji zleceń kupna i sprzedaży (wkrótce)',
     icon: 'swap-horizontal-outline',
   },
   {
     key: 'reminders',
-    label: 'Przypomnienia',
-    description: 'Cykliczne podsumowania i przypomnienia',
+    label: 'Podsumowania cykliczne',
+    description: 'Cykliczne podsumowania i przypomnienia (wkrótce)',
     icon: 'alarm-outline',
   },
 ];
@@ -81,4 +81,59 @@ export function serializeNotificationCategories(
   categories: NotificationCategories,
 ): string {
   return JSON.stringify(categories);
+}
+
+export function mapNotificationCategoryToKey(
+  category: string | undefined | null,
+): NotificationCategoryKey | null {
+  if (!category) return null;
+  const normalized = category.toLowerCase().trim();
+
+  if (normalized === 'portfolio') {
+    return 'portfolio';
+  }
+  if (
+    normalized === 'market' ||
+    normalized.startsWith('market-') ||
+    normalized.startsWith('market')
+  ) {
+    return 'market';
+  }
+  if (
+    normalized === 'news' ||
+    normalized === 'news-feed' ||
+    normalized.startsWith('news')
+  ) {
+    return 'news';
+  }
+  if (
+    normalized === 'transactions' ||
+    normalized === 'transaction'
+  ) {
+    return 'transactions';
+  }
+  if (
+    normalized === 'reminders' ||
+    normalized === 'reminder' ||
+    normalized.includes('podsumowani') ||
+    normalized.includes('przypomn')
+  ) {
+    return 'reminders';
+  }
+  return null;
+}
+
+export function isNotificationAllowed(
+  category: string | undefined | null,
+  notificationsEnabled: boolean,
+  categories: NotificationCategories,
+): boolean {
+  if (!notificationsEnabled) return false;
+
+  const key = mapNotificationCategoryToKey(category);
+  if (!key) {
+    return true;
+  }
+
+  return categories[key] ?? true;
 }

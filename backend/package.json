@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "notify:test": "node send-test-notification.js",
     "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

@@ -92,6 +92,8 @@ export default function SettingsScreen() {
     updateAccount,
     notificationsEnabled,
     setNotificationsEnabled,
+    pushNotificationsEnabled,
+    setPushNotificationsEnabled,
     notificationCategories,
     setNotificationCategory,
     biometricEnabled,
@@ -568,13 +570,18 @@ export default function SettingsScreen() {
             <SettingsRow
               icon="phone-portrait-outline"
               title="Powiadomienia push"
-              subtitle="Niedostępne w tej wersji aplikacji"
+              subtitle={
+                pushNotificationsEnabled
+                  ? "Włączone - otrzymujesz alerty systemowe na urządzeniu"
+                  : "Wyłączone - brak powiadomień systemowych"
+              }
               right={
                 <SettingsToggle
-                  value={false}
-                  onChange={() => undefined}
-                  disabled
-                  accessibilityLabel="Powiadomienia push - niedostępne"
+                  value={pushNotificationsEnabled}
+                  onChange={(value) => {
+                    void setPushNotificationsEnabled(value);
+                  }}
+                  accessibilityLabel="Powiadomienia push"
                 />
               }
               last

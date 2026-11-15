@@ -7,7 +7,16 @@ import {
   type ArticleSource,
   type EducationalArticle,
 } from "./educationalArticles";
-import { normalizeAndValidateSymbol ,validateAvatarUrl, validateCurrencyCode, validateDate, validateIconWallet, validateNumberReal, validateUserName, validateWalletName } from "./checkSecurityParam";
+import {
+  normalizeAndValidateSymbol,
+  validateAvatarUrl,
+  validateCurrencyCode,
+  validateDate,
+  validateIconWallet,
+  validateNumberReal,
+  validateUserName,
+  validateWalletName,
+} from "./checkSecurityParam";
 import { acquireDbLock } from "./dbLock";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;

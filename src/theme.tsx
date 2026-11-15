@@ -40,6 +40,7 @@ import {
 } from "./displayCurrency";
 import { setGlobalFontScale } from "./fontScale";
 import { NOTIFICATION_GROUPS, notify } from "./notificationBus";
+import { registerForPushNotificationsAsync } from "./pushNotifications";
 import {
   DEFAULT_NOTIFICATION_CATEGORIES,
   type NotificationCategories,
@@ -200,6 +201,8 @@ type ThemeContextValue = {
   reloadAccounts: () => Promise<void>;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
+  pushNotificationsEnabled: boolean;
+  setPushNotificationsEnabled: (enabled: boolean) => Promise<boolean>;
   notificationCategories: NotificationCategories;
   setNotificationCategory: (
     key: NotificationCategoryKey,
@@ -231,6 +234,8 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const [accounts, setAccounts] = useState<UserProfile[]>([]);
   const [activeAccount, setActiveAccount] = useState<UserProfile | null>(null);
   const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
+  const [pushNotificationsEnabled, setPushNotificationsEnabledState] =
+    useState(false);
   const [notificationCategories, setNotificationCategories] =
     useState<NotificationCategories>({ ...DEFAULT_NOTIFICATION_CATEGORIES });
   const [biometricEnabled, setBiometricEnabledState] = useState(false);
@@ -269,6 +274,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const applyNotificationSettings = useCallback(
     (settings: NotificationSettings) => {
       setNotificationsEnabledState(settings.notifications_enabled === 1);
+      setPushNotificationsEnabledState(
+        settings.push_notifications_enabled === 1,
+      );
       setNotificationCategories({
         portfolio: settings.portfolio === 1,
         market: settings.market === 1,
@@ -506,6 +514,38 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     [activeAccount],
   );
 
+  const changePushNotificationsEnabled = useCallback(
+    async (enabled: boolean): Promise<boolean> => {
+      if (enabled) {
+        const result = await registerForPushNotificationsAsync();
+        if (!result.success) {
+          notify({
+            variant: "warning",
+            title: "Powiadomienia push",
+            message:
+              result.error ??
+              "Nie udało się włączyć powiadomień push. Sprawdź uprawnienia systemowe.",
+          });
+          setPushNotificationsEnabledState(false);
+          await updateNotificationSettings({
+            push_notifications_enabled: 0,
+            user_id: requireAccount(),
+          });
+          return false;
+        }
+      }
+
+      setPushNotificationsEnabledState(enabled);
+      await updateNotificationSettings({
+        push_notifications_enabled: enabled ? 1 : 0,
+        user_id: requireAccount(),
+      });
+      return true;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeAccount],
+  );
+
   const changeNotificationCategory = useCallback(
     async (key: NotificationCategoryKey, enabled: boolean) => {
       setNotificationCategories((prev) => ({ ...prev, [key]: enabled }));
@@ -582,6 +622,8 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       reloadAccounts,
       notificationsEnabled,
       setNotificationsEnabled: changeNotificationsEnabled,
+      pushNotificationsEnabled,
+      setPushNotificationsEnabled: changePushNotificationsEnabled,
       notificationCategories,
       setNotificationCategory: changeNotificationCategory,
       biometricEnabled,
@@ -611,6 +653,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       changeMultiCurrency,
       changeNotificationCategory,
       changeNotificationsEnabled,
+      changePushNotificationsEnabled,
       colors,
       defaultCurrency,
       fontSizePreference,
@@ -622,6 +665,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       multiCurrency,
       notificationCategories,
       notificationsEnabled,
+      pushNotificationsEnabled,
       rates,
       ratesLoading,
       ratesUpdatedAt,

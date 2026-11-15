@@ -14,6 +14,8 @@ app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const PORT = Number(process.env.PORT || 3000);
+const pendingNotifications = new Map();
+const knownDeviceIds = new Set();
 
 const getLocalIpv4Address = () => {
   const interfaces = os.networkInterfaces();
@@ -288,6 +290,7 @@ app.post("/api/guest", (req, res) => {
   if (!deviceId) return res.status(400).json({ error: "Brak ID urządzenia" });
 
   const token = jwt.sign({ deviceId }, JWT_SECRET, { expiresIn: "7d" });
+  knownDeviceIds.add(deviceId);
   console.log("Generowanie nowego tokenu JWT:", token);
   res.json({ token });
 });
@@ -304,6 +307,38 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+app.get("/api/notifications/pending", authenticateToken, (req, res) => {
+  knownDeviceIds.add(req.user.deviceId);
+  const notifications = pendingNotifications.get(req.user.deviceId) ?? [];
+  pendingNotifications.delete(req.user.deviceId);
+  res.json({ notifications });
+});
+
+// Przykładowy alert LAN: trafia do kolejek urządzeń znanych temu backendowi.
+app.post("/api/notifications/dev-example", (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(404).json({ error: "Endpoint developerski jest wyłączony" });
+  }
+
+  const { title, body, category, data } = req.body ?? {};
+  const notification = {
+    title: title || "Przykładowe powiadomienie",
+    body:
+      body ||
+      "To jest poglądowy alert z lokalnego backendu InvestSimulator.",
+    category: category || "market",
+    data: data || { source: "local-backend" },
+  };
+
+  for (const deviceId of knownDeviceIds) {
+    const notifications = pendingNotifications.get(deviceId) ?? [];
+    notifications.push(notification);
+    pendingNotifications.set(deviceId, notifications.slice(-20));
+  }
+
+  res.status(202).json({ queued: knownDeviceIds.size });
+});
 
 app.get("/api/instruments/search", authenticateToken, async (req, res) => {
   const query = String(req.query.q || "").trim();

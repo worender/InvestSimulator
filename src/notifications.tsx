@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { StyleSheet, View } from "react-native";
+import { authenticatedFetch } from "./api/marketService";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NotificationCard } from "./components/NotificationCard";
@@ -18,6 +19,9 @@ import {
   subscribeToNotifications,
   type AppNotification,
 } from "./notificationBus";
+import { sendLocalPushNotificationAsync } from "./pushNotifications";
+import { isNotificationAllowed } from "./settings/notificationSettings";
+import { useTheme } from "./theme";
 
 type NotificationContextValue = {
   notify: typeof notify;
@@ -51,6 +55,11 @@ const NotificationLayerContext =
 
 // Kolejkuje powiadomienia i renderuje je nad całą aplikacją
 export function NotificationProvider({ children }: PropsWithChildren) {
+  const {
+    notificationsEnabled,
+    notificationCategories,
+    pushNotificationsEnabled,
+  } = useTheme();
   const [queue, setQueue] = useState<AppNotification[]>([]);
   // Warstwy powiadomień wewnątrz natywnych modali. Modal tworzy osobną
   // warstwę natywną, więc powiadomienie z korzenia aplikacji zostałoby pod nim.
@@ -59,13 +68,84 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   const shownAtRef = useRef<Map<string, number>>(new Map());
   const seenRef = useRef<Set<string>>(new Set());
 
+  const settingsRef = useRef({
+    notificationsEnabled,
+    notificationCategories,
+    pushNotificationsEnabled,
+  });
+
+  useEffect(() => {
+    settingsRef.current = {
+      notificationsEnabled,
+      notificationCategories,
+      pushNotificationsEnabled,
+    };
+  }, [notificationsEnabled, notificationCategories, pushNotificationsEnabled]);
+
+  useEffect(() => {
+    if (!notificationsEnabled) {
+      // Wyczyść już wyświetlane alerty po wyłączeniu powiadomień
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setQueue([]);
+    }
+  }, [notificationsEnabled]);
+
   useEffect(
     () =>
       subscribeToNotifications((notification) => {
+        const {
+          notificationsEnabled: enabled,
+          notificationCategories: cats,
+          pushNotificationsEnabled: pushEnabled,
+        } = settingsRef.current;
+
+        if (!isNotificationAllowed(notification.category, enabled, cats)) {
+          return;
+        }
+
+        if (pushEnabled) {
+          void sendLocalPushNotificationAsync(
+            notification.title,
+            notification.message,
+          );
+        }
+
         setQueue((current) => mergeNotificationQueue(current, notification));
       }),
     [],
   );
+
+  useEffect(() => {
+    if (!notificationsEnabled) return undefined;
+
+    const poll = async () => {
+      const response = await authenticatedFetch("/api/notifications/pending");
+      if (!response?.ok) return;
+
+      const payload = (await response.json()) as {
+        notifications?: {
+          title: string;
+          body?: string;
+          category?: string;
+        }[];
+      };
+
+      for (const item of payload.notifications ?? []) {
+        notify({
+          title: item.title,
+          message: item.body,
+          category: item.category,
+        });
+      }
+    };
+
+    void poll();
+    const interval = setInterval(() => {
+      void poll();
+    }, 15_000);
+
+    return () => clearInterval(interval);
+  }, [notificationsEnabled]);
 
   const dismiss = useCallback(() => {
     setQueue((current) => {

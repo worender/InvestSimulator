@@ -104,3 +104,19 @@ export function validateDate(value: number): number {
 
   return value;
 }
+
+export function validateId(value: number, label: string): number {
+  if (value <= 0 || !Number.isInteger(value)) {
+    throw new Error(`Nieprawidłowy ${label}`);
+  }
+
+  return value;
+}
+
+export function validateUserId(value: number): number {
+  return validateId(value, "identyfikator użytkownika");
+}
+
+export function validateWalletId(value: number): number {
+  return validateId(value, "identyfikator portfela");
+}
