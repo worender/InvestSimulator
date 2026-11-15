@@ -185,6 +185,16 @@ const getValidToken = (): Promise<string | null> => {
   return tokenRequest;
 };
 
+// Odświeża token po odpowiedzi 401/403
+const refreshAuthToken = async (staleToken: string): Promise<string | null> => {
+  const currentToken = await getItem("jwtToken");
+  if (currentToken && currentToken !== staleToken) {
+    return currentToken;
+  }
+  await deleteItem("jwtToken");
+  return getValidToken();
+};
+
 // State do śledzenia błędów fetchowania świec
 const lastFetchErrorMap = new Map<
   string,
@@ -322,14 +332,18 @@ const fetchStockCandlesFromApi = async (
     // Sprawdź czy można ponowić próbę po błędzie
     if (!canRetryFetch(symbol)) {
       const state = lastFetchErrorMap.get(symbol);
-      const elapsedSeconds = Math.floor(
-        (Date.now() - (state?.timestamp ?? 0)) / 1000,
+      const remainingSeconds = Math.max(
+        1,
+        Math.ceil(
+          FETCH_RETRY_MINUTES * 60 -
+            (Date.now() - (state?.timestamp ?? 0)) / 1000,
+        ),
       );
       notify({
         variant: "error",
         title: "Opóźnione pobieranie danych",
         category: NOTIFICATION_GROUPS.marketChart,
-        message: `Oczekiwanie na ponowną próbę pobrania danych świec dla ${symbol}. Próba za ${elapsedSeconds} sekund...`,
+        message: `Oczekiwanie na ponowną próbę pobrania danych świec dla ${symbol}. Próba za ${remainingSeconds} sekund...`,
       });
       return null;
     }
@@ -343,8 +357,7 @@ const fetchStockCandlesFromApi = async (
 
     // Token wygasł (401/403), usuwamy go i ponawiamy próbę tylko raz
     if (response.status === 401 || response.status === 403) {
-      await deleteItem("jwtToken");
-      const refreshedToken = await getValidToken();
+      const refreshedToken = await refreshAuthToken(token);
       if (refreshedToken && refreshedToken !== token) {
         response = await request(refreshedToken);
       }
@@ -420,9 +433,9 @@ export const searchInstruments = async (
 
     let response = await request(token);
     if (response.status === 401 || response.status === 403) {
-      await deleteItem("jwtToken");
-      token = await getValidToken();
-      if (!token) return [];
+      const refreshedToken = await refreshAuthToken(token);
+      if (!refreshedToken) return [];
+      token = refreshedToken;
       response = await request(token);
     }
 
@@ -467,9 +480,9 @@ export const getInstrumentQuote = async (
     if (!token) return null;
     let response = await request(token);
     if (response.status === 401 || response.status === 403) {
-      await deleteItem("jwtToken");
-      token = await getValidToken();
-      if (!token) return null;
+      const refreshedToken = await refreshAuthToken(token);
+      if (!refreshedToken) return null;
+      token = refreshedToken;
       response = await request(token);
     }
     if (!response.ok) {
@@ -500,12 +513,23 @@ const fetchDynamicTrendsFromApi = async (
     const token = await getValidToken();
     if (!token) return [];
     const baseUrl = await getApiBaseUrl();
-    const response = await fetch(
-      `${baseUrl}/api/trends?category=${encodeURIComponent(category)}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      },
-    );
+    const url = `${baseUrl}/api/trends?category=${encodeURIComponent(category)}`;
+    const request = (authToken: string) =>
+      fetch(url, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+
+    let response = await request(token);
+
+    // Token wygasł (401/403)
+    // Usuwamy go i ponawiamy próbę tylko raz
+    if (response.status === 401 || response.status === 403) {
+      const refreshedToken = await refreshAuthToken(token);
+      if (refreshedToken && refreshedToken !== token) {
+        response = await request(refreshedToken);
+      }
+    }
+
     if (!response.ok) throw new Error(`Błąd trendów: ${response.status}`);
     const data: unknown = await response.json();
     const result = Array.isArray(data) ? (data as DynamicTrendAsset[]) : [];
@@ -639,10 +663,10 @@ export const authenticatedFetch = async (
 
     let response = await request(token);
     if (response.status === 401 || response.status === 403) {
-      await deleteItem("jwtToken");
-      token = await getValidToken();
-      if (!token) return null;
-      response = await request(token);
+      const refreshedToken = await refreshAuthToken(token);
+      if (refreshedToken && refreshedToken !== token) {
+        response = await request(refreshedToken);
+      }
     }
 
     return response;
