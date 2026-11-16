@@ -1521,6 +1521,8 @@ export async function createDailySnapshots(
   return snapshots;
 }
 
+
+
 export async function clearLocalDatabase(): Promise<void> {
   const database = await getReadyDatabase();
   await database.withTransactionAsync(async () => {
