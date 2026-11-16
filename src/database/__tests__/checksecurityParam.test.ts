@@ -3,6 +3,7 @@ import { describe, expect, it } from "@jest/globals";
 import {
   normalizeAndValidateSymbol,
   validateAvatarUrl,
+  validateBoolean,
   validateCurrencyCode,
   validateDate,
   validateIconWallet,
@@ -140,6 +141,20 @@ describe("validateDate", () => {
     "odrzuca niepoprawną datę: %s",
     (value) => {
       expect(() => validateDate(value)).toThrow();
+    },
+  );
+});
+
+describe("validateBoolean", () => {
+  it("akceptuje 0 i 1", () => {
+    expect(validateBoolean(0)).toBe(0);
+    expect(validateBoolean(1)).toBe(1);
+  });
+
+  it.each([-1, 2, NaN, Infinity])(
+    "odrzuca niepoprawną wartość logiczną: %s",
+    (value) => {
+      expect(() => validateBoolean(value)).toThrow();
     },
   );
 });
