@@ -1,4 +1,3 @@
-
 export function normalizeAndValidateSymbol(value: string): string {
   const symbol = value.trim().toUpperCase();
 
@@ -14,23 +13,43 @@ export function normalizeAndValidateSymbol(value: string): string {
   return symbol;
 }
 
-export function ValidateUserName(value: string): string {
-  const userName = value.trim(); 
+export function validateUserName(value: string): string {
+  const userName = value.trim();
 
   if (userName.length === 0 || userName.length > 30) {
     throw new Error("Nieprawidłowa nazwa użytkownika");
-  }else if (!/^[a-zA-Z0-9._ -]+$/.test(userName)) {
-    throw new Error("Nazwa użytkownika może zawierać tylko litery, cyfry, kropki, podkreślenia i myślniki");
+  } else if (!/^[a-zA-Z0-9._ -]+$/.test(userName)) {
+    throw new Error(
+      "Nazwa użytkownika może zawierać tylko litery, cyfry, kropki, podkreślenia i myślniki",
+    );
   }
 
   return userName;
 }
 
-export function ValidateAvatarUrl(value: string): string {
+export function validateWalletName(value: string): string {
+  const userName = value.trim();
+
+  if (userName.length === 0 || userName.length > 30) {
+    throw new Error("Nieprawidłowa nazwa portfela");
+  } else if (!/^[a-zA-Z0-9._ -]+$/.test(userName)) {
+    throw new Error(
+      "Nazwa portfela może zawierać tylko litery, cyfry, kropki, podkreślenia i myślniki",
+    );
+  }
+
+  return userName;
+}
+
+export function validateAvatarUrl(value: string): string {
   const avatarUrl = value.trim();
   const allowedProtocols = ["http:", "https:", "file:", "content:"];
 
   if (avatarUrl.length === 0 || avatarUrl.length > 500) {
+    throw new Error("Nieprawidłowy URL avatara");
+  }
+
+  if (/[<>"'`]/.test(avatarUrl)) {
     throw new Error("Nieprawidłowy URL avatara");
   }
 
@@ -47,4 +66,61 @@ export function ValidateAvatarUrl(value: string): string {
   }
 
   return avatarUrl;
+}
+
+export function validateNumberReal(value: number): number {
+  if (isNaN(value) || !isFinite(value)) {
+    throw new Error("Nieprawidłowa liczba");
+  }
+
+  return value;
+}
+
+export function validateCurrencyCode(value: string): string {
+  const currencyCode = value.trim().toUpperCase();
+
+  if (!/^[A-Z]{3}$/.test(currencyCode)) {
+    throw new Error("Nieprawidłowy kod waluty");
+  }
+
+  return currencyCode;
+}
+
+export function validateIconWallet(value: string): string {
+  const iconWallet = value.trim();
+
+  if (
+    iconWallet.length === 0 ||
+    iconWallet.length > 50 ||
+    !/^[a-z0-9-]+$/.test(iconWallet)
+  ) {
+    throw new Error("Nieprawidłowa nazwa ikony portfela");
+  }
+
+  return iconWallet;
+}
+
+export function validateDate(value: number): number {
+  if (isNaN(value) || !isFinite(value) || value < 0) {
+    throw new Error("Nieprawidłowa data");
+  }
+
+  return value;
+}
+
+// Wspólna walidacja dodatnich identyfikatorów całkowitych
+export function validateId(value: number, label: string): number {
+  if (value <= 0 || !Number.isInteger(value)) {
+    throw new Error(`Nieprawidłowy ${label}`);
+  }
+
+  return value;
+}
+
+export function validateUserId(value: number): number {
+  return validateId(value, "identyfikator użytkownika");
+}
+
+export function validateWalletId(value: number): number {
+  return validateId(value, "identyfikator portfela");
 }

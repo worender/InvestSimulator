@@ -33,11 +33,15 @@ import {
   SettingsRow,
 } from "../../components/settings/SettingsPrimitives";
 import { SettingsToggle } from "../../components/settings/SettingsToggle";
-import { deleteLocalDatabase } from "../../database/database";
+import {
+  deleteLocalDatabase,
+  type CustomAccentColor,
+} from "../../database/database";
 import { hasPassword } from "../../database/passwords";
 import { FALLBACK_RATES } from "../../displayCurrency";
 import { NOTIFICATION_GROUPS, notify } from "../../notificationBus";
 import { pickAvatar } from "../../settings/avatars";
+import { MAX_CUSTOM_ACCENTS } from "../../settings/color";
 import { NOTIFICATION_CATEGORY_OPTIONS } from "../../settings/notificationSettings";
 import {
   useTheme,
@@ -79,6 +83,9 @@ export default function SettingsScreen() {
     toggleMode,
     accent,
     setAccent,
+    customAccents,
+    addCustomAccent,
+    updateCustomAccent,
     defaultCurrency,
     setDefaultCurrency,
     multiCurrency,
@@ -131,7 +138,9 @@ export default function SettingsScreen() {
   const [editAccountOpen, setEditAccountOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [passwordConfigured, setPasswordConfigured] = useState(false);
-  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [colorPickerTarget, setColorPickerTarget] = useState<
+    { mode: "add" } | { mode: "edit"; custom: CustomAccentColor } | null
+  >(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [resetDatabaseOpen, setResetDatabaseOpen] = useState(false);
@@ -439,11 +448,20 @@ export default function SettingsScreen() {
             >
               <AccentColorPicker
                 accent={accent}
+                customAccents={customAccents}
                 onChange={(next) => {
                   void setAccent(next);
                 }}
-                onAddCustom={() => setColorPickerOpen(true)}
+                onAddCustom={() => setColorPickerTarget({ mode: "add" })}
+                onEditCustom={(custom) =>
+                  setColorPickerTarget({ mode: "edit", custom })
+                }
               />
+              <Text style={[styles.swatchHint, { color: colors.textMuted }]}>
+                {customAccents.length >= MAX_CUSTOM_ACCENTS
+                  ? `Zapisano ${MAX_CUSTOM_ACCENTS} własne kolory. Możesz je edytować, wybierając ołówek.`
+                  : `Własne kolory: ${customAccents.length}/${MAX_CUSTOM_ACCENTS}. Zapisane kolory pojawiają się na końcu listy.`}
+              </Text>
             </View>
           </SettingsCategory>
 
@@ -769,6 +787,31 @@ export default function SettingsScreen() {
                 Usuń lokalną bazę danych
               </Text>
             </Pressable>
+            {__DEV__ ? (
+              <Pressable
+                onPress={() => router.push("../database-test")}
+                accessibilityRole="button"
+                accessibilityLabel="Testuj bazę danych"
+                style={({ pressed }) => [
+                  styles.logoutButton,
+                  {
+                    borderColor: colors.accent,
+                    backgroundColor: pressed
+                      ? colors.accentGlass
+                      : "transparent",
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="flask-outline"
+                  size={19}
+                  color={colors.accent}
+                />
+                <Text style={[styles.logoutText, { color: colors.accent }]}>
+                  Testuj bazę danych
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
 
           <View>
@@ -798,7 +841,7 @@ export default function SettingsScreen() {
             const profile = await addAccount({ username: name, avatarUri });
 
             if (!profile) return;
-            
+
             notify({
               variant: "success",
               title: "Konto utworzone",
@@ -818,7 +861,10 @@ export default function SettingsScreen() {
           initialAvatar={activeAccount?.avatar_uri ?? null}
           onClose={() => setEditAccountOpen(false)}
           onSaved={async ({ name, avatarUri }) => {
-            const success = await updateAccount({ username: name, avatar_uri: avatarUri });
+            const success = await updateAccount({
+              username: name,
+              avatar_uri: avatarUri,
+            });
 
             if (!success) return;
 
@@ -840,13 +886,43 @@ export default function SettingsScreen() {
         />
       ) : null}
 
-      {colorPickerOpen ? (
+      {colorPickerTarget ? (
         <ColorPickerSheet
-          initialColor={customAccent}
-          onClose={() => setColorPickerOpen(false)}
+          initialColor={
+            colorPickerTarget.mode === "edit"
+              ? colorPickerTarget.custom.color
+              : customAccent
+          }
+          title={
+            colorPickerTarget.mode === "edit"
+              ? "Edytuj własny kolor"
+              : "Własny kolor akcentu"
+          }
+          subtitle={
+            colorPickerTarget.mode === "edit"
+              ? "Zmień zapisany kolor"
+              : "Dodaj nowy kolor"
+          }
+          submitLabel={
+            colorPickerTarget.mode === "edit"
+              ? "Zapisz kolor"
+              : "Dodaj ten kolor"
+          }
+          onClose={() => setColorPickerTarget(null)}
           onSelect={(color) => {
-            void setAccent(color);
-            setColorPickerOpen(false);
+            const target = colorPickerTarget;
+            setColorPickerTarget(null);
+
+            if (target.mode === "edit") {
+              void updateCustomAccent(target.custom.id, color).then((ok) => {
+                if (ok) void setAccent(color);
+              });
+              return;
+            }
+
+            void addCustomAccent(color).then((ok) => {
+              if (ok) void setAccent(color);
+            });
           }}
         />
       ) : null}
@@ -898,11 +974,21 @@ const styles = StyleSheet.create({
   blurTarget: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 24 },
   // Na desktopie treść w wyśrodkowanej kolumnie o ograniczonej szerokości
-  contentDesktop: { width: "100%", maxWidth: 760, alignSelf: "center", paddingHorizontal: 32 },
+  contentDesktop: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
+    paddingHorizontal: 32,
+  },
   swatchArea: {
     paddingTop: 12,
     paddingBottom: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  swatchHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 10,
   },
   rateRow: {
     flexDirection: "row",

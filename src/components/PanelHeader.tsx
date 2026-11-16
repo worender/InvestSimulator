@@ -243,7 +243,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 8,
     zIndex: 20,
-    elevation: 20,
   },
   bottomLine: {
     position: "absolute",

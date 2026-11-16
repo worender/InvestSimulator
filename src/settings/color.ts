@@ -1,7 +1,17 @@
 export type HsvColor = { h: number; s: number; v: number };
 
+// Maksymalna liczba własnych kolorów motywu zapisywanych na konto
+export const MAX_CUSTOM_ACCENTS = 3;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+// Zwraca kolor w formacie #RRGGBB
+export function normalizeHexColor(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^#[0-9a-f]{6}$/i.test(trimmed) ? trimmed.toUpperCase() : null;
 }
 
 export function hsvToHex(h: number, s: number, v: number): string {

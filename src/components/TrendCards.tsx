@@ -135,6 +135,15 @@ const TREND_RANGE_INDEX = Math.max(
   CHART_RANGES.findIndex((range) => range.days === 30),
 );
 
+const TREND_LOAD_ATTEMPTS = 3;
+const TREND_RETRY_DELAY_MS = 1200;
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 function getInitialCategoryData(cat: string) {
   const staticTrends = STATIC_TRENDS[cat];
   const cachedTrends = staticTrends
@@ -177,6 +186,8 @@ export function TrendCards() {
   const [loadedCategory, setLoadedCategory] = useState(
     initial.isReady ? "gainers" : "",
   );
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [selectedAsset, setSelectedAsset] = useState<DynamicTrendAsset | null>(
     null,
   );
@@ -184,6 +195,7 @@ export function TrendCards() {
 
   const handleCategoryChange = (newCategory: string) => {
     setCategory(newCategory);
+    setLoadFailed(false);
     const cached = getInitialCategoryData(newCategory);
     if (cached.isReady) {
       setAssets(cached.assets);
@@ -192,19 +204,53 @@ export function TrendCards() {
     }
   };
 
+  const handleRetry = () => {
+    setLoadFailed(false);
+    setLoadedCategory("");
+    setReloadKey((key) => key + 1);
+  };
+
   useEffect(() => {
     let active = true;
 
+    const loadTrends = async (): Promise<DynamicTrendAsset[] | null> => {
+      const staticTrends = STATIC_TRENDS[category];
+      if (staticTrends) return pickRandom(staticTrends, 3);
+
+      // Ponawianie pobierania trendów w celu wyelimiowania losowych błędów lub problemów z tokenem
+      for (let attempt = 1; attempt <= TREND_LOAD_ATTEMPTS; attempt += 1) {
+        const trends = await getDynamicTrends(category);
+        if (!active) return null;
+        if (trends.length > 0) return trends;
+        if (attempt < TREND_LOAD_ATTEMPTS) {
+          await delay(TREND_RETRY_DELAY_MS * attempt);
+          if (!active) return null;
+        }
+      }
+      return [];
+    };
+
     const loadTrendsAndCandles = async () => {
       try {
-        const staticTrends = STATIC_TRENDS[category];
-        const trends = staticTrends
-          ? pickRandom(staticTrends, 3)
-          : await getDynamicTrends(category);
+        const trends = await loadTrends();
+        if (!active || trends === null) return;
 
-        if (!active) return;
+        if (trends.length === 0) {
+          setLoadFailed(true);
+          setLoadedCategory(category);
+          notify({
+            variant: "error",
+            title: "Błąd ładowania trendów",
+            category: NOTIFICATION_GROUPS.marketTrends,
+            message:
+              "Nie udało się pobrać danych trendów. Spróbuj ponownie później.",
+          });
+          return;
+        }
+
         const selectedTrends = trends.slice(0, 3);
         setAssets(selectedTrends);
+        setLoadFailed(false);
 
         // Pobieranie danych (z pamięci podręcznej lub z API)
         const candlesResults = await Promise.all(
@@ -237,17 +283,14 @@ export function TrendCards() {
       } catch (error) {
         console.error("Błąd ładowania trendów:", error);
         if (active) {
-          setData((prevData) => {
-            if (Object.keys(prevData).length === 0) {
-              notify({
-                variant: "error",
-                title: "Błąd ładowania trendów",
-                category: NOTIFICATION_GROUPS.marketTrends,
-                message:
-                  "Nie udało się pobrać danych trendów. Spróbuj ponownie później.",
-              });
-            }
-            return prevData;
+          setLoadFailed(true);
+          setLoadedCategory(category);
+          notify({
+            variant: "error",
+            title: "Błąd ładowania trendów",
+            category: NOTIFICATION_GROUPS.marketTrends,
+            message:
+              "Nie udało się pobrać danych trendów. Spróbuj ponownie później.",
           });
         }
       }
@@ -258,7 +301,7 @@ export function TrendCards() {
     return () => {
       active = false;
     };
-  }, [category]);
+  }, [category, reloadKey]);
 
   return (
     <View>
@@ -311,6 +354,18 @@ export function TrendCards() {
             </View>
           ))}
         </View>
+      ) : loadFailed ? (
+        <Pressable
+          onPress={handleRetry}
+          accessibilityRole="button"
+          accessibilityLabel="Spróbuj ponownie pobrać trendy"
+          style={({ pressed }) => [styles.retry, pressed && styles.itemPressed]}
+        >
+          <Ionicons name="refresh-outline" size={18} color={colors.textMuted} />
+          <Text style={[styles.retryText, { color: colors.textMuted }]}>
+            Nie udało się pobrać trendów. Spróbuj ponownie
+          </Text>
+        </Pressable>
       ) : (
         <View>
           {assets.slice(0, 3).map((asset, index) => (
@@ -360,7 +415,7 @@ function TrendCard({
     value: display.convertForDisplay(item.close, currency),
   }));
   const hasChart = values.length > 1;
-  
+
   const change = trendChangePercent(values, asset.changePercent);
   const tone = change >= 0 ? colors.positive : colors.negative;
   const changeLabel = `${change >= 0 ? "+" : ""}${change.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
@@ -513,6 +568,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   chartEmptyText: { fontSize: 11, fontWeight: "500" },
+  retry: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 28,
+  },
+  retryText: { fontSize: 12, fontWeight: "500" },
   chartSkeleton: { height: 88, marginTop: 12, position: "relative" },
   chartLineTop: { position: "absolute", top: 16, left: 0, right: 0 },
   chartLineMiddle: { position: "absolute", top: 52, left: 0, right: 0 },

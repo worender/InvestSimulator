@@ -21,18 +21,23 @@ import {
   setLoggedIn,
 } from "./database/activeAccount";
 import {
+  addCustomAccentColor,
   createUserProfile,
+  getCustomAccentColors,
   getNotificationSettings,
   getSettings,
   getUserProfile,
   getUserProfiles,
+  updateCustomAccentColor,
   updateNotificationSettings,
   updateSettings,
   updateUserProfile,
+  type CustomAccentColor,
   type NotificationSettings,
   type Settings,
   type UserProfile,
 } from "./database/database";
+import { MAX_CUSTOM_ACCENTS, normalizeHexColor } from "./settings/color";
 import {
   FALLBACK_RATES,
   setDisplayCurrencyState,
@@ -56,7 +61,6 @@ export type AccentPreset = {
   label: string;
   dark: string;
   light: string;
-  rainbow?: boolean;
 };
 
 export const ACCENT_PRESETS: AccentPreset[] = [
@@ -73,13 +77,6 @@ export const ACCENT_PRESETS: AccentPreset[] = [
   { key: "Różowy", label: "Różowy", dark: "#f778ba", light: "#bf3989" },
   { key: "Turkusowy", label: "Turkusowy", dark: "#39c5cf", light: "#1b7c83" },
   { key: "Żółty", label: "Żółty", dark: "#e3b341", light: "#9a6700" },
-  {
-    key: "Tęczowy",
-    label: "Tęczowy",
-    dark: "#d946ef",
-    light: "#a21caf",
-    rainbow: true,
-  },
 ];
 
 const DEFAULT_ACCENT: ThemeAccent = "Niebieski";
@@ -99,14 +96,14 @@ const LEGACY_ACCENTS: Record<string, ThemeAccent> = {
   pink: "Różowy",
   teal: "Turkusowy",
   yellow: "Żółty",
-  rainbow: "Tęczowy",
 };
 
 export function resolveThemeAccent(value: unknown): ThemeAccent {
   if (typeof value !== "string") return DEFAULT_ACCENT;
   const trimmed = value.trim();
 
-  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed.toUpperCase();
+  const custom = normalizeHexColor(trimmed);
+  if (custom) return custom;
   if (ACCENT_PRESETS.some((preset) => preset.key === trimmed)) return trimmed;
   return LEGACY_ACCENTS[trimmed.toLowerCase()] ?? DEFAULT_ACCENT;
 }
@@ -180,6 +177,9 @@ type ThemeContextValue = {
   toggleMode: () => Promise<void>;
   accent: ThemeAccent;
   setAccent: (accent: ThemeAccent) => Promise<void>;
+  customAccents: CustomAccentColor[];
+  addCustomAccent: (color: string) => Promise<boolean>;
+  updateCustomAccent: (id: number, color: string) => Promise<boolean>;
   defaultCurrency: Currency;
   setDefaultCurrency: (currency: Currency) => Promise<void>;
   multiCurrency: boolean;
@@ -224,6 +224,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: PropsWithChildren) {
   const [mode, setModeState] = useState<ThemeMode>("dark");
   const [accent, setAccentState] = useState<ThemeAccent>(DEFAULT_ACCENT);
+  const [customAccents, setCustomAccents] = useState<CustomAccentColor[]>([]);
   const [defaultCurrency, setDefaultCurrencyState] = useState<Currency>("PLN");
   const [multiCurrency, setMultiCurrencyState] = useState(true);
   const [fontSizePreference, setFontSizePreferenceState] =
@@ -332,10 +333,29 @@ export function ThemeProvider({ children }: PropsWithChildren) {
           const notificationSettings = await getNotificationSettings(
             profile.id,
           );
+          let savedCustomAccents = await getCustomAccentColors(profile.id);
 
+          // Kolory wybrane przed wprowadzeniem listy własnych kolorów nie
+          // miały wpisu w tabeli — dopisujemy aktywny kolor, aby nie zniknął.
+          const activeAccent = settings
+            ? normalizeHexColor(settings.color_mode)
+            : null;
+          if (
+            activeAccent &&
+            savedCustomAccents.length < MAX_CUSTOM_ACCENTS &&
+            !savedCustomAccents.some((item) => item.color === activeAccent)
+          ) {
+            savedCustomAccents = [
+              ...savedCustomAccents,
+              await addCustomAccentColor(profile.id, activeAccent),
+            ];
+          }
+
+          if (!active) return;
           if (settings) applySettings(settings);
           if (notificationSettings)
             applyNotificationSettings(notificationSettings);
+          setCustomAccents(savedCustomAccents);
         }
       } catch (error) {
         console.error("Nie udało się wczytać profilu z SQLite:", error);
@@ -363,6 +383,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       if (!profile) return;
       setActiveAccountId(userId);
       applyProfile(profile);
+      setCustomAccents(await getCustomAccentColors(userId));
     },
     [applyProfile],
   );
@@ -378,6 +399,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         setAccounts(profiles);
         setActiveAccountId(profile.id);
         applyProfile(profile);
+        setCustomAccents([]);
         return profile;
       } catch (error) {
         notify({
@@ -446,6 +468,60 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       await updateSettings({ color_mode: resolved, user_id: requireAccount() });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeAccount],
+  );
+
+  const addCustomAccent = useCallback(
+    async (color: string) => {
+      if (!activeAccount) return false;
+
+      try {
+        const created = await addCustomAccentColor(activeAccount.id, color);
+        setCustomAccents((current) => [...current, created]);
+        return true;
+      } catch (error) {
+        notify({
+          variant: "error",
+          title: "Nie udało się dodać koloru",
+          category: NOTIFICATION_GROUPS.appearance,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Spróbuj ponownie za chwilę.",
+        });
+        return false;
+      }
+    },
+    [activeAccount],
+  );
+
+  const updateCustomAccent = useCallback(
+    async (id: number, color: string) => {
+      if (!activeAccount) return false;
+
+      try {
+        const updated = await updateCustomAccentColor(
+          activeAccount.id,
+          id,
+          color,
+        );
+        setCustomAccents((current) =>
+          current.map((item) => (item.id === id ? updated : item)),
+        );
+        return true;
+      } catch (error) {
+        notify({
+          variant: "error",
+          title: "Nie udało się zapisać koloru",
+          category: NOTIFICATION_GROUPS.appearance,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Spróbuj ponownie za chwilę.",
+        });
+        return false;
+      }
+    },
     [activeAccount],
   );
 
@@ -567,6 +643,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       toggleMode: () => changeMode(mode === "dark" ? "light" : "dark"),
       accent,
       setAccent: changeAccent,
+      customAccents,
+      addCustomAccent,
+      updateCustomAccent,
       defaultCurrency,
       setDefaultCurrency: changeCurrency,
       multiCurrency,
@@ -599,9 +678,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     }),
     [
       accent,
+      addAccount,
+      addCustomAccent,
       accounts,
       activeAccount,
-      addAccount,
       biometricEnabled,
       changeAccent,
       changeBiometricEnabled,
@@ -612,6 +692,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       changeNotificationCategory,
       changeNotificationsEnabled,
       colors,
+      customAccents,
       defaultCurrency,
       fontSizePreference,
       fontSizeScale,
@@ -629,6 +710,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       reloadAccounts,
       switchAccount,
       updateAccount,
+      updateCustomAccent,
     ],
   );
 

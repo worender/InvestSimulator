@@ -1,31 +1,300 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { type ComponentRef, useRef, useState } from "react";
 import {
-  Animated,
-  Dimensions,
-  Easing,
-  Modal,
+  type ComponentRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  type LayoutChangeEvent,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { NotificationHost } from "../notifications";
+import Reanimated, {
+  Easing,
+  Extrapolation,
+  interpolate,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useTheme } from "../theme";
-import { useResetOnPanelBlur } from "../useResetOnPanelBlur";
 
-type CategoryOption<T extends string> = {
+export type CategoryOption<T extends string> = {
   key: T;
   label: string;
+  icon?: keyof typeof Ionicons.glyphMap | null;
 };
 
-type CategorySelectorProps<T extends string> = {
+export type CategorySelectorProps<T extends string> = {
   options: readonly CategoryOption<T>[];
-  value: T;
-  onChange: (value: T) => void;
+  value?: T;
+  onChange?: (value: T) => void;
   accessibilityLabel?: string;
 };
+
+const DEFAULT_CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  watchlist: "star-outline",
+  obserwowane: "star-outline",
+  pl: "flag-outline",
+  polska: "flag-outline",
+  world: "globe-outline",
+  liderzy: "globe-outline",
+  cfd: "swap-vertical-outline",
+  crypto: "logo-bitcoin",
+  krypto: "logo-bitcoin",
+  gainers: "trending-up-outline",
+  zyskujące: "trending-up-outline",
+  active: "flame-outline",
+  najaktywniejsze: "flame-outline",
+  zaskakujące: "flash-outline",
+  technology: "hardware-chip-outline",
+  bigtech: "hardware-chip-outline",
+  currencies: "cash-outline",
+  waluty: "cash-outline",
+  details: "information-circle-outline",
+  szczegóły: "information-circle-outline",
+  trade: "swap-horizontal-outline",
+  handel: "swap-horizontal-outline",
+  all: "apps-outline",
+  wszystko: "apps-outline",
+  stocks: "bar-chart-outline",
+  akcje: "bar-chart-outline",
+  etf: "pie-chart-outline",
+  funds: "briefcase-outline",
+  bonds: "document-text-outline",
+  obligacje: "document-text-outline",
+  news: "newspaper-outline",
+  wiadomości: "newspaper-outline",
+  settings: "settings-outline",
+  ustawienia: "settings-outline",
+};
+
+export function resolveCategoryIcon<T extends string>(
+  option: CategoryOption<T>,
+): keyof typeof Ionicons.glyphMap | null {
+  if (option.icon !== undefined) {
+    return option.icon;
+  }
+  const keyStr = String(option.key).trim().toLowerCase();
+  const labelStr = option.label.trim().toLowerCase();
+
+  // Brak ikon dla kategorii zaczynających się od cyfr (np. "1M", "3M", "5Y")
+  if (/^\d/i.test(keyStr) || /^\d/i.test(labelStr)) {
+    return null;
+  }
+
+  if (DEFAULT_CATEGORY_ICONS[keyStr]) {
+    return DEFAULT_CATEGORY_ICONS[keyStr];
+  }
+  if (DEFAULT_CATEGORY_ICONS[labelStr]) {
+    return DEFAULT_CATEGORY_ICONS[labelStr];
+  }
+  for (const [matchKey, iconName] of Object.entries(DEFAULT_CATEGORY_ICONS)) {
+    if (keyStr.includes(matchKey) || labelStr.includes(matchKey)) {
+      return iconName;
+    }
+  }
+  return "shapes-outline";
+}
+
+const COLLAPSED_WIDTH = 38;
+const HORIZONTAL_PADDING = 14;
+
+const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
+
+type CategoryItemProps<T extends string> = {
+  option: CategoryOption<T>;
+  isSelected: boolean;
+  onSelect: (key: T) => void;
+  onItemLayout?: (key: string, event: LayoutChangeEvent) => void;
+  colors: ReturnType<typeof useTheme>["colors"];
+};
+
+function CategoryItem<T extends string>({
+  option,
+  isSelected,
+  onSelect,
+  onItemLayout,
+  colors,
+}: CategoryItemProps<T>) {
+  const iconName = resolveCategoryIcon(option);
+  const hasIcon = iconName !== null;
+
+  const initialEstimatedWidth = Math.max(
+    COLLAPSED_WIDTH,
+    Math.ceil(option.label.length * 8.5) + HORIZONTAL_PADDING * 2,
+  );
+
+  const [measuredTextWidth, setMeasuredTextWidth] = useState<number | null>(
+    null,
+  );
+  const expandedWidthShared = useSharedValue(initialEstimatedWidth);
+  const progress = useSharedValue(isSelected ? 1 : 0);
+
+  useEffect(() => {
+    if (measuredTextWidth !== null) {
+      expandedWidthShared.value = Math.max(
+        COLLAPSED_WIDTH,
+        measuredTextWidth + HORIZONTAL_PADDING * 2,
+      );
+    }
+  }, [measuredTextWidth, expandedWidthShared]);
+
+  useEffect(() => {
+    progress.value = withTiming(isSelected ? 1 : 0, {
+      duration: 250,
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+    });
+  }, [isSelected, progress]);
+
+  const containerAnimStyle = useAnimatedStyle(() => {
+    const width = hasIcon
+      ? interpolate(
+          progress.value,
+          [0, 1],
+          [COLLAPSED_WIDTH, expandedWidthShared.value],
+          Extrapolation.CLAMP,
+        )
+      : expandedWidthShared.value;
+
+    return {
+      width,
+    };
+  });
+
+  const bubbleAnimStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+  }));
+
+  const iconAnimStyle = useAnimatedStyle(() => {
+    if (!hasIcon) {
+      return { opacity: 0, transform: [{ scale: 0 }] };
+    }
+    const opacity = interpolate(
+      progress.value,
+      [0, 0.45],
+      [1, 0],
+      Extrapolation.CLAMP,
+    );
+    const scale = interpolate(
+      progress.value,
+      [0, 0.45],
+      [1, 0.55],
+      Extrapolation.CLAMP,
+    );
+    return {
+      opacity,
+      transform: [{ scale }],
+    };
+  });
+
+  const textAnimStyle = useAnimatedStyle(() => {
+    if (!hasIcon) {
+      return {
+        opacity: 1,
+        transform: [{ scale: 1 }],
+      };
+    }
+
+    const opacity = interpolate(
+      progress.value,
+      [0.35, 1],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    const scale = interpolate(
+      progress.value,
+      [0.35, 1],
+      [0.85, 1],
+      Extrapolation.CLAMP,
+    );
+    return {
+      opacity,
+      transform: [{ scale }],
+    };
+  });
+
+  const textColorStyle = useAnimatedStyle(() => {
+    if (!hasIcon) {
+      const color = interpolateColor(
+        progress.value,
+        [0, 1],
+        [colors.textMuted, colors.accent],
+      );
+      return { color };
+    }
+    return { color: colors.accent };
+  });
+
+  const onTextLayout = useCallback((e: LayoutChangeEvent) => {
+    const w = Math.ceil(e.nativeEvent.layout.width);
+    if (w > 0) {
+      setMeasuredTextWidth(w);
+    }
+  }, []);
+
+  return (
+    <AnimatedPressable
+      onPress={() => onSelect(option.key)}
+      onLayout={(e) => onItemLayout?.(option.key, e)}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: isSelected }}
+      accessibilityLabel={option.label}
+      style={[styles.itemBubble, containerAnimStyle]}
+    >
+      <Reanimated.View
+        style={[
+          StyleSheet.absoluteFill,
+          styles.bubbleHighlight,
+          {
+            backgroundColor: colors.accentGlass,
+            borderColor: colors.borderGlass,
+          },
+          bubbleAnimStyle,
+        ]}
+        pointerEvents="none"
+      />
+
+      <View
+        style={styles.hiddenMeasurer}
+        pointerEvents="none"
+        onLayout={onTextLayout}
+      >
+        <Text style={styles.label} numberOfLines={1}>
+          {option.label}
+        </Text>
+      </View>
+
+      {hasIcon ? (
+        <Reanimated.View
+          style={[styles.iconWrap, iconAnimStyle]}
+          pointerEvents="none"
+        >
+          <Ionicons name={iconName} size={18} color={colors.textMuted} />
+        </Reanimated.View>
+      ) : null}
+
+      <Reanimated.View
+        style={[styles.textWrap, textAnimStyle]}
+        pointerEvents="none"
+      >
+        <Reanimated.Text
+          numberOfLines={1}
+          style={[styles.label, textColorStyle]}
+        >
+          {option.label}
+        </Reanimated.Text>
+      </Reanimated.View>
+    </AnimatedPressable>
+  );
+}
 
 export function CategorySelector<T extends string>({
   options,
@@ -33,377 +302,82 @@ export function CategorySelector<T extends string>({
   onChange,
   accessibilityLabel,
 }: CategorySelectorProps<T>) {
-  const { colors, mode } = useTheme();
-  const pillRef = useRef<ComponentRef<typeof View>>(null);
+  const { colors } = useTheme();
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const itemCoords = useRef<Record<string, { x: number; width: number }>>({});
 
-  const [coords, setCoords] = useState<{
-    top: number;
-    left: number;
-    width: number;
-  } | null>(null);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const progress = useState(() => new Animated.Value(0))[0];
+  // Domyślnie pierwszy klucz jest wybrany
+  const defaultKey = options[0]?.key;
+  const [internalValue, setInternalValue] = useState<T | undefined>(defaultKey);
 
-  // Zmiana panelu zamyka listę, która jest tylko nakładką nad treścią
-  useResetOnPanelBlur(() => {
-    if (!isMenuOpen) return;
-    progress.stopAnimation();
-    progress.setValue(0);
-    setIsMenuOpen(false);
-  });
+  const activeKey = useMemo(() => {
+    const candidate = value !== undefined ? value : internalValue;
+    const exists = options.some((opt) => opt.key === candidate);
+    return exists ? (candidate as T) : (options[0]?.key as T);
+  }, [value, internalValue, options]);
 
-  const [activeSlots, setActiveSlots] = useState<{
-    first: T;
-    second: T | null;
-  }>(() => {
-    const valIndex = options.findIndex((o) => o.key === value);
-    const first = valIndex > 1 ? value : (options[0]?.key ?? value);
-    const second =
-      options.length >= 2
-        ? valIndex > 1
-          ? options[0].key
-          : (options[1]?.key ?? null)
-        : null;
-    return { first, second };
-  });
-
-  const [prevValue, setPrevValue] = useState(value);
-  const [prevOptions, setPrevOptions] = useState(options);
-
-  if (prevValue !== value || prevOptions !== options) {
-    setPrevValue(value);
-    setPrevOptions(options);
-
-    const keys = options.map((o) => o.key);
-    let nextFirst = activeSlots.first;
-    let nextSecond = activeSlots.second;
-
-    if (!keys.includes(nextFirst)) {
-      nextFirst = keys[0] ?? value;
-    }
-    if (value !== nextFirst && value !== nextSecond) {
-      nextFirst = value;
-    }
-
-    if (keys.length >= 2) {
-      if (
-        !nextSecond ||
-        !keys.includes(nextSecond) ||
-        nextSecond === nextFirst
-      ) {
-        nextSecond = keys.find((k) => k !== nextFirst) ?? keys[1] ?? null;
+  const handleSelect = useCallback(
+    (key: T) => {
+      setInternalValue(key);
+      if (onChange && key !== value) {
+        onChange(key);
       }
-    } else {
-      nextSecond = null;
+    },
+    [onChange, value],
+  );
+
+  const onItemLayout = useCallback((key: string, event: LayoutChangeEvent) => {
+    const { x, width } = event.nativeEvent.layout;
+    itemCoords.current[key] = { x, width };
+  }, []);
+
+  useEffect(() => {
+    if (!activeKey) return;
+    const coord = itemCoords.current[activeKey];
+    if (coord && scrollRef.current) {
+      scrollRef.current.scrollTo({
+        x: Math.max(0, coord.x - 24),
+        animated: true,
+      });
     }
+  }, [activeKey]);
 
-    setActiveSlots({ first: nextFirst, second: nextSecond });
-  }
-
-  if (options.length === 0) {
+  if (!options || options.length === 0) {
     return null;
   }
 
-  const firstOption =
-    options.find((o) => o.key === activeSlots.first) ?? options[0];
-  const secondOption = activeSlots.second
-    ? (options.find((o) => o.key === activeSlots.second) ?? null)
-    : null;
-  const hasMoreOptions = options.length > 2;
-
-  const firstActive = firstOption.key === value;
-  const secondActive = secondOption ? secondOption.key === value : false;
-
-  const openMenu = () => {
-    pillRef.current?.measureInWindow((x, y, pillWidth, pillHeight) => {
-      const windowWidth = Dimensions.get("window").width;
-      const windowHeight = Dimensions.get("window").height;
-
-      const measuredWidth = pillWidth && pillWidth > 0 ? pillWidth : 200;
-      const cardWidth = Math.min(
-        windowWidth - 32,
-        Math.max(190, measuredWidth),
-      );
-
-      let left = typeof x === "number" ? x : 16;
-      if (left + cardWidth > windowWidth - 16) {
-        left = windowWidth - cardWidth - 16;
-      }
-      if (left < 16) left = 16;
-
-      const estimatedHeight = Math.min(options.length * 44 + 40, 300);
-      const measuredY = typeof y === "number" ? y : 100;
-      const measuredHeight = pillHeight && pillHeight > 0 ? pillHeight : 34;
-
-      let top = measuredY + measuredHeight + 6;
-      if (top + estimatedHeight > windowHeight - 20) {
-        top = Math.max(20, measuredY - estimatedHeight - 6);
-      }
-
-      setCoords({ top, left, width: cardWidth });
-      setIsMenuOpen(true);
-      progress.setValue(0);
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: 180,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    });
-  };
-
-  const closeMenu = (onFinished?: () => void) => {
-    Animated.timing(progress, {
-      toValue: 0,
-      duration: 140,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        setIsMenuOpen(false);
-        onFinished?.();
-      }
-    });
-  };
-
-  const handleSelectOption = (key: T) => {
-    closeMenu(() => {
-      if (key !== value) {
-        onChange(key);
-      }
-
-      // Zamiana miejscami w activeSlots, jeśli wybrana opcja nie jest już w pierwszej ani drugiej pozycji
-      if (key !== activeSlots.first && key !== activeSlots.second) {
-        setActiveSlots((prev) => ({
-          first: key,
-          second: prev.first,
-        }));
-      }
-    });
-  };
-
-  const chevronRotate = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "180deg"],
-  });
-
   return (
-    <>
-      <View
-        ref={pillRef}
-        collapsable={false}
-        style={[
-          styles.shell,
-          {
-            backgroundColor: colors.surfaceMutedGlass,
-            borderColor: colors.borderGlass,
-          },
-        ]}
-        accessibilityRole="tablist"
-        accessibilityLabel={accessibilityLabel}
+    <View
+      style={[
+        styles.shell,
+        {
+          backgroundColor: colors.surfaceMutedGlass,
+          borderColor: colors.borderGlass,
+        },
+      ]}
+      accessibilityRole="tablist"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        bounces={false}
+        contentContainerStyle={styles.track}
+        style={styles.scrollView}
       >
-        <View style={styles.track}>
-          {/* Pozycja 1 */}
-          <Pressable
-            onPress={() => onChange(firstOption.key)}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: firstActive }}
-            style={({ pressed }) => [
-              styles.option,
-              firstActive && { backgroundColor: colors.accentGlass },
-              { opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.label,
-                { color: firstActive ? colors.accent : colors.textMuted },
-              ]}
-            >
-              {firstOption.label}
-            </Text>
-          </Pressable>
-
-          {/* Pozycja 2 */}
-          {secondOption ? (
-            <>
-              <View
-                style={[
-                  styles.divider,
-                  { backgroundColor: colors.borderGlass },
-                ]}
-              />
-              <Pressable
-                onPress={() => onChange(secondOption.key)}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: secondActive }}
-                style={({ pressed }) => [
-                  styles.option,
-                  secondActive && { backgroundColor: colors.accentGlass },
-                  { opacity: pressed ? 0.7 : 1 },
-                ]}
-              >
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.label,
-                    { color: secondActive ? colors.accent : colors.textMuted },
-                  ]}
-                >
-                  {secondOption.label}
-                </Text>
-              </Pressable>
-            </>
-          ) : null}
-
-          {hasMoreOptions ? (
-            <View style={styles.chevronWrap}>
-              <Pressable
-                onPress={isMenuOpen ? () => closeMenu() : openMenu}
-                accessibilityRole="button"
-                accessibilityLabel="Pokaż wszystkie kategorie"
-                accessibilityState={{ expanded: isMenuOpen }}
-                style={({ pressed }) => [
-                  styles.chevronButton,
-                  isMenuOpen && { backgroundColor: colors.accentGlass },
-                  { opacity: pressed ? 0.7 : 1 },
-                ]}
-              >
-                <Animated.View
-                  style={{
-                    transform: [{ rotate: chevronRotate }],
-                  }}
-                >
-                  <Ionicons
-                    name="chevron-down"
-                    size={14}
-                    color={isMenuOpen ? colors.accent : colors.textMuted}
-                  />
-                </Animated.View>
-              </Pressable>
-            </View>
-          ) : null}
-        </View>
-      </View>
-
-      {isMenuOpen && coords ? (
-        <Modal
-          visible={isMenuOpen}
-          transparent
-          animationType="none"
-          statusBarTranslucent
-          onRequestClose={() => closeMenu()}
-        >
-          <NotificationHost />
-          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-            <Animated.View
-              style={[
-                StyleSheet.absoluteFill,
-                styles.backdrop,
-                { opacity: progress },
-              ]}
-            >
-              <Pressable
-                style={StyleSheet.absoluteFill}
-                onPress={() => closeMenu()}
-                accessibilityLabel="Zamknij listę kategorii"
-              />
-            </Animated.View>
-
-            <Animated.View
-              style={[
-                styles.card,
-                {
-                  top: coords.top,
-                  left: coords.left,
-                  width: coords.width,
-                  backgroundColor:
-                    mode === "dark"
-                      ? "rgba(22, 27, 34, 0.98)"
-                      : "rgba(255, 255, 255, 0.99)",
-                  borderColor: colors.borderGlass,
-                  opacity: progress,
-                  transform: [
-                    {
-                      translateY: progress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-8, 0],
-                      }),
-                    },
-                    {
-                      scale: progress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.96, 1],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              {accessibilityLabel ? (
-                <View style={styles.sectionLabelWrap}>
-                  <Text
-                    style={[styles.sectionLabel, { color: colors.textMuted }]}
-                  >
-                    {accessibilityLabel.toUpperCase()}
-                  </Text>
-                </View>
-              ) : null}
-
-              <ScrollView
-                bounces={false}
-                showsVerticalScrollIndicator={false}
-                style={styles.cardScroll}
-                contentContainerStyle={styles.cardScrollContent}
-              >
-                {options.map((option, index) => {
-                  const isActive = option.key === value;
-                  const isLast = index === options.length - 1;
-
-                  return (
-                    <Pressable
-                      key={option.key}
-                      onPress={() => handleSelectOption(option.key)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isActive }}
-                      style={({ pressed }) => [
-                        styles.dropdownRow,
-                        {
-                          borderBottomColor: colors.borderGlass,
-                          borderBottomWidth: isLast
-                            ? 0
-                            : StyleSheet.hairlineWidth,
-                          opacity: pressed ? 0.65 : 1,
-                        },
-                      ]}
-                    >
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.dropdownRowLabel,
-                          { color: isActive ? colors.text : colors.textMuted },
-                          isActive && styles.dropdownRowLabelActive,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                      {isActive ? (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={18}
-                          color={colors.accent}
-                        />
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </Animated.View>
-          </View>
-        </Modal>
-      ) : null}
-    </>
+        {options.map((option) => (
+          <CategoryItem
+            key={option.key}
+            option={option}
+            isSelected={option.key === activeKey}
+            onSelect={handleSelect}
+            onItemLayout={onItemLayout}
+            colors={colors}
+          />
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -415,82 +389,44 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     maxWidth: "100%",
   },
+  scrollView: {
+    flexGrow: 0,
+  },
   track: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 4,
+    padding: 3,
+    gap: 4,
   },
-  divider: {
-    width: StyleSheet.hairlineWidth,
-    height: 16,
-    marginHorizontal: 7,
-  },
-  option: {
-    paddingHorizontal: 13,
-    paddingVertical: 7,
+  itemBubble: {
+    height: 34,
     borderRadius: 999,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  bubbleHighlight: {
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  iconWrap: {
+    position: "absolute",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  textWrap: {
+    position: "absolute",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 10,
+  },
+  hiddenMeasurer: {
+    position: "absolute",
+    opacity: 0,
+    zIndex: -99,
   },
   label: {
     fontSize: 12,
-    fontWeight: "700",
-  },
-  chevronWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginLeft: 8,
-  },
-  chevronButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  backdrop: {
-    backgroundColor: "rgba(0, 0, 0, 0.16)",
-  },
-  card: {
-    position: "absolute",
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.24,
-    shadowRadius: 24,
-    elevation: 16,
-    zIndex: 9999,
-  },
-  sectionLabelWrap: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 4,
-  },
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.1,
-  },
-  cardScroll: {
-    maxHeight: 280,
-  },
-  cardScrollContent: {
-    paddingVertical: 2,
-  },
-  dropdownRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  dropdownRowLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  dropdownRowLabelActive: {
     fontWeight: "700",
   },
 });

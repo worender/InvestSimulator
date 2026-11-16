@@ -13,6 +13,9 @@ import { SettingsSheet } from "./SettingsSheet";
 
 type ColorPickerSheetProps = {
   initialColor: string;
+  title?: string;
+  subtitle?: string;
+  submitLabel?: string;
   onClose: () => void;
   onSelect: (color: string) => void;
 };
@@ -99,6 +102,9 @@ function ColorSlider({
 
 export function ColorPickerSheet({
   initialColor,
+  title = "Własny kolor akcentu",
+  subtitle = "Color picker",
+  submitLabel = "Dodaj ten kolor",
   onClose,
   onSelect,
 }: ColorPickerSheetProps) {
@@ -123,8 +129,8 @@ export function ColorPickerSheet({
 
   return (
     <SettingsSheet
-      title="Własny kolor akcentu"
-      subtitle="Color picker"
+      title={title}
+      subtitle={subtitle}
       height="78%"
       onClose={onClose}
     >
@@ -185,7 +191,7 @@ export function ColorPickerSheet({
           ]}
         >
           <Text style={[styles.addText, { color: readableTextColor(color) }]}>
-            Dodaj ten kolor
+            {submitLabel}
           </Text>
         </Pressable>
       </View>

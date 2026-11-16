@@ -1,5 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, StyleSheet, View } from "react-native";
+import type { CustomAccentColor } from "../../database/database";
+import { MAX_CUSTOM_ACCENTS } from "../../settings/color";
 import {
   ACCENT_PRESETS,
   accentSwatchColor,
@@ -10,42 +12,21 @@ import {
 
 type AccentColorPickerProps = {
   accent: ThemeAccent;
+  customAccents: CustomAccentColor[];
   onChange: (accent: ThemeAccent) => void;
   onAddCustom: () => void;
+  onEditCustom: (custom: CustomAccentColor) => void;
 };
-
-const RAINBOW = [
-  "#ff3b30",
-  "#ff9500",
-  "#ffcc00",
-  "#34c759",
-  "#007aff",
-  "#af52de",
-];
-
-function RainbowDot({ size = 30 }: { size?: number }) {
-  return (
-    <View
-      style={[
-        styles.rainbow,
-        { width: size, height: size, borderRadius: size / 2 },
-      ]}
-    >
-      {RAINBOW.map((color) => (
-        <View key={color} style={{ flex: 1, backgroundColor: color }} />
-      ))}
-    </View>
-  );
-}
 
 export function AccentColorPicker({
   accent,
+  customAccents,
   onChange,
   onAddCustom,
+  onEditCustom,
 }: AccentColorPickerProps) {
   const { colors, mode } = useTheme();
-  const isCustom = /^#[0-9a-f]{6}$/i.test(accent);
-  const customColor = isCustom ? accent : null;
+  const canAddCustom = customAccents.length < MAX_CUSTOM_ACCENTS;
 
   return (
     <View style={styles.wrap}>
@@ -71,29 +52,72 @@ export function AccentColorPicker({
                 },
               ]}
             >
-              {preset.rainbow ? (
-                <RainbowDot />
-              ) : (
-                <View
-                  style={[
-                    styles.swatch,
-                    {
-                      backgroundColor: accentSwatchColor(preset, mode),
-                    },
-                  ]}
-                />
-              )}
+              <View
+                style={[
+                  styles.swatch,
+                  {
+                    backgroundColor: accentSwatchColor(preset, mode),
+                  },
+                ]}
+              />
             </View>
           </Pressable>
         );
       })}
 
-      {customColor ? (
+      {customAccents.map((custom) => {
+        const selected = accent.toUpperCase() === custom.color.toUpperCase();
+        return (
+          <View key={custom.id} style={styles.customItem}>
+            <Pressable
+              onPress={() => onChange(custom.color)}
+              accessibilityRole="button"
+              accessibilityLabel={`Własny kolor akcentu: ${custom.color}`}
+              accessibilityState={{ selected }}
+              style={({ pressed }) => [
+                styles.swatchHit,
+                { opacity: pressed ? 0.68 : 1 },
+              ]}
+            >
+              <View
+                style={[
+                  styles.swatchRing,
+                  {
+                    borderColor: selected ? colors.text : "transparent",
+                  },
+                ]}
+              >
+                <View
+                  style={[styles.swatch, { backgroundColor: custom.color }]}
+                />
+              </View>
+            </Pressable>
+
+            <Pressable
+              onPress={() => onEditCustom(custom)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={`Edytuj własny kolor: ${custom.color}`}
+              style={({ pressed }) => [
+                styles.editBadge,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Ionicons name="pencil" size={10} color={colors.text} />
+            </Pressable>
+          </View>
+        );
+      })}
+
+      {canAddCustom ? (
         <Pressable
-          onPress={() => onChange(customColor)}
+          onPress={onAddCustom}
           accessibilityRole="button"
-          accessibilityLabel="Własny kolor akcentu"
-          accessibilityState={{ selected: accent === customColor }}
+          accessibilityLabel="Dodaj własny kolor akcentu"
           style={({ pressed }) => [
             styles.swatchHit,
             { opacity: pressed ? 0.68 : 1 },
@@ -101,52 +125,19 @@ export function AccentColorPicker({
         >
           <View
             style={[
-              styles.swatchRing,
+              styles.addSwatch,
               {
-                borderColor:
-                  accent === customColor ? colors.text : "transparent",
+                borderColor: colors.accent,
+                backgroundColor: colors.accentGlass,
               },
             ]}
           >
-            <View
-              style={[
-                styles.swatch,
-                {
-                  backgroundColor: customColor,
-                },
-              ]}
-            />
+            <Ionicons name="add" size={19} color={colors.accent} />
           </View>
         </Pressable>
       ) : null}
-
-      <Pressable
-        onPress={onAddCustom}
-        accessibilityRole="button"
-        accessibilityLabel="Dodaj własny kolor akcentu"
-        style={({ pressed }) => [
-          styles.swatchHit,
-          { opacity: pressed ? 0.68 : 1 },
-        ]}
-      >
-        <View
-          style={[
-            styles.addSwatch,
-            {
-              borderColor: colors.accent,
-              backgroundColor: colors.accentGlass,
-            },
-          ]}
-        >
-          <Ionicons name="add" size={19} color={colors.accent} />
-        </View>
-      </Pressable>
     </View>
   );
-}
-
-export function RainbowPreview() {
-  return <RainbowDot size={22} />;
 }
 
 export function accentPreviewColor(
@@ -164,6 +155,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   swatchHit: { paddingVertical: 2 },
+  customItem: { position: "relative" },
   swatchRing: {
     width: 40,
     height: 40,
@@ -177,9 +169,16 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 15,
   },
-  rainbow: {
-    flexDirection: "row",
-    overflow: "hidden",
+  editBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: 0,
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   addSwatch: {
     width: 40,
