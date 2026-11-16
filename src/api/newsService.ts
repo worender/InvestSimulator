@@ -10,7 +10,6 @@
 
 import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { authenticatedFetch } from "./marketService";
-import { filterNewsWithContent } from "./newsQuality";
 
 export type NewsLanguage = "pl" | "en";
 export type NewsTopic = "poland" | "world";
@@ -254,12 +253,10 @@ export async function getYahooNews(
       throw new Error("Nieprawidłowy format listy newsów");
     }
 
-    // Backend już filtruje, ale starszy backend albo jego cache mogą zwrócić newsy bez treści
-    return filterNewsWithContent(
-      items
-        .map((item) => toNewsItem(item, topic))
-        .filter((item): item is YahooNewsItem => item !== null),
-    );
+    // Newsy bez treści odfiltrowuje backend (`backend/newsQuality.js`)
+    return items
+      .map((item) => toNewsItem(item, topic))
+      .filter((item): item is YahooNewsItem => item !== null);
   } catch (error) {
     console.error(`Błąd getYahooNews (${topic}):`, error);
     if (!silent) {
