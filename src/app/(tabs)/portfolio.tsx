@@ -14,6 +14,7 @@ import {
   type AddPortfolioInput,
 } from "../../components/AddPortfolioSheet";
 import { AssetCategoryCard } from "../../components/AssetCategoryCard";
+import { PortfolioCashSheet } from "../../components/PortfolioCashSheet";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import {
   pillarKeyToAssetCategoryKey,
@@ -50,6 +51,7 @@ export default function PortfolioScreen() {
     useState<Record<string, PortfolioCategory[]>>({});
   const [pillarSheetOpen, setPillarSheetOpen] = useState(false);
   const [addPortfolioSheetOpen, setAddPortfolioSheetOpen] = useState(false);
+  const [cashSheetOpen, setCashSheetOpen] = useState(false);
 
   // Animacja obracających się strzałek w headerze
   const rotation = useSharedValue(0);
@@ -58,7 +60,10 @@ export default function PortfolioScreen() {
   }));
 
   const currentPortfolio = portfolios[activePortfolioIndex] || portfolios[0];
-  const activePillars = pillarCategoriesByPortfolio[currentPortfolio?.id] ?? [];
+  const activePillars =
+    pillarCategoriesByPortfolio[currentPortfolio?.id] ??
+    currentPortfolio?.categories ??
+    [];
   const hasMultiplePortfolios = portfolios.length > 1;
   const isAddDisabled = portfolios.length >= 5;
 
@@ -83,6 +88,7 @@ export default function PortfolioScreen() {
   useResetOnPanelBlur(() => {
     setPillarSheetOpen(false);
     setAddPortfolioSheetOpen(false);
+    setCashSheetOpen(false);
   });
 
   /**
@@ -163,7 +169,8 @@ export default function PortfolioScreen() {
     if (!option || !currentPortfolio) return;
 
     setPillarCategoriesByPortfolio((prev) => {
-      const existing = prev[currentPortfolio.id] ?? [];
+      const existing =
+        prev[currentPortfolio.id] ?? currentPortfolio.categories ?? [];
       if (existing.some((category) => category.id === key)) return prev;
 
       const category: PortfolioCategory = {
@@ -183,6 +190,74 @@ export default function PortfolioScreen() {
         ...prev,
         [currentPortfolio.id]: [...existing, category],
       };
+    });
+    notify({
+      variant: "success",
+      title: "Dodano filar",
+      category: NOTIFICATION_GROUPS.portfolio,
+      message: `${option.title} został dodany do portfela ${currentPortfolio.name}.`,
+    });
+  };
+
+  const handleCashOperation = (input: {
+    operation: "deposit" | "withdraw" | "transfer";
+    amount: number;
+    sourceCurrency: string;
+    targetPortfolioId?: string;
+    targetAmount?: number;
+  }) => {
+    setPortfolios((prev) =>
+      prev.map((portfolio) => {
+        if (input.operation === "transfer") {
+          if (portfolio.id === currentPortfolio.id) {
+            const cashBalance = portfolio.cashBalance - input.amount;
+            return {
+              ...portfolio,
+              cashBalance,
+              totalValue: Math.max(0, portfolio.totalValue - input.amount),
+            };
+          }
+          if (portfolio.id === input.targetPortfolioId) {
+            const transferredAmount = input.targetAmount ?? input.amount;
+            return {
+              ...portfolio,
+              cashBalance: portfolio.cashBalance + transferredAmount,
+              totalValue: portfolio.totalValue + transferredAmount,
+            };
+          }
+          return portfolio;
+        }
+
+        if (portfolio.id !== currentPortfolio.id) return portfolio;
+        const cashBalance =
+          input.operation === "deposit"
+            ? portfolio.cashBalance + input.amount
+            : portfolio.cashBalance - input.amount;
+        return {
+          ...portfolio,
+          cashBalance,
+          totalValue: Math.max(
+            0,
+            input.operation === "deposit"
+              ? portfolio.totalValue + input.amount
+              : portfolio.totalValue - input.amount,
+          ),
+        };
+      }),
+    );
+    setCashSheetOpen(false);
+
+    const operationLabel =
+      input.operation === "deposit"
+        ? "Wpłata"
+        : input.operation === "withdraw"
+          ? "Wypłata"
+          : "Transfer";
+    notify({
+      variant: "success",
+      title: `${operationLabel} wykonana`,
+      category: NOTIFICATION_GROUPS.portfolio,
+      message: `${currentPortfolio.name}: operacja została zrealizowana w walucie ${currentPortfolio.currency}.`,
     });
   };
 
@@ -208,6 +283,18 @@ export default function PortfolioScreen() {
         right={
           <View style={styles.headerButtons}>
             <Pressable
+              onPress={() => setCashSheetOpen(true)}
+              accessibilityLabel="Wpłata lub wypłata środków"
+              hitSlop={10}
+              style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Ionicons
+                name="arrow-down-circle-outline"
+                size={22}
+                color={colors.accent}
+              />
+            </Pressable>
+            <Pressable
               onPress={handleAddPortfolio}
               accessibilityLabel="Dodaj nowe portfolio"
               accessibilityState={{ disabled: isAddDisabled }}
@@ -220,7 +307,7 @@ export default function PortfolioScreen() {
                 },
               ]}
             >
-              <Ionicons name="add" size={24} color={colors.accent} />
+              <Ionicons name="add" size={24} color={colors.textMuted} />
             </Pressable>
           </View>
         }
@@ -311,6 +398,23 @@ export default function PortfolioScreen() {
         <AddPortfolioSheet
           onClose={() => setAddPortfolioSheetOpen(false)}
           onAdd={handleCreatePortfolio}
+        />
+      )}
+
+      {cashSheetOpen && (
+        <PortfolioCashSheet
+          portfolioId={currentPortfolio.id}
+          portfolioName={currentPortfolio.name}
+          portfolioCurrency={currentPortfolio.currency}
+          cashBalance={currentPortfolio.cashBalance}
+          portfolios={portfolios.map((portfolio) => ({
+            id: portfolio.id,
+            name: portfolio.name,
+            currency: portfolio.currency,
+            cashBalance: portfolio.cashBalance,
+          }))}
+          onClose={() => setCashSheetOpen(false)}
+          onConfirm={handleCashOperation}
         />
       )}
     </View>

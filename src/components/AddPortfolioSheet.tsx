@@ -53,7 +53,7 @@ export function AddPortfolioSheet({ onClose, onAdd }: AddPortfolioSheetProps) {
     <SettingsSheet
       title={name.trim() || "Nowy portfel"}
       subtitle="UTWÓRZ PORTFEL"
-      height="86%"
+      height="auto"
       onClose={onClose}
     >
       <Text style={[styles.label, { color: colors.textMuted }]}>NAZWA</Text>
@@ -68,7 +68,7 @@ export function AddPortfolioSheet({ onClose, onAdd }: AddPortfolioSheetProps) {
           {
             color: colors.text,
             backgroundColor: colors.background,
-            borderColor: colors.border,
+            borderWidth: 0,
           },
         ]}
       />
@@ -86,8 +86,10 @@ export function AddPortfolioSheet({ onClose, onAdd }: AddPortfolioSheetProps) {
               style={[
                 styles.currencyOption,
                 {
-                  borderColor: selected ? colors.accent : colors.border,
-                  backgroundColor: colors.background,
+                  borderColor: selected ? colors.accent : "transparent",
+                  backgroundColor: selected
+                    ? colors.accentGlass
+                    : "transparent",
                 },
               ]}
             >
@@ -119,8 +121,10 @@ export function AddPortfolioSheet({ onClose, onAdd }: AddPortfolioSheetProps) {
               style={[
                 styles.pillarOption,
                 {
-                  borderColor: selected ? colors.accent : colors.border,
-                  backgroundColor: colors.background,
+                  borderColor: selected ? colors.accent : "transparent",
+                  backgroundColor: selected
+                    ? colors.accentGlass
+                    : "transparent",
                 },
               ]}
             >
