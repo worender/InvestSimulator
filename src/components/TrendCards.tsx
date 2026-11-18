@@ -16,7 +16,7 @@ import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { useTheme } from "../theme";
 import { CategorySelector } from "./CategorySelector";
 import { CHART_RANGES } from "./ChartFullscreenModal";
-import { ModalChartView } from "./ModalChartView";
+import { InstrumentCard } from "./InstrumentCard";
 import { Skeleton } from "./Skeleton";
 import { TrendChart, trendChangePercent } from "./TrendChart";
 
@@ -382,7 +382,7 @@ export function TrendCards() {
       )}
 
       {selectedAsset && (
-        <ModalChartView
+        <InstrumentCard
           instrument={toModalInstrument(selectedAsset)}
           initialRangeIndex={TREND_RANGE_INDEX}
           initialInterval="1d"

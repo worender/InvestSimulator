@@ -1,40 +1,38 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
 import { useRef, useState, type ComponentRef } from "react";
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Reanimated, {
   Easing,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { InstrumentSearchResult, getStockData } from "../../api/marketService";
-import { AssetCategoryCard } from "../../components/AssetCategoryCard";
-import { GlassBackground } from "../../components/GlassBackground";
 import {
-  InstrumentDetailModal,
-  ModalTab,
-} from "../../components/InstrumentDetailModal";
-import { InstrumentSearchSheet } from "../../components/InstrumentSearchSheet";
+  AddPortfolioSheet,
+  type AddPortfolioInput,
+} from "../../components/AddPortfolioSheet";
+import { AssetCategoryCard } from "../../components/AssetCategoryCard";
+import { InstrumentCard } from "../../components/InstrumentCard";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
+import { PortfolioCashSheet } from "../../components/PortfolioCashSheet";
+import { PortfolioCategoryModal } from "../../components/PortfolioCategoryModal";
+import {
+  pillarKeyToAssetCategoryKey,
+  PORTFOLIO_PILLARS,
+  PortfolioPillarKey,
+  PortfolioPillarSheet,
+} from "../../components/PortfolioPillarSheet";
 import { Section } from "../../components/Section";
 import { SinglePortfolioCard } from "../../components/SinglePortfolioCard";
-import { resolveCurrency } from "../../currency";
 import {
   MOCK_PORTFOLIOS,
   MockPortfolio,
   PortfolioAssetItem,
   PortfolioCategory,
 } from "../../database/mockPortfolioData";
+import { resolveMarketCategory } from "../../instrumentCategories";
 import { NOTIFICATION_GROUPS, notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
 import { useLayoutMode } from "../../useLayoutMode";
@@ -42,7 +40,7 @@ import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 export default function PortfolioScreen() {
-  const { colors, mode } = useTheme();
+  const { colors } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
   // Widok treści rozmywanej pod nagłówkiem
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
@@ -53,29 +51,17 @@ export default function PortfolioScreen() {
   const [portfolios, setPortfolios] =
     useState<MockPortfolio[]>(MOCK_PORTFOLIOS);
   const [activePortfolioIndex, setActivePortfolioIndex] = useState(0);
-
-  // Stan modalu szczegółów i zakupu instrumentu / kategorii
+  const [pillarCategoriesByPortfolio, setPillarCategoriesByPortfolio] =
+    useState<Record<string, PortfolioCategory[]>>({});
+  const [pillarSheetOpen, setPillarSheetOpen] = useState(false);
+  const [addPortfolioSheetOpen, setAddPortfolioSheetOpen] = useState(false);
+  const [cashSheetOpen, setCashSheetOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] =
     useState<PortfolioCategory | null>(null);
-  const [selectedAsset, setSelectedAsset] = useState<PortfolioAssetItem | null>(
-    null,
-  );
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalInitialTab, setModalInitialTab] = useState<ModalTab>("details");
-  const [modalInstrument, setModalInstrument] = useState<{
-    stock: string;
-    title: string;
-    currency: string;
-    symbol: string;
-    exchange: string;
-    financialData?: any;
+  const [selectedAssetDetails, setSelectedAssetDetails] = useState<{
+    asset: PortfolioAssetItem;
+    category: PortfolioCategory;
   } | null>(null);
-
-  // Menu przycisku "+" w headerze
-  const [menuMounted, setMenuMounted] = useState(false);
-
-  // Overlay wyszukiwania instrumentu (wspólny dla karty i menu headera)
-  const [searchSheetOpen, setSearchSheetOpen] = useState(false);
 
   // Animacja obracających się strzałek w headerze
   const rotation = useSharedValue(0);
@@ -83,26 +69,11 @@ export default function PortfolioScreen() {
     transform: [{ rotate: `${rotation.value}deg` }],
   }));
 
-  // Animacja przycisku "+": obrót o 45° zmienia go w "x" po otwarciu menu
-  const menuIconRotation = useSharedValue(0);
-  const menuIconStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${menuIconRotation.value}deg` }],
-  }));
-
-  // Animacja wypłynięcia menu: lekki zjazd z góry + fade
-  const menuProgress = useSharedValue(0);
-  const menuCardStyle = useAnimatedStyle(() => ({
-    opacity: menuProgress.value,
-    transform: [
-      { translateY: (1 - menuProgress.value) * -12 },
-      { scale: 0.96 + menuProgress.value * 0.04 },
-    ],
-  }));
-  const menuBackdropStyle = useAnimatedStyle(() => ({
-    opacity: menuProgress.value,
-  }));
-
   const currentPortfolio = portfolios[activePortfolioIndex] || portfolios[0];
+  const activePillars =
+    pillarCategoriesByPortfolio[currentPortfolio?.id] ??
+    currentPortfolio?.categories ??
+    [];
   const hasMultiplePortfolios = portfolios.length > 1;
   const isAddDisabled = portfolios.length >= 5;
 
@@ -111,60 +82,33 @@ export default function PortfolioScreen() {
       duration: 350,
       easing: Easing.out(Easing.cubic),
     });
-    setActivePortfolioIndex((prev) => (prev + 1) % portfolios.length);
-  };
-
-  // Otwieranie menu
-  const openMenu = () => {
-    setMenuMounted(true);
-    // eslint-disable-next-line react-hooks/immutability
-    menuProgress.value = withTiming(1, {
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-    });
-    menuIconRotation.value = withTiming(45, {
-      duration: 200,
-      easing: Easing.out(Easing.cubic),
-    });
-  };
-
-  // Zamykanie menu
-  const closeMenu = () => {
-    // eslint-disable-next-line react-hooks/immutability
-    menuProgress.value = withTiming(
-      0,
-      { duration: 160, easing: Easing.in(Easing.cubic) },
-      (finished) => {
-        "worklet";
-        if (finished) {
-          runOnJS(setMenuMounted)(false);
-        }
-      },
-    );
-    menuIconRotation.value = withTiming(0, {
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
+    setActivePortfolioIndex((prev) => {
+      const next = (prev + 1) % portfolios.length;
+      notify({
+        variant: "info",
+        title: "Zmieniono portfel",
+        category: NOTIFICATION_GROUPS.portfolio,
+        message: `Wyświetlany jest teraz ${portfolios[next].name}.`,
+      });
+      return next;
     });
   };
 
   // Po opuszczeniu zakładki menu i wyszukiwanie wracają do stanu początkowego.
   useResetOnPanelBlur(() => {
-    setSearchSheetOpen(false);
-    closeMenu();
+    setPillarSheetOpen(false);
+    setAddPortfolioSheetOpen(false);
+    setCashSheetOpen(false);
+    setSelectedCategory(null);
+    setSelectedAssetDetails(null);
   });
 
-  // Przełączanie menu przycisku "+"
-  const toggleMenu = () => {
-    if (menuMounted) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
-  };
-
-  // Dodanie nowego portfela na bazie aktualnie wybranego (limit 5)
+  /**
+   * Obsługuje kliknięcie przycisku dodawania nowego portfela.
+   * Jeśli limit portfeli został osiągnięty, wyświetla powiadomienie.
+   * W przeciwnym razie otwiera arkusz tworzenia nowego portfela.
+   */
   const handleAddPortfolio = () => {
-    closeMenu();
     if (isAddDisabled) {
       notify({
         variant: "info",
@@ -174,12 +118,50 @@ export default function PortfolioScreen() {
       });
       return;
     }
+    setAddPortfolioSheetOpen(true);
+  };
+
+  /**
+   * Tworzy nowy portfel na podstawie danych z formularza.
+   * @param input Dane z formularza tworzenia portfela
+   */
+  const handleCreatePortfolio = (input: AddPortfolioInput) => {
     const newPortfolio: MockPortfolio = {
       ...currentPortfolio,
       id: `port-${Date.now()}`,
-      name: `Portfel ${portfolios.length + 1}`,
+      name: input.name,
+      currency: input.currency,
+      currencySymbol:
+        input.currency === "PLN" ? "zł" : input.currency === "EUR" ? "€" : "$",
+      cashBalance: 0,
+      totalValue: 0,
+      profitCurrency: 0,
+      profitPercent: 0,
+      categories: [],
     };
+
+    const pillarCategories = input.pillars.map((key) => {
+      const option = PORTFOLIO_PILLARS.find((pillar) => pillar.key === key)!;
+      return {
+        id: pillarKeyToAssetCategoryKey(key),
+        title: option.title,
+        subtitle: option.description,
+        pastelBgLight: option.pastelLight,
+        pastelBgDark: option.pastelDark,
+        accentColor: option.color,
+        totalValue: 0,
+        profitCurrency: 0,
+        profitPercent: 0,
+        items: [],
+      } satisfies PortfolioCategory;
+    });
+
     setPortfolios((prev) => [...prev, newPortfolio]);
+    setPillarCategoriesByPortfolio((prev) => ({
+      ...prev,
+      [newPortfolio.id]: pillarCategories,
+    }));
+    setAddPortfolioSheetOpen(false);
     setActivePortfolioIndex(portfolios.length);
     notify({
       variant: "success",
@@ -189,61 +171,106 @@ export default function PortfolioScreen() {
     });
   };
 
-  const handleOpenSearchSheet = () => {
-    closeMenu();
-    setSearchSheetOpen(true);
+  /**
+   * Dodaje nowy filar do aktualnego portfela.
+   * @param key
+   * @returns
+   */
+  const handleAddPillar = (key: PortfolioPillarKey) => {
+    const option = PORTFOLIO_PILLARS.find((pillar) => pillar.key === key);
+    if (!option || !currentPortfolio) return;
+
+    setPillarCategoriesByPortfolio((prev) => {
+      const existing =
+        prev[currentPortfolio.id] ?? currentPortfolio.categories ?? [];
+      if (existing.some((category) => category.id === key)) return prev;
+
+      const category: PortfolioCategory = {
+        id: pillarKeyToAssetCategoryKey(key),
+        title: option.title,
+        subtitle: option.description,
+        pastelBgLight: option.pastelLight,
+        pastelBgDark: option.pastelDark,
+        accentColor: option.color,
+        totalValue: 0,
+        profitCurrency: 0,
+        profitPercent: 0,
+        items: [],
+      };
+
+      return {
+        ...prev,
+        [currentPortfolio.id]: [...existing, category],
+      };
+    });
+    notify({
+      variant: "success",
+      title: "Dodano filar",
+      category: NOTIFICATION_GROUPS.portfolio,
+      message: `${option.title} został dodany do portfela ${currentPortfolio.name}.`,
+    });
   };
 
-  const handleSelectCategory = (category: PortfolioCategory) => {
-    setSelectedCategory(category);
-    setSelectedAsset(category.items[0] || null);
-    setModalInitialTab("details");
-    setModalVisible(true);
-  };
+  const handleCashOperation = (input: {
+    operation: "deposit" | "withdraw" | "transfer";
+    amount: number;
+    sourceCurrency: string;
+    targetPortfolioId?: string;
+    targetAmount?: number;
+  }) => {
+    setPortfolios((prev) =>
+      prev.map((portfolio) => {
+        if (input.operation === "transfer") {
+          if (portfolio.id === currentPortfolio.id) {
+            const cashBalance = portfolio.cashBalance - input.amount;
+            return {
+              ...portfolio,
+              cashBalance,
+              totalValue: Math.max(0, portfolio.totalValue - input.amount),
+            };
+          }
+          if (portfolio.id === input.targetPortfolioId) {
+            const transferredAmount = input.targetAmount ?? input.amount;
+            return {
+              ...portfolio,
+              cashBalance: portfolio.cashBalance + transferredAmount,
+              totalValue: portfolio.totalValue + transferredAmount,
+            };
+          }
+          return portfolio;
+        }
 
-  // Dodanie instrumentu do portfela: modal otwiera się od razu, a dane finansowe dociągają się w tle
-  const handleAddInstrument = async (instrument: InstrumentSearchResult) => {
-    setSearchSheetOpen(false);
-    setSelectedCategory(null);
-    setSelectedAsset(null);
-    const resolvedCurrency = resolveCurrency(instrument);
-    const selectedInstrument = {
-      stock: instrument.symbol,
-      title: instrument.name.toUpperCase(),
-      currency: resolvedCurrency,
-      symbol: instrument.symbol,
-      exchange: instrument.exchange || instrument.exchangeName,
-    };
+        if (portfolio.id !== currentPortfolio.id) return portfolio;
+        const cashBalance =
+          input.operation === "deposit"
+            ? portfolio.cashBalance + input.amount
+            : portfolio.cashBalance - input.amount;
+        return {
+          ...portfolio,
+          cashBalance,
+          totalValue: Math.max(
+            0,
+            input.operation === "deposit"
+              ? portfolio.totalValue + input.amount
+              : portfolio.totalValue - input.amount,
+          ),
+        };
+      }),
+    );
+    setCashSheetOpen(false);
 
-    setModalInitialTab("details");
-    setModalInstrument(selectedInstrument);
-    setModalVisible(true);
-
-    try {
-      const financialData = await getStockData(
-        instrument.symbol,
-        instrument.exchange,
-      );
-      if (!financialData) return;
-      // Aktualizuj tylko wtedy, gdy modal nadal pokazuje ten sam instrument.
-      setModalInstrument((current) =>
-        current && current.symbol === instrument.symbol
-          ? {
-              ...current,
-              currency: financialData.currency || current.currency,
-              financialData,
-            }
-          : current,
-      );
-    } catch (error) {
-      console.error("Błąd pobierania danych finansowych:", error);
-    }
-  };
-
-  const handleCloseModal = () => {
-    setModalVisible(false);
-    setSelectedCategory(null);
-    setSelectedAsset(null);
+    const operationLabel =
+      input.operation === "deposit"
+        ? "Wpłata"
+        : input.operation === "withdraw"
+          ? "Wypłata"
+          : "Transfer";
+    notify({
+      variant: "success",
+      title: `${operationLabel} wykonana`,
+      category: NOTIFICATION_GROUPS.portfolio,
+      message: `${currentPortfolio.name}: operacja została zrealizowana w walucie ${currentPortfolio.currency}.`,
+    });
   };
 
   return (
@@ -268,124 +295,35 @@ export default function PortfolioScreen() {
         right={
           <View style={styles.headerButtons}>
             <Pressable
-              onPress={() => {
-                notify({
-                  variant: "info",
-                  title: "Edycja/Usuwanie",
-                  category: NOTIFICATION_GROUPS.portfolio,
-                  message:
-                    "Obecnie wybrane portfolio nie może być usunięte ani edytowane.",
-                });
-              }}
-              accessibilityLabel="Edytuj portfel"
+              onPress={() => setCashSheetOpen(true)}
+              accessibilityLabel="Wpłata lub wypłata środków"
               hitSlop={10}
               style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
             >
               <Ionicons
-                name="pencil-outline"
-                size={18}
-                color={mode === "dark" ? colors.textMuted : colors.text}
+                name="arrow-down-circle-outline"
+                size={22}
+                color={colors.accent}
               />
             </Pressable>
-
             <Pressable
-              onPress={toggleMenu}
-              accessibilityLabel={
-                menuMounted
-                  ? "Zamknij menu dodawania"
-                  : "Dodaj portfel lub instrument"
-              }
-              accessibilityState={{ expanded: menuMounted }}
+              onPress={handleAddPortfolio}
+              accessibilityLabel="Dodaj nowe portfolio"
+              accessibilityState={{ disabled: isAddDisabled }}
               hitSlop={10}
               style={({ pressed }) => [
                 styles.addButton,
                 {
                   backgroundColor: "transparent",
-                  opacity: pressed ? 0.7 : 1,
+                  opacity: isAddDisabled ? 0.45 : pressed ? 0.7 : 1,
                 },
               ]}
             >
-              <Reanimated.View style={menuIconStyle}>
-                <Ionicons name="add" size={24} color={colors.accent} />
-              </Reanimated.View>
+              <Ionicons name="add" size={24} color={colors.textMuted} />
             </Pressable>
           </View>
         }
       />
-
-      {menuMounted && (
-        <View style={styles.menuLayer} pointerEvents="box-none">
-          <Reanimated.View
-            style={[
-              StyleSheet.absoluteFill,
-              styles.menuBackdrop,
-              menuBackdropStyle,
-            ]}
-          >
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={closeMenu}
-              accessibilityLabel="Zamknij menu"
-            />
-          </Reanimated.View>
-          <Reanimated.View
-            style={[
-              styles.menuCard,
-              {
-                top: top + PANEL_HEADER_HEIGHT + 6,
-                backgroundColor:
-                  mode === "dark"
-                    ? "rgba(22, 27, 34, 0.97)"
-                    : "rgba(255, 255, 255, 0.98)",
-                borderColor: colors.borderGlass,
-              },
-              menuCardStyle,
-            ]}
-          >
-            <Pressable
-              onPress={handleOpenSearchSheet}
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.menuItem,
-                {
-                  borderBottomColor: colors.borderGlass,
-                  opacity: pressed ? 0.65 : 1,
-                },
-              ]}
-            >
-              <Ionicons
-                name="add-circle-outline"
-                size={20}
-                color={colors.accent}
-              />
-              <Text style={[styles.menuText, { color: colors.text }]}>
-                Dodaj instrument
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={handleAddPortfolio}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: isAddDisabled }}
-              style={({ pressed }) => [
-                styles.menuItem,
-                styles.menuItemLast,
-                { opacity: isAddDisabled ? 0.45 : pressed ? 0.65 : 1 },
-              ]}
-            >
-              <Ionicons name="wallet-outline" size={20} color={colors.accent} />
-              <Text style={[styles.menuText, { color: colors.text }]}>
-                Dodaj nowe portfolio
-              </Text>
-              {isAddDisabled && (
-                <Text style={[styles.menuLimit, { color: colors.textMuted }]}>
-                  limit
-                </Text>
-              )}
-            </Pressable>
-          </Reanimated.View>
-        </View>
-      )}
 
       <BlurTargetView ref={blurTargetRef} style={styles.blurTarget}>
         <ScrollView
@@ -403,79 +341,130 @@ export default function PortfolioScreen() {
         >
           <SinglePortfolioCard portfolio={currentPortfolio} />
 
-          <Section label="Kategorie aktywów">
+          <Section label="Filary portfela">
             <View style={styles.categoriesGrid}>
-              {currentPortfolio.categories.map((category) => (
+              {activePillars.map((category) => (
                 <AssetCategoryCard
                   key={category.id}
                   category={category}
                   currency={currentPortfolio.currency}
-                  onPress={() => handleSelectCategory(category)}
+                  onPress={() => setSelectedCategory(category)}
                 />
               ))}
 
-              <Pressable
-                onPress={handleOpenSearchSheet}
-                accessibilityLabel="Dodaj instrument do portfela"
-                style={({ pressed }) => [
-                  styles.addCard,
-                  // Cień na Androidzie rysowany jest z tła
-                  Platform.OS === "android" && {
-                    backgroundColor: colors.surface,
-                  },
-                  {
-                    borderColor: "#22c55e55",
-                    transform: [{ scale: pressed ? 0.98 : 1 }],
-                    opacity: pressed ? 0.92 : 1,
-                  },
-                ]}
-              >
-                <View style={styles.addCardClip}>
-                  <GlassBackground
-                    intensity={mode === "dark" ? 40 : 55}
-                    tintColor="rgba(34, 197, 94, 0.16)"
-                  />
-
-                  <View style={styles.addCardContent}>
-                    <View
-                      style={[
-                        styles.addCardButton,
-                        {
-                          backgroundColor: "#22c55e25",
-                          borderColor: "#22c55e55",
-                        },
-                      ]}
-                    >
-                      <Ionicons name="add" size={24} color="#22c55e" />
+              {activePillars.length < 5 && (
+                <Pressable
+                  onPress={() => setPillarSheetOpen(true)}
+                  accessibilityLabel="Dodaj filar portfela"
+                  style={({ pressed }) => [
+                    styles.addCard,
+                    {
+                      borderColor: colors.accent + "99",
+                      backgroundColor: colors.background,
+                      transform: [{ scale: pressed ? 0.98 : 1 }],
+                      opacity: pressed ? 0.92 : 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.addCardClip}>
+                    <View style={styles.addCardContent}>
+                      <View
+                        style={[
+                          styles.addCardButton,
+                          {
+                            backgroundColor: colors.background,
+                            borderColor: colors.accent + "99",
+                          },
+                        ]}
+                      >
+                        <Ionicons name="add" size={24} color={colors.accent} />
+                      </View>
+                      <Text
+                        style={[styles.addCardLabel, { color: colors.text }]}
+                      >
+                        Dodaj
+                      </Text>
                     </View>
-                    <Text style={[styles.addCardLabel, { color: colors.text }]}>
-                      Dodaj
-                    </Text>
                   </View>
-                </View>
-              </Pressable>
+                </Pressable>
+              )}
             </View>
           </Section>
         </ScrollView>
       </BlurTargetView>
 
-      {searchSheetOpen && (
-        <InstrumentSearchSheet
-          visible
-          onClose={() => setSearchSheetOpen(false)}
-          onSelect={handleAddInstrument}
+      {pillarSheetOpen && (
+        <PortfolioPillarSheet
+          selectedKeys={activePillars.map(
+            (category) => category.id as PortfolioPillarKey,
+          )}
+          onClose={() => setPillarSheetOpen(false)}
+          onSelect={(key) => {
+            handleAddPillar(key);
+            setPillarSheetOpen(false);
+          }}
         />
       )}
 
-      <InstrumentDetailModal
-        visible={modalVisible}
-        asset={selectedAsset}
-        category={selectedCategory}
-        portfolio={currentPortfolio}
-        initialTab={modalInitialTab}
-        onClose={handleCloseModal}
-        modalInstrument={modalInstrument}
-      />
+      {addPortfolioSheetOpen && (
+        <AddPortfolioSheet
+          onClose={() => setAddPortfolioSheetOpen(false)}
+          onAdd={handleCreatePortfolio}
+        />
+      )}
+
+      {cashSheetOpen && (
+        <PortfolioCashSheet
+          portfolioId={currentPortfolio.id}
+          portfolioName={currentPortfolio.name}
+          portfolioCurrency={currentPortfolio.currency}
+          cashBalance={currentPortfolio.cashBalance}
+          portfolios={portfolios.map((portfolio) => ({
+            id: portfolio.id,
+            name: portfolio.name,
+            currency: portfolio.currency,
+            cashBalance: portfolio.cashBalance,
+          }))}
+          onClose={() => setCashSheetOpen(false)}
+          onConfirm={handleCashOperation}
+        />
+      )}
+
+      {selectedCategory && (
+        <PortfolioCategoryModal
+          portfolio={currentPortfolio}
+          category={selectedCategory}
+          onClose={() => setSelectedCategory(null)}
+          onOpenAsset={(asset) => {
+            setSelectedCategory(null);
+            setSelectedAssetDetails({
+              asset,
+              category: selectedCategory,
+            });
+          }}
+        />
+      )}
+
+      {selectedAssetDetails && (
+        <InstrumentCard
+          instrument={{
+            stock: selectedAssetDetails.asset.symbol,
+            title: selectedAssetDetails.asset.name.toUpperCase(),
+            currency: selectedAssetDetails.asset.currency,
+            symbol: selectedAssetDetails.asset.symbol,
+            exchange: selectedAssetDetails.asset.exchange,
+            marketCategory: resolveMarketCategory({
+              category: selectedAssetDetails.asset.category,
+              symbol: selectedAssetDetails.asset.symbol,
+              exchange: selectedAssetDetails.asset.exchange,
+            }),
+          }}
+          onClose={() => {
+            setSelectedAssetDetails(null);
+            setSelectedCategory(selectedAssetDetails.category);
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -486,7 +475,12 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
   // Na desktopie treść w wyśrodkowanej kolumnie o ograniczonej szerokości
-  contentDesktop: { width: "100%", maxWidth: 1280, alignSelf: "center", paddingHorizontal: 32 },
+  contentDesktop: {
+    width: "100%",
+    maxWidth: 1280,
+    alignSelf: "center",
+    paddingHorizontal: 32,
+  },
   intro: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
   headerButtons: {
     flexDirection: "row",
@@ -500,51 +494,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-  },
-  menuLayer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 15,
-    elevation: 15,
-  },
-  menuBackdrop: {
-    backgroundColor: "rgba(0, 0, 0, 0.12)",
-  },
-  menuCard: {
-    position: "absolute",
-    right: 20,
-    width: 232,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 4,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.22,
-    shadowRadius: 20,
-    elevation: 14,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  menuItemLast: {
-    borderBottomWidth: 0,
-  },
-  menuText: {
-    fontSize: 14,
-    fontWeight: "600",
-    flex: 1,
-  },
-  menuLimit: {
-    fontSize: 11,
   },
   addCard: {
     width: "48%",

@@ -154,7 +154,7 @@ function PortfolioCard({
     });
 
   const isPositive = data.profitCurrency >= 0;
-  const arrowColor = isPositive ? "#10b981" : "#ef4444";
+  const arrowColor = isPositive ? colors.positive : colors.negative;
   const arrowIcon = isPositive ? "arrow-up" : "arrow-down";
   const sign = isPositive ? "+" : "-";
 

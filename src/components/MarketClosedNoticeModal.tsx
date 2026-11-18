@@ -2,8 +2,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurView } from "expo-blur";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SearchableInstrument } from "../database/mockSearchableInstruments";
-import { NotificationHost } from "../notifications";
 import { useDisplayCurrency } from "../displayCurrency";
+import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
 
 interface MarketClosedNoticeModalProps {
@@ -122,7 +122,7 @@ export function MarketClosedNoticeModal({
               <Text
                 style={[
                   styles.summaryValue,
-                  { color: isBuy ? "#10b981" : "#ef4444" },
+                  { color: isBuy ? colors.positive : colors.negative },
                 ]}
               >
                 {actionLabel} (Zlecenie z limitem)

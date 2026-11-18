@@ -39,7 +39,9 @@ type SettingsSheetProps = PropsWithChildren<{
   title: string;
   subtitle?: string;
   onClose: () => void;
-  height?: `${number}%` | number;
+  height?: `${number}%` | number | "auto";
+  contentBottomPadding?: number;
+  contentHorizontalPadding?: number;
 }>;
 
 export function SettingsSheet({
@@ -47,13 +49,17 @@ export function SettingsSheet({
   subtitle,
   onClose,
   height = "82%",
+  contentBottomPadding,
+  contentHorizontalPadding,
   children,
 }: SettingsSheetProps) {
   const { colors } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
   const translateY = useSharedValue(windowHeight);
+  const sheetHeightAnimated = useSharedValue(windowHeight);
   const dragStart = useSharedValue(0);
 
   useLockScreenWhileActive(true);
@@ -84,7 +90,45 @@ export function SettingsSheet({
     ? Platform.OS === "ios"
       ? Math.max(windowHeight - keyboardHeight - top, 0)
       : "100%"
-    : height;
+    : height === "auto"
+      ? Math.min(
+          windowHeight - top,
+          82 + contentHeight + 12,
+        )
+      : height;
+
+  useEffect(() => {
+    if (isKeyboardOpen) {
+      const keyboardSheetHeight =
+        Platform.OS === "ios"
+          ? Math.max(windowHeight - keyboardHeight - top, 0)
+          : windowHeight;
+      sheetHeightAnimated.value = withTiming(keyboardSheetHeight, {
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+      });
+      return;
+    }
+
+    const targetHeight =
+      height === "auto"
+        ? Math.min(windowHeight - top, 82 + contentHeight + 12)
+        : typeof height === "number"
+          ? height
+          : (windowHeight * parseFloat(height)) / 100;
+    sheetHeightAnimated.value = withTiming(targetHeight, {
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [
+    height,
+    isKeyboardOpen,
+    keyboardHeight,
+    contentHeight,
+    sheetHeightAnimated,
+    top,
+    windowHeight,
+  ]);
 
   const finishClose = useCallback(() => {
     onClose();
@@ -160,6 +204,7 @@ export function SettingsSheet({
   );
 
   const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    height: sheetHeightAnimated.value,
     transform: [{ translateY: translateY.value }],
   }));
 
@@ -297,8 +342,16 @@ export function SettingsSheet({
                 style={styles.content}
                 contentContainerStyle={[
                   styles.contentContainer,
-                  { paddingBottom: 28 + bottom },
+                    {
+                      paddingBottom:
+                        contentBottomPadding ??
+                        (height === "auto" ? 8 : 28 + bottom),
+                      paddingHorizontal: contentHorizontalPadding ?? 20,
+                    },
                 ]}
+                onContentSizeChange={(_width, nextHeight) => {
+                  if (height === "auto") setContentHeight(nextHeight);
+                }}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
@@ -317,6 +370,7 @@ const styles = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: "flex-end" },
   backdrop: { ...StyleSheet.absoluteFill },
   sheet: {
+    width: "100%",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: StyleSheet.hairlineWidth,

@@ -116,10 +116,7 @@ export function AccountSwitcher({
       >
         <View onLayout={handleContentLayout} style={styles.dropdownBody}>
           <View
-            style={[
-              styles.dropdown,
-              { backgroundColor: colors.background },
-            ]}
+            style={[styles.dropdown, { backgroundColor: colors.background }]}
           >
             {accounts.map((account, index) => {
               const isActive = account.id === activeAccount.id;
@@ -179,7 +176,7 @@ export function AccountSwitcher({
               ]}
             >
               <View style={styles.addBadge}>
-                <Ionicons name="add" size={19} color="#22c55e" />
+                <Ionicons name="add" size={19} color={colors.positive} />
               </View>
               <Text style={[styles.addText, { color: colors.text }]}>
                 Dodaj nowe konto

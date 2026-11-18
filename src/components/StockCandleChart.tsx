@@ -1,5 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -189,17 +189,25 @@ export function StockCandleChart({
         contentContainerStyle={styles.controls}
       >
         {CHART_RANGES.map((item, index) => (
-          <ChartButton
-            key={item.label}
-            label={item.label}
-            active={index === rangeIndex}
-            onPress={() => {
-              setRangeIndex(index);
-              if (item.days > 60 && isIntradayInterval(interval))
-                setInterval("1d");
-            }}
-            colors={colors}
-          />
+          <Fragment key={item.label}>
+            {index > 0 && (
+              <Text
+                style={[styles.controlSeparator, { color: colors.border }]}
+              >
+                |
+              </Text>
+            )}
+            <ChartButton
+              label={item.label}
+              active={index === rangeIndex}
+              onPress={() => {
+                setRangeIndex(index);
+                if (item.days > 60 && isIntradayInterval(interval))
+                  setInterval("1d");
+              }}
+              colors={colors}
+            />
+          </Fragment>
         ))}
       </ScrollView>
       <Text style={[styles.controlLabel, { color: colors.textMuted }]}>
@@ -215,15 +223,23 @@ export function StockCandleChart({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.controls}
       >
-        {CHART_INTERVALS.map((item) => (
-          <ChartButton
-            key={item.value}
-            label={item.label}
-            active={item.value === interval}
-            disabled={intradayDisabled && isIntradayInterval(item.value)}
-            onPress={() => setInterval(item.value)}
-            colors={colors}
-          />
+        {CHART_INTERVALS.map((item, index) => (
+          <Fragment key={item.value}>
+            {index > 0 && (
+              <Text
+                style={[styles.controlSeparator, { color: colors.border }]}
+              >
+                |
+              </Text>
+            )}
+            <ChartButton
+              label={item.label}
+              active={item.value === interval}
+              disabled={intradayDisabled && isIntradayInterval(item.value)}
+              onPress={() => setInterval(item.value)}
+              colors={colors}
+            />
+          </Fragment>
         ))}
       </ScrollView>
       <View style={styles.chart} onLayout={onChartLayout}>
@@ -281,7 +297,7 @@ export function StockCandleChart({
                 renderRect={renderCandleRect}
               />
               <ChartCrosshair color={colors.textMuted} minDurationMs={320}>
-                {/* Tooltip spójny z wykresem w ModalChartView / ChartFullscreenModal. */}
+                {/* Tooltip spójny z wykresem w karcie instrumentu / ChartFullscreenModal. */}
                 <CandlestickChart.Tooltip
                   style={[
                     styles.tooltip,
@@ -340,7 +356,7 @@ export function StockCandleChart({
   );
 }
 
-// Komponent przycisku wyboru zakresu lub interwału wykresu
+// Komponent tekstowego wyboru zakresu lub interwału wykresu
 function ChartButton({
   label,
   active,
@@ -359,20 +375,15 @@ function ChartButton({
       disabled={disabled}
       onPress={onPress}
       accessibilityRole="button"
-      style={[
-        styles.button,
-        {
-          backgroundColor: active ? colors.accent : colors.surfaceMutedGlass,
-          borderColor: active ? colors.accent : colors.borderGlass,
-          opacity: disabled ? 0.35 : 1,
-        },
-      ]}
+      accessibilityState={{ selected: active, disabled }}
+      hitSlop={6}
+      style={{ opacity: disabled ? 0.35 : 1 }}
     >
       <Text
         style={{
-          color: active ? "#ffffff" : colors.textMuted,
+          color: active ? colors.accent : colors.textMuted,
           fontSize: 12,
-          fontWeight: "700",
+          fontWeight: active ? "700" : "500",
         }}
       >
         {label}
@@ -424,14 +435,15 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 8,
   },
-  controls: { flexDirection: "row", gap: 8, paddingRight: 8 },
-  button: {
-    minHeight: 32,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: "center",
+  controls: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    paddingRight: 8,
+  },
+  controlSeparator: {
+    fontSize: 12,
+    fontWeight: "400",
   },
   hint: { fontSize: 11, lineHeight: 16, marginBottom: 8 },
   chart: { minHeight: 280, marginTop: 16, overflow: "hidden" },
