@@ -14,8 +14,10 @@ import {
   type AddPortfolioInput,
 } from "../../components/AddPortfolioSheet";
 import { AssetCategoryCard } from "../../components/AssetCategoryCard";
-import { PortfolioCashSheet } from "../../components/PortfolioCashSheet";
+import { InstrumentCard } from "../../components/InstrumentCard";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
+import { PortfolioCashSheet } from "../../components/PortfolioCashSheet";
+import { PortfolioCategoryModal } from "../../components/PortfolioCategoryModal";
 import {
   pillarKeyToAssetCategoryKey,
   PORTFOLIO_PILLARS,
@@ -27,8 +29,10 @@ import { SinglePortfolioCard } from "../../components/SinglePortfolioCard";
 import {
   MOCK_PORTFOLIOS,
   MockPortfolio,
+  PortfolioAssetItem,
   PortfolioCategory,
 } from "../../database/mockPortfolioData";
+import { resolveMarketCategory } from "../../instrumentCategories";
 import { NOTIFICATION_GROUPS, notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
 import { useLayoutMode } from "../../useLayoutMode";
@@ -52,6 +56,12 @@ export default function PortfolioScreen() {
   const [pillarSheetOpen, setPillarSheetOpen] = useState(false);
   const [addPortfolioSheetOpen, setAddPortfolioSheetOpen] = useState(false);
   const [cashSheetOpen, setCashSheetOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] =
+    useState<PortfolioCategory | null>(null);
+  const [selectedAssetDetails, setSelectedAssetDetails] = useState<{
+    asset: PortfolioAssetItem;
+    category: PortfolioCategory;
+  } | null>(null);
 
   // Animacja obracających się strzałek w headerze
   const rotation = useSharedValue(0);
@@ -89,6 +99,8 @@ export default function PortfolioScreen() {
     setPillarSheetOpen(false);
     setAddPortfolioSheetOpen(false);
     setCashSheetOpen(false);
+    setSelectedCategory(null);
+    setSelectedAssetDetails(null);
   });
 
   /**
@@ -336,7 +348,7 @@ export default function PortfolioScreen() {
                   key={category.id}
                   category={category}
                   currency={currentPortfolio.currency}
-                  onPress={() => undefined}
+                  onPress={() => setSelectedCategory(category)}
                 />
               ))}
 
@@ -415,6 +427,42 @@ export default function PortfolioScreen() {
           }))}
           onClose={() => setCashSheetOpen(false)}
           onConfirm={handleCashOperation}
+        />
+      )}
+
+      {selectedCategory && (
+        <PortfolioCategoryModal
+          portfolio={currentPortfolio}
+          category={selectedCategory}
+          onClose={() => setSelectedCategory(null)}
+          onOpenAsset={(asset) => {
+            setSelectedCategory(null);
+            setSelectedAssetDetails({
+              asset,
+              category: selectedCategory,
+            });
+          }}
+        />
+      )}
+
+      {selectedAssetDetails && (
+        <InstrumentCard
+          instrument={{
+            stock: selectedAssetDetails.asset.symbol,
+            title: selectedAssetDetails.asset.name.toUpperCase(),
+            currency: selectedAssetDetails.asset.currency,
+            symbol: selectedAssetDetails.asset.symbol,
+            exchange: selectedAssetDetails.asset.exchange,
+            marketCategory: resolveMarketCategory({
+              category: selectedAssetDetails.asset.category,
+              symbol: selectedAssetDetails.asset.symbol,
+              exchange: selectedAssetDetails.asset.exchange,
+            }),
+          }}
+          onClose={() => {
+            setSelectedAssetDetails(null);
+            setSelectedCategory(selectedAssetDetails.category);
+          }}
         />
       )}
     </View>

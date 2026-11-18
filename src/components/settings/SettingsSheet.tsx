@@ -40,6 +40,8 @@ type SettingsSheetProps = PropsWithChildren<{
   subtitle?: string;
   onClose: () => void;
   height?: `${number}%` | number | "auto";
+  contentBottomPadding?: number;
+  contentHorizontalPadding?: number;
 }>;
 
 export function SettingsSheet({
@@ -47,6 +49,8 @@ export function SettingsSheet({
   subtitle,
   onClose,
   height = "82%",
+  contentBottomPadding,
+  contentHorizontalPadding,
   children,
 }: SettingsSheetProps) {
   const { colors } = useTheme();
@@ -338,7 +342,12 @@ export function SettingsSheet({
                 style={styles.content}
                 contentContainerStyle={[
                   styles.contentContainer,
-                  { paddingBottom: height === "auto" ? 8 : 28 + bottom },
+                    {
+                      paddingBottom:
+                        contentBottomPadding ??
+                        (height === "auto" ? 8 : 28 + bottom),
+                      paddingHorizontal: contentHorizontalPadding ?? 20,
+                    },
                 ]}
                 onContentSizeChange={(_width, nextHeight) => {
                   if (height === "auto") setContentHeight(nextHeight);
@@ -361,6 +370,7 @@ const styles = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: "flex-end" },
   backdrop: { ...StyleSheet.absoluteFill },
   sheet: {
+    width: "100%",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: StyleSheet.hairlineWidth,

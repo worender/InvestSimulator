@@ -33,7 +33,7 @@ export function AssetCategoryCard({
   const display = useDisplayCurrency();
 
   const isPositive = category.profitPercent >= 0;
-  const arrowColor = isPositive ? "#10b981" : "#ef4444";
+  const arrowColor = isPositive ? colors.positive : colors.negative;
   const arrowName = isPositive ? "arrow-up" : "arrow-down";
 
   const formatNumber = (num: number, maxDecimals = 2) =>

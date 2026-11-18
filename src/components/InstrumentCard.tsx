@@ -28,18 +28,11 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StockFinancialData } from "../api/marketService";
-import {
-  MOCK_PORTFOLIOS,
-  MockPortfolio,
-  PortfolioAssetItem,
-  PortfolioCategory,
-  TransactionHistoryItem,
-} from "../database/mockPortfolioData";
+import { MOCK_PORTFOLIOS } from "../database/mockPortfolioData";
 import {
   SEARCHABLE_INSTRUMENTS,
   SearchableInstrument,
 } from "../database/mockSearchableInstruments";
-import { useDisplayCurrency } from "../displayCurrency";
 import {
   InstrumentMarketCategory,
   MARKET_CATEGORY_LABELS,
@@ -87,12 +80,6 @@ const RISK_LEVELS = [
 const RISK_COLORS = ["#10b981", "#f59e0b", "#f97316", "#ef4444"] as const;
 
 /**
- * Maksymalna liczba transakcji wyświetlanych w karcie instrumentu.
- * Pozostałe są dostępne w pełnej historii transakcji.
- */
-const MAX_VISIBLE_TRANSACTIONS = 5;
-
-/**
  * Typ instrumentu używany w karcie instrumentu
  */
 interface InstrumentCardInstrument {
@@ -111,11 +98,6 @@ interface InstrumentCardProps {
   onClose: () => void;
   initialRangeIndex?: number;
   initialInterval?: ChartInterval;
-  initialTab?: InstrumentCardTab;
-  // Dane portfela są opcjonalne: karta działa też jako podgląd rynku bez pozycji
-  portfolio?: MockPortfolio;
-  category?: PortfolioCategory | null;
-  asset?: PortfolioAssetItem | null;
 }
 
 /**
@@ -139,17 +121,12 @@ function toSearchableCategory(
 }
 
 /**
- * Komponent karty instrumentu: wyświetla wykres, moduł kupna/sprzedaży, historię transakcji i informacje o instrumencie.
+ * Komponent karty instrumentu: wyświetla wykres, moduł kupna/sprzedaży i informacje o instrumencie.
  * @param instrument Instrument do wyświetlenia
  * @param financialData Dane finansowe instrumentu (opcjonalne)
  * @param onClose Funkcja wywoływana przy zamknięciu karty
  * @param initialRangeIndex Początkowy indeks zakresu wykresu (opcjonalny)
  * @param initialInterval Początkowy interwał wykresu (opcjonalny)
- * @param initialTab Początkowa zakładka karty (opcjonalna, domyślnie "instrument")
- * @param portfolio Portfel użytkownika (opcjonalny)
- * @param category Kategoria portfela (opcjonalna)
- * @param asset Pozycja w portfelu (opcjonalna)
- * @returns
  */
 export function InstrumentCard({
   instrument,
@@ -157,13 +134,8 @@ export function InstrumentCard({
   onClose,
   initialRangeIndex,
   initialInterval,
-  initialTab = "instrument",
-  portfolio,
-  category,
-  asset,
 }: InstrumentCardProps) {
   const theme = useTheme();
-  const display = useDisplayCurrency();
   const { bottom } = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { isWatched, toggle: toggleWatchlist } = useWatchlist();
@@ -171,9 +143,8 @@ export function InstrumentCard({
   // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(true);
 
-  const [activeTab, setActiveTab] = useState<InstrumentCardTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<InstrumentCardTab>("instrument");
   const [noticeVisible, setNoticeVisible] = useState(false);
-  const [historyVisible, setHistoryVisible] = useState(false);
   const [noticeData, setNoticeData] = useState<{
     instrument: SearchableInstrument;
     orderType: "BUY" | "SELL";
@@ -181,59 +152,23 @@ export function InstrumentCard({
     totalCost: number;
   } | null>(null);
 
-  const categoryItems = category?.items ?? [];
-  const initialAssetIndex = useMemo(() => {
-    if (!category || !asset) return 0;
-    const index = category.items.findIndex((item) => item.id === asset.id);
-    return index >= 0 ? index : 0;
-  }, [asset, category]);
-  const [selectedAssetIndex, setSelectedAssetIndex] =
-    useState(initialAssetIndex);
+  // Portfel techniczny dla panelu handlu (podgląd rynku bez pozycji)
+  const fallbackPortfolio = MOCK_PORTFOLIOS[0];
 
-  const categoryAsset = categoryItems[selectedAssetIndex] ?? null;
-  const fallbackPortfolio = portfolio ?? MOCK_PORTFOLIOS[0];
+  const activeSymbol = instrument.symbol || instrument.stock;
+  const activeName = instrument.title;
+  const activeExchange = instrument.exchange;
+  const activeCurrency = instrument.currency;
+  const hasInstrument = Boolean(activeSymbol);
 
-  // Pozycja instrumentu w portfelu: najpierw wybrana kategoria, potem
-  // dopasowanie po symbolu w bieżącym portfelu
-  const portfolioAsset = useMemo<PortfolioAssetItem | null>(() => {
-    if (categoryAsset) return categoryAsset;
-    if (asset) return asset;
+  const marketCategory =
+    instrument.marketCategory ??
+    resolveMarketCategory({
+      symbol: activeSymbol,
+      exchange: activeExchange,
+    });
 
-    const symbol = instrument.stock.replace(/\.[A-Z]+$/i, "");
-    for (const portfolioCategory of fallbackPortfolio.categories) {
-      const found = portfolioCategory.items.find(
-        (item) =>
-          item.symbol === instrument.stock ||
-          item.symbol.replace(/\.[A-Z]+$/i, "") === symbol,
-      );
-      if (found) return found;
-    }
-    return null;
-  }, [asset, categoryAsset, fallbackPortfolio, instrument.stock]);
-
-  const activeSymbol = portfolioAsset?.symbol ?? instrument.stock;
-  const activeName = portfolioAsset?.name ?? instrument.title;
-  const activeExchange = portfolioAsset?.exchange ?? instrument.exchange;
-  const activeCurrency = portfolioAsset?.currency ?? instrument.currency;
-  const hasInstrument = Boolean(portfolioAsset || instrument.stock);
-
-  const marketCategory = portfolioAsset
-    ? resolveMarketCategory({
-        category: portfolioAsset.category,
-        symbol: activeSymbol,
-        exchange: activeExchange,
-      })
-    : (instrument.marketCategory ??
-      resolveMarketCategory({
-        symbol: activeSymbol,
-        exchange: activeExchange,
-      }));
-
-  // Dane finansowe dołączone do instrumentu pasują tylko do tego samego symbolu
-  const attachedFinancialData =
-    portfolioAsset && portfolioAsset.symbol !== instrument.stock
-      ? undefined
-      : (propFinancialData ?? instrument.financialData);
+  const attachedFinancialData = propFinancialData ?? instrument.financialData;
 
   const instrumentRef = useMemo(
     () => ({
@@ -251,7 +186,7 @@ export function InstrumentCard({
   );
 
   /**
-   * Tworzy obiekt instrumentu do modułu handlu, łącząc dane z portfela, finansowe i wyszukiwalne.
+   * Tworzy obiekt instrumentu do modułu handlu, łącząc dane finansowe i wyszukiwalne.
    * Wyszukiwalne instrumenty są używane do uzyskania domyślnej ceny, zmiany procentowej i statusu rynku.
    */
   const tradeInstrument = useMemo<SearchableInstrument>(() => {
@@ -271,11 +206,7 @@ export function InstrumentCard({
       categoryLabel: `${MARKET_CATEGORY_LABELS[marketCategory]} · ${activeExchange}`,
       exchange: activeExchange,
       currency: activeCurrency,
-      price:
-        portfolioAsset?.currentPrice ??
-        financialData?.price ??
-        searchable?.price ??
-        0,
+      price: financialData?.price ?? searchable?.price ?? 0,
       changePercent:
         financialData?.changePercent ?? searchable?.changePercent ?? 0,
       isMarketOpen: searchable?.isMarketOpen ?? false,
@@ -291,26 +222,7 @@ export function InstrumentCard({
     financialData,
     instrument.stock,
     marketCategory,
-    portfolioAsset,
   ]);
-
-  const ownedQuantity = portfolioAsset?.ownedQuantity ?? 0;
-
-  // Historia transakcji: połączone transkacje kupna i sprzedaży.
-  // Sortowanie od najnowszych do najstarszych.
-  // W karcie pokazujemy maksymalnie 5 ostatnich operacji.
-  const transactions = useMemo<TransactionHistoryItem[]>(() => {
-    if (!portfolioAsset) return [];
-    return [
-      ...portfolioAsset.purchaseHistory,
-      ...portfolioAsset.salesHistory,
-    ].sort((a, b) => b.date.localeCompare(a.date));
-  }, [portfolioAsset]);
-  const recentTransactions = useMemo(
-    () => transactions.slice(0, MAX_VISIBLE_TRANSACTIONS),
-    [transactions],
-  );
-  const hasMoreTransactions = transactions.length > MAX_VISIBLE_TRANSACTIONS;
 
   const isFavorite = isWatched(activeSymbol);
 
@@ -323,138 +235,18 @@ export function InstrumentCard({
     });
   };
 
-  // Wartość przeliczona na walutę wyświetlania (dla wiele walut on).
-  const formatNumber = (num: number, maxDecimals = 2) =>
-    Math.abs(num).toLocaleString("pl-PL", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: maxDecimals,
-    });
-
-  const formatMoney = (value: number, currency?: string) =>
-    `${formatNumber(display.convertForDisplay(value, currency))} ${display.displaySymbol(currency)}`;
-
-  // Pojedynczy wiersz historii transakcji
-  const renderTransactionRow = (tx: TransactionHistoryItem) => {
-    const isBuy = tx.type === "BUY";
-    const txColor = isBuy ? theme.colors.positive : theme.colors.negative;
-
-    return (
-      <View
-        key={tx.id}
-        style={[styles.txLine, { borderBottomColor: theme.colors.border }]}
-      >
-        <View style={styles.txLineLeft}>
-          <View style={styles.txDotLabel}>
-            <View
-              style={[styles.txIndicatorDot, { backgroundColor: txColor }]}
-            />
-            <Text style={[styles.txName, { color: theme.colors.text }]}>
-              {isBuy ? "Kupno" : "Sprzedaż"}
-            </Text>
-          </View>
-          <Text style={[styles.txDate, { color: theme.colors.textMuted }]}>
-            {tx.date}
-          </Text>
-        </View>
-        <View style={styles.txLineRight}>
-          <Text style={[styles.txQtyPrice, { color: theme.colors.text }]}>
-            {isBuy ? "+" : "-"}
-            {tx.quantity} szt. @{" "}
-            {formatMoney(tx.price, portfolioAsset?.currency)}
-          </Text>
-          <Text style={[styles.txTotal, { color: theme.colors.textMuted }]}>
-            {formatMoney(tx.total, portfolioAsset?.currency)}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  const isProfit = (portfolioAsset?.profitCurrency ?? 0) >= 0;
-  const arrowColor = isProfit ? theme.colors.positive : theme.colors.negative;
-  const arrowName = isProfit ? "arrow-up" : "arrow-down";
-  const sign = isProfit ? "+" : "-";
-
-  const formattedProfitVal = portfolioAsset
-    ? `${sign}${formatMoney(portfolioAsset.profitCurrency, portfolioAsset.currency)}`
-    : "-";
-  const formattedProfitPct = portfolioAsset
-    ? `${sign}${Math.abs(portfolioAsset.profitPercent).toFixed(2)}%`
-    : "-";
-
-  const purchaseYear = portfolioAsset
-    ? new Date(portfolioAsset.firstPurchasedDate).getFullYear()
-    : new Date().getFullYear();
-  const currentYear = new Date().getFullYear();
-  const yearsHolding = currentYear - purchaseYear;
-
-  // Zysk w okresach jest pokazywany zawsze
-  // Dla instrumentów posiadanych w portfelu pokazujemy zysk w okresach 1M, 3M, 1R, 3L, 5L.
-  const periodReturns: {
-    label: string;
-    value?: number;
-    available: boolean;
-  }[] = portfolioAsset
-    ? [
-        {
-          label: "1M",
-          value: portfolioAsset.returns.oneMonth,
-          available: true,
-        },
-        {
-          label: "3M",
-          value: portfolioAsset.returns.threeMonths,
-          available: true,
-        },
-        {
-          label: "1R",
-          value: portfolioAsset.returns.oneYear,
-          available: yearsHolding >= 1,
-        },
-        {
-          label: "3L",
-          value: portfolioAsset.returns.threeYears,
-          available:
-            yearsHolding >= 3 &&
-            portfolioAsset.returns.threeYears !== undefined,
-        },
-        {
-          label: "5L",
-          value: portfolioAsset.returns.fiveYears,
-          available:
-            yearsHolding >= 5 && portfolioAsset.returns.fiveYears !== undefined,
-        },
-      ]
-    : [
-        { label: "1M", available: false },
-        { label: "3M", available: false },
-        { label: "1R", available: false },
-        { label: "3L", available: false },
-        { label: "5L", available: false },
-      ];
-
   /**
    * Tworzy obiekt z informacjami o instrumencie do wyświetlenia w karcie.
    */
-  const instrumentInfo = portfolioAsset
-    ? {
-        name: portfolioAsset.name,
-        symbol: portfolioAsset.symbol,
-        exchange: portfolioAsset.exchange,
-        categoryLabel: portfolioAsset.category.toUpperCase(),
-        description: portfolioAsset.description,
-        riskLevel: portfolioAsset.riskLevel,
-        assetClassInfo: portfolioAsset.assetClassInfo,
-      }
-    : {
-        name: activeName,
-        symbol: activeSymbol,
-        exchange: activeExchange,
-        categoryLabel: MARKET_CATEGORY_LABELS[marketCategory].toUpperCase(),
-        description: MARKET_INSTRUMENT_INFO[marketCategory].description,
-        riskLevel: MARKET_INSTRUMENT_INFO[marketCategory].riskLevel,
-        assetClassInfo: MARKET_INSTRUMENT_INFO[marketCategory].assetClassInfo,
-      };
+  const instrumentInfo = {
+    name: activeName,
+    symbol: activeSymbol,
+    exchange: activeExchange,
+    categoryLabel: MARKET_CATEGORY_LABELS[marketCategory].toUpperCase(),
+    description: MARKET_INSTRUMENT_INFO[marketCategory].description,
+    riskLevel: MARKET_INSTRUMENT_INFO[marketCategory].riskLevel,
+    assetClassInfo: MARKET_INSTRUMENT_INFO[marketCategory].assetClassInfo,
+  };
 
   // Pozycja instrumentu na skali ryzyka
   const riskIndex = Math.max(
@@ -743,62 +535,6 @@ export function InstrumentCard({
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                 >
-                  {categoryItems.length > 1 && (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.pickerRow}
-                    >
-                      {categoryItems.map((item, index) => {
-                        const selected = index === selectedAssetIndex;
-                        const itemPositive = item.profitCurrency >= 0;
-                        return (
-                          <Pressable
-                            key={item.id}
-                            onPress={() => setSelectedAssetIndex(index)}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected }}
-                            style={[
-                              styles.pickerChip,
-                              {
-                                borderColor: selected
-                                  ? theme.colors.accent
-                                  : theme.colors.border,
-                                backgroundColor: selected
-                                  ? theme.colors.accent + "1f"
-                                  : theme.colors.surfaceMutedGlass,
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.pickerSymbol,
-                                {
-                                  color: selected
-                                    ? theme.colors.accent
-                                    : theme.colors.text,
-                                },
-                              ]}
-                            >
-                              {item.symbol}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.pickerChange,
-                                {
-                                  color: itemPositive ? "#10b981" : "#ef4444",
-                                },
-                              ]}
-                            >
-                              {itemPositive ? "+" : "-"}
-                              {Math.abs(item.profitPercent).toFixed(2)}%
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </ScrollView>
-                  )}
-
                   {hasInstrument ? (
                     <>
                       {/* Wykres */}
@@ -819,85 +555,9 @@ export function InstrumentCard({
                         key={activeSymbol}
                         instrument={tradeInstrument}
                         portfolio={fallbackPortfolio}
-                        ownedQuantity={ownedQuantity}
+                        ownedQuantity={0}
                         onMarketClosedAlert={handleMarketClosedAlert}
                       />
-                      {/* Historia transakcji */}
-                      {transactions.length > 0 && (
-                        <View style={styles.sectionBlock}>
-                          <Text
-                            style={[
-                              styles.sectionHeading,
-                              { color: theme.colors.textMuted },
-                            ]}
-                          >
-                            TRANSAKCJE
-                          </Text>
-                          {recentTransactions.map(renderTransactionRow)}
-                          {hasMoreTransactions && (
-                            <Pressable
-                              onPress={() => setHistoryVisible(true)}
-                              hitSlop={8}
-                              accessibilityRole="button"
-                              accessibilityLabel="Pokaż pełną historię transakcji"
-                              style={({ pressed }) => [
-                                styles.txShowAll,
-                                { opacity: pressed ? 0.6 : 1 },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.txShowAllText,
-                                  { color: theme.colors.accent },
-                                ]}
-                              >
-                                Pokaż wszystkie ({transactions.length})
-                              </Text>
-                              <Ionicons
-                                name="chevron-forward"
-                                size={14}
-                                color={theme.colors.accent}
-                              />
-                            </Pressable>
-                          )}
-                        </View>
-                      )}
-                      {/* Wynik finansowy */}
-                      {portfolioAsset && ownedQuantity > 0 && (
-                        <View style={styles.sectionBlock}>
-                          <Text
-                            style={[
-                              styles.sectionHeading,
-                              { color: theme.colors.textMuted },
-                            ]}
-                          >
-                            WYNIK FINANSOWY
-                          </Text>
-                          <View style={styles.profitInline}>
-                            <Ionicons
-                              name={arrowName}
-                              size={16}
-                              color={arrowColor}
-                            />
-                            <Text
-                              style={[
-                                styles.profitValue,
-                                { color: arrowColor },
-                              ]}
-                            >
-                              {formattedProfitVal}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.profitPct,
-                                { color: theme.colors.textMuted },
-                              ]}
-                            >
-                              ({formattedProfitPct})
-                            </Text>
-                          </View>
-                        </View>
-                      )}
 
                       {/* Informacje o instrumencie */}
                       <View style={styles.assetInfoSection}>
@@ -1014,69 +674,6 @@ export function InstrumentCard({
                           {instrumentInfo.assetClassInfo}
                         </Text>
                       </View>
-                      <View style={styles.sectionBlock}>
-                        <Text
-                          style={[
-                            styles.sectionHeading,
-                            { color: theme.colors.textMuted },
-                          ]}
-                        >
-                          ZYSK W OKRESACH
-                        </Text>
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={styles.periodBlocksRow}
-                        >
-                          {periodReturns.map((period) => {
-                            const val = period.value ?? 0;
-                            const isPeriodPositive = val >= 0;
-                            const periodColor = isPeriodPositive
-                              ? theme.colors.positive
-                              : theme.colors.negative;
-
-                            return (
-                              <View
-                                key={period.label}
-                                style={styles.periodBlock}
-                              >
-                                <Text
-                                  style={[
-                                    styles.periodBlockLabel,
-                                    { color: theme.colors.textMuted },
-                                  ]}
-                                >
-                                  {period.label}
-                                </Text>
-                                {period.available &&
-                                period.value !== undefined ? (
-                                  <Text
-                                    numberOfLines={1}
-                                    allowFontScaling={false}
-                                    style={[
-                                      styles.periodBlockValue,
-                                      { color: periodColor },
-                                    ]}
-                                  >
-                                    {isPeriodPositive ? "+" : ""}
-                                    {period.value.toFixed(2)}%
-                                  </Text>
-                                ) : (
-                                  <Text
-                                    numberOfLines={1}
-                                    style={[
-                                      styles.periodBlockValue,
-                                      { color: theme.colors.textMuted },
-                                    ]}
-                                  >
-                                    -
-                                  </Text>
-                                )}
-                              </View>
-                            );
-                          })}
-                        </ScrollView>
-                      </View>
                     </>
                   ) : (
                     <View style={styles.emptyState}>
@@ -1134,70 +731,6 @@ export function InstrumentCard({
             </Reanimated.View>
           </View>
         </GestureHandlerRootView>
-      </Modal>
-
-      {/* Pełna historia transakcji w oknie modalnym */}
-      <Modal
-        visible={historyVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setHistoryVisible(false)}
-      >
-        <View style={styles.historyModalRoot}>
-          <Pressable
-            style={styles.historyBackdrop}
-            onPress={() => setHistoryVisible(false)}
-            accessibilityLabel="Zamknij historię transakcji"
-          />
-          <View
-            style={[
-              styles.historySheet,
-              {
-                backgroundColor: theme.colors.background,
-                borderColor: theme.colors.borderGlass,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.historyHeader,
-                { borderBottomColor: theme.colors.borderGlass },
-              ]}
-            >
-              <View>
-                <Text
-                  style={[styles.historyTitle, { color: theme.colors.text }]}
-                >
-                  Historia transakcji
-                </Text>
-                <Text
-                  style={[
-                    styles.historySubtitle,
-                    { color: theme.colors.textMuted },
-                  ]}
-                >
-                  {activeSymbol} · {transactions.length} operacji
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => setHistoryVisible(false)}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel="Zamknij"
-              >
-                <Ionicons name="close" size={22} color={theme.colors.accent} />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              style={styles.historyScroll}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.historyList}
-            >
-              {transactions.map(renderTransactionRow)}
-            </ScrollView>
-          </View>
-        </View>
       </Modal>
 
       {/* Powiadomienie modalne o zamkniętym rynku */}
@@ -1296,161 +829,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
   },
-  pickerRow: {
-    gap: 8,
-    paddingVertical: 4,
-  },
-  pickerChip: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    minWidth: 82,
-  },
-  pickerSymbol: {
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  pickerChange: {
-    fontSize: 11,
-    fontWeight: "600",
-    marginTop: 2,
-  },
   chartContainer: {
     paddingTop: 10,
-  },
-  profitInline: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  profitValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: -0.2,
-  },
-  profitPct: {
-    fontSize: 12,
-  },
-  sectionBlock: {
-    marginTop: 34,
-  },
-  sectionHeading: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.1,
-    marginBottom: 12,
-  },
-  periodBlocksRow: {
-    gap: 10,
-    paddingRight: 8,
-  },
-  periodBlock: {
-    minWidth: 64,
-    gap: 6,
-  },
-  periodBlockLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-  },
-  periodBlockValue: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  txLine: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  txLineLeft: {
-    flex: 1,
-    gap: 3,
-  },
-  txDotLabel: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  txIndicatorDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  txName: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  txDate: {
-    fontSize: 11,
-  },
-  txLineRight: {
-    alignItems: "flex-end",
-    gap: 3,
-  },
-  txQtyPrice: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  txTotal: {
-    fontSize: 11,
-  },
-  txShowAll: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingTop: 12,
-    alignSelf: "flex-start",
-  },
-  txShowAllText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  historyModalRoot: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 40,
-  },
-  historyBackdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0, 0, 0, 0.55)",
-  },
-  historySheet: {
-    width: "100%",
-    maxWidth: 520,
-    maxHeight: "80%",
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden",
-  },
-  historyHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  historyTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  historySubtitle: {
-    fontSize: 11,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  historyList: {
-    paddingHorizontal: 18,
-    paddingBottom: 18,
-  },
-  historyScroll: {
-    flexShrink: 1,
   },
   assetInfoSection: {
     marginTop: 38,

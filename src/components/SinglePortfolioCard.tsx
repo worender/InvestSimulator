@@ -2,9 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMemo } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { MockPortfolio } from "../database/mockPortfolioData";
-import {
-  useDisplayCurrency,
-} from "../displayCurrency";
+import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 import { GlassBackground } from "./GlassBackground";
 import {
@@ -27,7 +25,7 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
     });
 
   const isPositive = portfolio.profitCurrency >= 0;
-  const arrowColor = isPositive ? "#10b981" : "#ef4444";
+  const arrowColor = isPositive ? colors.positive : colors.negative;
   const arrowIcon = isPositive ? "arrow-up" : "arrow-down";
   const sign = isPositive ? "+" : "-";
 
@@ -43,12 +41,10 @@ export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
     const baseVal = portfolio.totalValue - portfolio.profitCurrency;
     const midVal = baseVal + portfolio.profitCurrency * 0.45;
     const endVal = portfolio.totalValue;
-    return buildPortfolioSeries([baseVal, midVal, endVal], 90).map(
-      (point) => ({
-        ...point,
-        value: display.convertForDisplay(point.value, portfolio.currency),
-      }),
-    );
+    return buildPortfolioSeries([baseVal, midVal, endVal], 90).map((point) => ({
+      ...point,
+      value: display.convertForDisplay(point.value, portfolio.currency),
+    }));
   }, [portfolio, display]);
 
   const cardAccent = colors.accent;
