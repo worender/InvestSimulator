@@ -1,12 +1,11 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   AssetCategoryKey,
   PortfolioCategory,
 } from "../database/mockPortfolioData";
 import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
-import { GlassBackground } from "./GlassBackground";
 
 interface AssetCategoryCardProps {
   category: PortfolioCategory;
@@ -18,6 +17,9 @@ const CATEGORY_ICONS: Record<AssetCategoryKey, keyof typeof Ionicons.glyphMap> =
   {
     stocks: "trending-up-outline",
     bonds: "shield-checkmark-outline",
+    cfd: "swap-horizontal-outline",
+    crypto: "logo-bitcoin",
+    etf: "pie-chart-outline",
     cfd_crypto: "logo-bitcoin",
     etf_funds: "pie-chart-outline",
   };
@@ -27,11 +29,10 @@ export function AssetCategoryCard({
   currency,
   onPress,
 }: AssetCategoryCardProps) {
-  const { colors, mode } = useTheme();
+  const { colors } = useTheme();
   const display = useDisplayCurrency();
-  const isDark = mode === "dark";
 
-  const isPositive = category.profitCurrency >= 0;
+  const isPositive = category.profitPercent >= 0;
   const arrowColor = isPositive ? "#10b981" : "#ef4444";
   const arrowName = isPositive ? "arrow-up" : "arrow-down";
 
@@ -41,21 +42,15 @@ export function AssetCategoryCard({
       maximumFractionDigits: maxDecimals,
     });
 
-  const sign = isPositive ? "+" : "-";
-  const displayedProfit = display.convertForDisplay(
-    category.profitCurrency,
-    currency,
-  );
   const displayedTotal = display.convertForDisplay(
     category.totalValue,
     currency,
   );
   const symbol = display.displaySymbol(currency);
-  const formattedProfitVal = `${sign}${formatNumber(displayedProfit)} ${symbol}`;
+  const sign = isPositive ? "+" : "-";
   const formattedProfitPct = `${sign}${Math.abs(category.profitPercent).toFixed(2)}%`;
   const formattedTotal = `${formatNumber(displayedTotal)} ${symbol}`;
 
-  const pastelBg = isDark ? category.pastelBgDark : category.pastelBgLight;
   const iconName = CATEGORY_ICONS[category.id] ?? "cube-outline";
 
   return (
@@ -64,19 +59,15 @@ export function AssetCategoryCard({
       accessibilityLabel={`Kategoria ${category.title}`}
       style={({ pressed }) => [
         styles.cardOuter,
-        // Na Androidzie cień potrzebuje tła, inaczej ignoruje zaokrąglone rogi i rysuje prostokąt
-        Platform.OS === "android" && { backgroundColor: colors.surface },
         {
-          borderColor: category.accentColor + "55",
+          backgroundColor: colors.background,
+          borderColor: category.accentColor + "99",
           transform: [{ scale: pressed ? 0.98 : 1 }],
           opacity: pressed ? 0.92 : 1,
         },
       ]}
     >
       <View style={styles.cardClip}>
-        {/* Efekt Liquid Glass z pastelowym rozmyciem */}
-        <GlassBackground intensity={isDark ? 40 : 55} tintColor={pastelBg} />
-
         <View style={styles.cardContent}>
           <View style={styles.headerRow}>
             <View
@@ -103,25 +94,18 @@ export function AssetCategoryCard({
           </View>
 
           <View style={styles.valuesBlock}>
+            <View style={styles.profitPctRow}>
+              <Ionicons name={arrowName} size={11} color={arrowColor} />
+              <Text style={[styles.profitPct, { color: colors.textMuted }]}>
+                {formattedProfitPct}
+              </Text>
+            </View>
             <Text
               style={[styles.totalAmount, { color: colors.text }]}
               numberOfLines={1}
             >
               {formattedTotal}
             </Text>
-
-            <View style={styles.profitRow}>
-              <Ionicons name={arrowName} size={14} color={arrowColor} />
-              <Text
-                style={[styles.profitAmount, { color: colors.text }]}
-                numberOfLines={1}
-              >
-                {formattedProfitVal}
-              </Text>
-              <Text style={[styles.profitPct, { color: colors.textMuted }]}>
-                ({formattedProfitPct})
-              </Text>
-            </View>
           </View>
         </View>
       </View>
@@ -169,6 +153,16 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     flexShrink: 1,
   },
+  profitPctRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    alignSelf: "flex-start",
+  },
+  profitPct: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
   valuesBlock: {
     gap: 3,
   },
@@ -176,19 +170,5 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "500",
     letterSpacing: -0.2,
-  },
-  profitRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    flexWrap: "nowrap",
-  },
-  profitAmount: {
-    fontSize: 12,
-    fontWeight: "400",
-  },
-  profitPct: {
-    fontSize: 11,
-    fontWeight: "400",
   },
 });
