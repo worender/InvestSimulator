@@ -45,15 +45,30 @@ type NewsArticleModalProps = {
   onClose: () => void;
 };
 
-// Dzieli opis artykułu na akapity
-const buildParagraphs = (summary: string): string[] => {
-  const normalized = summary.replace(/\s+/g, " ").trim();
+// Koniec zdania: znak końca, opcjonalny cudzysłów/nawias, spacja i wielka litera.
+// Kropka bez spacji i wielkiej litery po niej ("5.6 billion", "Investing.com",
+// "U.S. equities") nie kończy zdania, więc tekst przed nią nie ginie.
+const SENTENCE_END = /[.!?…]["”')\]]?(?=\s+["“(]?[A-ZĄĆĘŁŃÓŚŹŻÀ-ÖØ-Þ])/g;
+
+const splitIntoSentences = (text: string): string[] => {
+  const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return [];
 
-  const sentences = normalized
-    .match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g)
-    ?.map((sentence) => sentence.trim()) ?? [normalized];
+  const sentences: string[] = [];
+  let start = 0;
+  for (const match of normalized.matchAll(SENTENCE_END)) {
+    const end = (match.index ?? 0) + match[0].length;
+    sentences.push(normalized.slice(start, end).trim());
+    start = end;
+  }
+  const rest = normalized.slice(start).trim();
+  if (rest) sentences.push(rest);
+  return sentences;
+};
 
+// Dzieli opis artykułu na akapity po 3 zdania
+const buildParagraphs = (summary: string): string[] => {
+  const sentences = splitIntoSentences(summary);
   const paragraphs: string[] = [];
   for (let index = 0; index < sentences.length; index += 3) {
     const paragraph = sentences.slice(index, index + 3).join(" ");

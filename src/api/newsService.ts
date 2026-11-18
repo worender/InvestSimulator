@@ -253,6 +253,7 @@ export async function getYahooNews(
       throw new Error("Nieprawidłowy format listy newsów");
     }
 
+    // Newsy bez treści odfiltrowuje backend (`backend/newsQuality.js`)
     return items
       .map((item) => toNewsItem(item, topic))
       .filter((item): item is YahooNewsItem => item !== null);
@@ -274,16 +275,19 @@ export async function getYahooNews(
 /**
  * Pobiera obie kategorie newsów równolegle.
  * Zwraca obiekt z gotowymi listami
+ *
+ * @param silent gdy `true`, brak newsów nie pokazuje powiadomienia (np. przy odświeżaniu w tle)
  */
 export async function getYahooNewsByTopic(
   limit = 15,
+  { silent = false }: { silent?: boolean } = {},
 ): Promise<Record<NewsTopic, YahooNewsItem[]>> {
   const [poland, world] = await Promise.all([
     getYahooNews("poland", limit, { silent: true }),
     getYahooNews("world", limit, { silent: true }),
   ]);
 
-  if (poland.length === 0 && world.length === 0) {
+  if (!silent && poland.length === 0 && world.length === 0) {
     notify({
       variant: "warning",
       title: "Brak newsów",

@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  getYahooNewsByTopic,
   NEWS_TOPICS,
   type NewsTopic,
   type YahooNewsItem,
@@ -23,6 +22,7 @@ import { notify } from "../../notificationBus";
 import { useSavedArticles } from "../../savedArticles";
 import { useTheme } from "../../theme";
 import { useLayoutMode } from "../../useLayoutMode";
+import { useNewsFeed } from "../../useNewsFeed";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 // Ikona nagłówka dla każdej kategorii newsów
@@ -79,13 +79,8 @@ export default function AboutScreen() {
   const scrollNav = useScrollAwareNavigation();
   const { isDesktop, isWeb } = useLayoutMode();
 
-  const [newsByTopic, setNewsByTopic] = useState<
-    Record<NewsTopic, YahooNewsItem[]>
-  >({
-    poland: [],
-    world: [],
-  });
-  const [loadingNews, setLoadingNews] = useState(true);
+  // Newsy odświeżają się same co 30 minut (także po powrocie aplikacji z tła)
+  const { newsByTopic, loading: loadingNews } = useNewsFeed(12);
   // Tylko jedna kategoria może być rozwinięta jednocześnie
   // Na start otwarta jest edukacja
   const [expandedCategory, setExpandedCategory] = useState<string | null>(
@@ -104,20 +99,6 @@ export default function AboutScreen() {
   } = useSavedArticles();
   const router = useRouter();
   const { articleId } = useLocalSearchParams<{ articleId?: string }>();
-
-  useEffect(() => {
-    let active = true;
-
-    getYahooNewsByTopic(12).then((items) => {
-      if (!active) return;
-      setNewsByTopic(items);
-      setLoadingNews(false);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     // Czeka na artykuły z bazy, aby nie zgubić parametru podczas ładowania
