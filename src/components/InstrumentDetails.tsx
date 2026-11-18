@@ -1,20 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import {
   buildFallbackFinancialData,
   enrichFinancialData,
   getStockData,
   StockFinancialData,
-} from '../api/marketService';
-import { NOTIFICATION_GROUPS, notify } from '../notificationBus';
-import { useTheme } from '../theme';
-import { Section } from './Section';
-import { Skeleton } from './Skeleton';
+} from "../api/marketService";
 import {
   convertForDisplay,
   displaySymbol,
   useDisplayCurrency,
 } from "../displayCurrency";
+import {
+  getMarketDetailTemplate,
+  type InstrumentMarketCategory,
+  type MarketDetailField,
+} from "../instrumentCategories";
+import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
+import { useTheme } from "../theme";
+import { Section } from "./Section";
+import { Skeleton } from "./Skeleton";
 
 // Funkcja formatująca wartość pieniężną w walucie wyświetlania wybranej w ustawieniach
 export const formatCurrency = (
@@ -74,9 +79,13 @@ export function useInstrumentFinancialData(
   const [financialData, setFinancialData] = useState<StockFinancialData | null>(
     initial ?? null,
   );
-  const [loading, setLoading] = useState<boolean>(!initial);
+  const [loading, setLoading] = useState<boolean>(
+    Boolean(instrument.stock) && !initial,
+  );
 
   useEffect(() => {
+    if (!instrument.stock) return;
+
     let isMounted = true;
 
     const loadData = async () => {
@@ -110,8 +119,8 @@ export function useInstrumentFinancialData(
           setFinancialData(fallback);
         } else if (isMounted) {
           notify({
-            variant: 'error',
-            title: 'Brak danych finansowych',
+            variant: "error",
+            title: "Brak danych finansowych",
             category: NOTIFICATION_GROUPS.marketFinancials,
             message: `Nie udało się pobrać danych dla ${instrument.stock}. Wykres pozostaje dostępny.`,
           });
@@ -223,13 +232,16 @@ type InstrumentDetailsProps = {
   loading: boolean;
   // Na desktopie sekcje układają się w siatkę kolumn zamiast jednej długiej listy
   grid?: boolean;
+  // Kategoria decyduje o doborze szablonu pól (akcje, ETF, obligacje, CFD, krypto)
+  category?: InstrumentMarketCategory;
 };
 
-// Sekcje ze zwrotem i danymi finansowymi instrumentu (pod wykresem w modalu lub w panelu na desktopie)
+// Sekcje z danymi rynkowymi instrumentu, filtrowane według szablonu kategorii
 export function InstrumentDetails({
   financialData,
   loading,
   grid = false,
+  category = "stocks",
 }: InstrumentDetailsProps) {
   const theme = useTheme();
   const display = useDisplayCurrency();
@@ -240,98 +252,79 @@ export function InstrumentDetails({
     const symbol = display.displaySymbol(currencyCode);
     return `${converted.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
   };
-  const [selectedReturnPeriod, setSelectedReturnPeriod] = useState<
-    "1Y" | "3Y" | "5Y"
-  >("1Y");
-
-  const periodReturn = useMemo(() => {
-    if (!financialData) return undefined;
-    switch (selectedReturnPeriod) {
-      case "1Y":
-        return financialData.performance1Y;
-      case "3Y":
-        return financialData.performance3Y;
-      case "5Y":
-        return financialData.performance5Y;
-    }
-  }, [financialData, selectedReturnPeriod]);
 
   const cell = grid ? styles.gridCell : undefined;
+  const template = getMarketDetailTemplate(category);
+
+  /**
+   * Formatuje jedno pole szablonu. Zwraca null, gdy nie ma sensownej wartości.
+   * @param field Pole do sformatowania
+   * @returns Sformatowana wartość lub null
+   */
+  const formatField = (
+    field: MarketDetailField,
+  ): { value: string; subValue?: string } | null => {
+    if (!financialData) return null;
+    const raw = financialData[field.key];
+
+    if (raw === undefined || raw === null) return null;
+
+    if (typeof raw === "string") {
+      if (raw.trim().length === 0) return null;
+      if (field.format === "split") {
+        return {
+          value: `${raw}x`,
+          subValue: financialData.lastSplitDate
+            ? formatDate(financialData.lastSplitDate)
+            : undefined,
+        };
+      }
+      if (field.format === "date") {
+        return { value: formatDate(raw) };
+      }
+      return { value: raw };
+    }
+
+    if (!Number.isFinite(raw)) return null;
+
+    const zeroIsMissing =
+      field.zeroIsMissing ??
+      (field.format !== "change" &&
+        field.format !== "changePercent" &&
+        field.key !== "price");
+    if (raw === 0 && zeroIsMissing) return null;
+
+    switch (field.format) {
+      case "currency":
+        return { value: formatCurrency(raw, financialData.currency) };
+      case "change":
+        return {
+          value:
+            raw >= 0
+              ? `+${formatCurrency(raw, financialData.currency)}`
+              : formatCurrency(raw, financialData.currency),
+        };
+      case "changePercent":
+        return {
+          value: raw >= 0 ? `+${formatPercent(raw)}` : formatPercent(raw),
+        };
+      case "percent":
+        return { value: formatPercent(raw) };
+      case "ratio":
+        return { value: formatRatio(raw) };
+      case "number":
+        return { value: formatNumber(raw) };
+      case "date":
+        return { value: formatDate(String(raw)) };
+      case "split":
+        return { value: `${raw}x` };
+      default:
+        return { value: String(raw) };
+    }
+  };
 
   return (
     <>
-      <View style={grid && styles.gridReturn}>
-        <Section label="Zwrot">
-          <View style={styles.periodButtons}>
-            {(["1Y", "3Y", "5Y"] as const).map((period) => {
-              const active = selectedReturnPeriod === period;
-              return (
-                <Pressable
-                  key={period}
-                  onPress={() => setSelectedReturnPeriod(period)}
-                  accessibilityRole="button"
-                >
-                  <Text
-                    style={[
-                      styles.periodButtonText,
-                      {
-                        color: active
-                          ? theme.colors.accent
-                          : theme.colors.textMuted,
-                        borderBottomColor: active
-                          ? theme.colors.accent
-                          : "transparent",
-                      },
-                    ]}
-                  >
-                    {period}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          {periodReturn !== undefined && (
-            <View
-              style={[
-                styles.periodBanner,
-                {
-                  borderTopColor: theme.colors.borderGlass,
-                  paddingTop: theme.spacing.md,
-                  marginTop: theme.spacing.sm,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.periodBannerLabel,
-                  {
-                    color: theme.colors.textMuted,
-                    fontSize: theme.fontSize.xs,
-                  },
-                ]}
-              >
-                Szacowany zwrot ({selectedReturnPeriod})
-              </Text>
-              <Text
-                style={[
-                  styles.periodBannerValue,
-                  {
-                    color:
-                      periodReturn >= 0
-                        ? theme.colors.positive
-                        : theme.colors.negative,
-                    fontSize: theme.fontSize.sm,
-                  },
-                ]}
-              >
-                {periodReturn >= 0 ? "+" : ""}
-                {formatPercent(periodReturn)}
-              </Text>
-            </View>
-          )}
-        </Section>
-      </View>
-
       {loading && !financialData && (
         <Section label="Dane finansowe">
           {[1, 2, 3, 4, 5].map((i) => (
@@ -345,282 +338,36 @@ export function InstrumentDetails({
 
       {financialData && (
         <View style={grid && styles.grid}>
-          <View style={cell}>
-            <Section label="Dane rynkowe">
-              <DataItem
-                label="Cena"
-                value={formatCurrency(
-                  financialData.price,
-                  financialData.currency,
-                )}
-              />
-              <DataItem
-                label="Zmiana"
-                value={
-                  financialData.change >= 0
-                    ? `+${formatCurrency(financialData.change, financialData.currency)}`
-                    : formatCurrency(
-                        financialData.change,
-                        financialData.currency,
-                      )
-                }
-              />
-              <DataItem
-                label="Zmiana %"
-                value={
-                  financialData.changePercent >= 0
-                    ? `+${formatPercent(financialData.changePercent)}`
-                    : formatPercent(financialData.changePercent)
-                }
-              />
-              <DataItem
-                label="Wolumen"
-                value={formatNumber(financialData.volume)}
-              />
-              <DataItem
-                label="Wolumen średni 10d"
-                value={formatNumber(financialData.averageVolume)}
-                divider={false}
-              />
-            </Section>
-          </View>
+          {template.map((section) => {
+            const rows = section.fields
+              .map((field) => ({ field, formatted: formatField(field) }))
+              .filter(
+                (
+                  row,
+                ): row is {
+                  field: MarketDetailField;
+                  formatted: { value: string; subValue?: string };
+                } => row.formatted !== null,
+              );
 
-          <View style={cell}>
-            <Section label="Wskaźniki wyceny">
-              <DataItem
-                label="P/E (trailing)"
-                value={
-                  financialData.trailingPE
-                    ? formatRatio(financialData.trailingPE)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="P/E (forward)"
-                value={
-                  financialData.forwardPE
-                    ? formatRatio(financialData.forwardPE)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="P/B"
-                value={
-                  financialData.priceToBook
-                    ? formatRatio(financialData.priceToBook)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="P/S"
-                value={
-                  financialData.priceToSales
-                    ? formatRatio(financialData.priceToSales)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="EV/EBITDA"
-                value={
-                  financialData.enterpriseValueToEbitda
-                    ? formatRatio(financialData.enterpriseValueToEbitda)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="P/FCF"
-                value={
-                  financialData.priceToFreeCashFlow
-                    ? formatRatio(financialData.priceToFreeCashFlow)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="Marża zysku"
-                value={
-                  financialData.profitMargins
-                    ? formatPercent(financialData.profitMargins)
-                    : "-"
-                }
-                divider={false}
-              />
-            </Section>
-          </View>
+            if (rows.length === 0) return null;
 
-          <View style={cell}>
-            <Section label="Dywidendy">
-              <DataItem
-                label="Stopa dywidendy"
-                value={formatPercent(financialData.dividendYield)}
-              />
-              <DataItem
-                label="Kwota dywidendy"
-                value={formatCurrency(
-                  financialData.dividendRate,
-                  financialData.currency,
-                )}
-              />
-              <DataItem
-                label="Data ex-dividenda"
-                value={formatDate(financialData.exDividendDate)}
-              />
-              <DataItem
-                label="Payout ratio"
-                value={formatPercent(financialData.payoutRatio)}
-              />
-              <DataItem
-                label="Średnia 5-letnia dywidenda"
-                value={formatPercent(financialData.fiveYearAvgDividendYield)}
-                divider={false}
-              />
-            </Section>
-          </View>
-
-          <View style={cell}>
-            <Section label="Wycena i akcje">
-              <DataItem
-                label="Kapitalizacja rynkowa"
-                value={formatCurrency(
-                  financialData.marketCap,
-                  financialData.currency,
-                )}
-              />
-              <DataItem
-                label="Liczba akcji"
-                value={formatNumber(financialData.sharesOutstanding)}
-              />
-              <DataItem
-                label="Wartość księgowa"
-                value={formatCurrency(
-                  financialData.bookValue,
-                  financialData.currency,
-                )}
-              />
-              <DataItem
-                label="Akcje w obiegu"
-                value={formatNumber(financialData.floatShares)}
-              />
-              <DataItem
-                label="Beta"
-                value={
-                  financialData.beta ? formatRatio(financialData.beta) : "-"
-                }
-                divider={false}
-              />
-            </Section>
-          </View>
-
-          <View style={cell}>
-            <Section label="Wyniki historyczne">
-              <DataItem
-                label="1 rok"
-                value={
-                  financialData.performance1Y !== undefined
-                    ? formatPercent(financialData.performance1Y)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="3 lata"
-                value={
-                  financialData.performance3Y !== undefined
-                    ? formatPercent(financialData.performance3Y)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="5 lat"
-                value={
-                  financialData.performance5Y !== undefined
-                    ? formatPercent(financialData.performance5Y)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="Rok bieżący (YTD)"
-                value={
-                  financialData.performanceYTD !== undefined
-                    ? formatPercent(financialData.performanceYTD)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="Średni zwrot 1 rok"
-                value={
-                  financialData.oneYearAvgReturn
-                    ? formatPercent(financialData.oneYearAvgReturn)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="Średni zwrot 3 lata"
-                value={
-                  financialData.threeYearAvgReturn
-                    ? formatPercent(financialData.threeYearAvgReturn)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="Średni zwrot 5 lat"
-                value={
-                  financialData.fiveYearAvgReturn
-                    ? formatPercent(financialData.fiveYearAvgReturn)
-                    : "-"
-                }
-                divider={false}
-              />
-            </Section>
-          </View>
-
-          <View style={cell}>
-            <Section label="Dane dodatkowe">
-              <DataItem
-                label="Wartość przedsiębiorstwa"
-                value={formatCurrency(
-                  financialData.enterpriseValue,
-                  financialData.currency,
-                )}
-              />
-              <DataItem
-                label="EV/Przychody"
-                value={
-                  financialData.enterpriseValueToRevenue
-                    ? formatRatio(financialData.enterpriseValueToRevenue)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="Akcje krótkoterminowe"
-                value={formatNumber(financialData.sharesShort)}
-              />
-              <DataItem
-                label="Stosunek krótkich akcji"
-                value={
-                  financialData.shortRatio
-                    ? formatRatio(financialData.shortRatio)
-                    : "-"
-                }
-              />
-              <DataItem
-                label="% krótkich akcji"
-                value={
-                  financialData.shortPercentOfFloat
-                    ? formatPercent(financialData.shortPercentOfFloat)
-                    : "-"
-                }
-                divider={!financialData.lastSplitFactor}
-              />
-              {/* !! — pusty string z API wyrenderowałby się jako goły tekst w View (błąd na webie) */}
-              {!!financialData.lastSplitFactor && (
-                <DataItem
-                  label="Ostatni split"
-                  value={`${financialData.lastSplitFactor}x`}
-                  subValue={formatDate(financialData.lastSplitDate)}
-                  divider={false}
-                />
-              )}
-            </Section>
-          </View>
+            return (
+              <View key={section.key} style={cell}>
+                <Section label={section.label}>
+                  {rows.map((row, index) => (
+                    <DataItem
+                      key={row.field.key}
+                      label={row.field.label}
+                      value={row.formatted.value}
+                      subValue={row.formatted.subValue}
+                      divider={index < rows.length - 1}
+                    />
+                  ))}
+                </Section>
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -641,27 +388,6 @@ export function InstrumentDetails({
 }
 
 const styles = StyleSheet.create({
-  periodButtons: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  periodButtonText: {
-    fontSize: 12,
-    fontWeight: "700",
-    paddingBottom: 6,
-    borderBottomWidth: 2,
-  },
-  periodBanner: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  periodBannerLabel: {},
-  periodBannerValue: {
-    fontWeight: "700",
-  },
   skeletonRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -670,9 +396,6 @@ const styles = StyleSheet.create({
   },
   footerNote: {
     textAlign: "center",
-  },
-  gridReturn: {
-    maxWidth: 420,
   },
   grid: {
     flexDirection: "row",

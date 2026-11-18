@@ -7,13 +7,11 @@ import {
 } from "../api/marketService";
 import { getPortfolio, type PortfolioItem } from "../database/database";
 import { MOCK_PORTFOLIOS } from "../database/mockPortfolioData";
-import {
-  useDisplayCurrency,
-} from "../displayCurrency";
+import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 import { useWatchlist, type WatchlistInstrument } from "../watchlist";
+import { InstrumentCard } from "./InstrumentCard";
 import { InstrumentRow } from "./InstrumentRow";
-import { ModalChartView } from "./ModalChartView";
 
 type Holding = {
   quantity: number;
@@ -199,7 +197,7 @@ export function WatchedInstrumentsSection() {
       })}
 
       {selected && (
-        <ModalChartView
+        <InstrumentCard
           instrument={{
             stock: selected.symbol,
             title: selected.name.toUpperCase(),

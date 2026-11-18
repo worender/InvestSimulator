@@ -21,9 +21,9 @@ import { InstrumentSearchResult, getStockData } from "../../api/marketService";
 import { AssetCategoryCard } from "../../components/AssetCategoryCard";
 import { GlassBackground } from "../../components/GlassBackground";
 import {
-  InstrumentDetailModal,
-  ModalTab,
-} from "../../components/InstrumentDetailModal";
+  InstrumentCard,
+  type InstrumentCardTab,
+} from "../../components/InstrumentCard";
 import { InstrumentSearchSheet } from "../../components/InstrumentSearchSheet";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import { Section } from "../../components/Section";
@@ -61,7 +61,8 @@ export default function PortfolioScreen() {
     null,
   );
   const [modalVisible, setModalVisible] = useState(false);
-  const [modalInitialTab, setModalInitialTab] = useState<ModalTab>("details");
+  const [modalInitialTab, setModalInitialTab] =
+    useState<InstrumentCardTab>("instrument");
   const [modalInstrument, setModalInstrument] = useState<{
     stock: string;
     title: string;
@@ -197,7 +198,8 @@ export default function PortfolioScreen() {
   const handleSelectCategory = (category: PortfolioCategory) => {
     setSelectedCategory(category);
     setSelectedAsset(category.items[0] || null);
-    setModalInitialTab("details");
+    setModalInstrument(null);
+    setModalInitialTab("instrument");
     setModalVisible(true);
   };
 
@@ -215,7 +217,7 @@ export default function PortfolioScreen() {
       exchange: instrument.exchange || instrument.exchangeName,
     };
 
-    setModalInitialTab("details");
+    setModalInitialTab("instrument");
     setModalInstrument(selectedInstrument);
     setModalVisible(true);
 
@@ -244,6 +246,7 @@ export default function PortfolioScreen() {
     setModalVisible(false);
     setSelectedCategory(null);
     setSelectedAsset(null);
+    setModalInstrument(null);
   };
 
   return (
@@ -467,15 +470,43 @@ export default function PortfolioScreen() {
         />
       )}
 
-      <InstrumentDetailModal
-        visible={modalVisible}
-        asset={selectedAsset}
-        category={selectedCategory}
-        portfolio={currentPortfolio}
-        initialTab={modalInitialTab}
-        onClose={handleCloseModal}
-        modalInstrument={modalInstrument}
-      />
+      {modalVisible && (
+        <InstrumentCard
+          instrument={{
+            stock:
+              modalInstrument?.stock ??
+              selectedAsset?.symbol ??
+              selectedCategory?.items[0]?.symbol ??
+              "",
+            title:
+              modalInstrument?.title ??
+              selectedAsset?.name ??
+              selectedCategory?.title ??
+              "",
+            currency:
+              modalInstrument?.currency ??
+              selectedAsset?.currency ??
+              currentPortfolio.currency,
+            symbol:
+              modalInstrument?.symbol ??
+              selectedAsset?.symbol ??
+              selectedCategory?.items[0]?.symbol ??
+              "",
+            exchange:
+              modalInstrument?.exchange ??
+              selectedAsset?.exchange ??
+              selectedCategory?.items[0]?.exchange ??
+              "",
+            financialData: modalInstrument?.financialData,
+          }}
+          financialData={modalInstrument?.financialData}
+          portfolio={currentPortfolio}
+          category={selectedCategory}
+          asset={selectedAsset}
+          initialTab={modalInitialTab}
+          onClose={handleCloseModal}
+        />
+      )}
     </View>
   );
 }
@@ -486,7 +517,12 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
   // Na desktopie treść w wyśrodkowanej kolumnie o ograniczonej szerokości
-  contentDesktop: { width: "100%", maxWidth: 1280, alignSelf: "center", paddingHorizontal: 32 },
+  contentDesktop: {
+    width: "100%",
+    maxWidth: 1280,
+    alignSelf: "center",
+    paddingHorizontal: 32,
+  },
   intro: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
   headerButtons: {
     flexDirection: "row",

@@ -24,7 +24,7 @@ import {
   StockFinancialData,
 } from "../../api/marketService";
 import { AccountMenu } from "../../components/AccountMenu";
-import { ModalChartView } from "../../components/ModalChartView";
+import { InstrumentCard } from "../../components/InstrumentCard";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import { PortfolioOverviewCard } from "../../components/PortfolioOverviewCard";
 import { SavedArticlesSection } from "../../components/SavedArticlesSection";
@@ -347,7 +347,7 @@ export default function Index() {
 
       {/* Modal Chart View */}
       {modalVisible && modalInstrument?.stock && (
-        <ModalChartView
+        <InstrumentCard
           instrument={modalInstrument}
           financialData={modalInstrument.financialData}
           onClose={closeModal}

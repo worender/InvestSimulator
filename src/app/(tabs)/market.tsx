@@ -33,17 +33,21 @@ import {
   type DynamicTrendAsset,
 } from "../../api/marketService";
 import { CategorySelector } from "../../components/CategorySelector";
+import { InstrumentCard } from "../../components/InstrumentCard";
 import {
   InstrumentDetails,
   useInstrumentFinancialData,
 } from "../../components/InstrumentDetails";
 import { InstrumentRow } from "../../components/InstrumentRow";
-import { ModalChartView } from "../../components/ModalChartView";
 import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import { Section } from "../../components/Section";
 import { Skeleton } from "../../components/Skeleton";
 import { StockCandleChart } from "../../components/StockCandleChart";
 import { resolveCurrency } from "../../currency";
+import {
+  resolveMarketCategory,
+  type InstrumentMarketCategory,
+} from "../../instrumentCategories";
 import {
   FIXED_MARKET_INSTRUMENTS,
   isDynamicMarketTab,
@@ -157,6 +161,7 @@ export default function MarketScreen() {
     symbol: string;
     exchange: string;
     financialData?: StockFinancialData;
+    marketCategory?: InstrumentMarketCategory;
   } | null>(null);
 
   // Po opuszczeniu zakładki wyszukiwanie i jego lista wyników wracają do stanu początkowego.
@@ -243,6 +248,17 @@ export default function MarketScreen() {
     return withResolvedCurrency(selected ?? currentInstruments[0]);
   }, [currentInstruments, selectedStock.exchange, selectedStock.symbol]);
 
+  // Kategoria szablonu danych rynkowych dla prawego panelu na desktopie
+  const panelMarketCategory = useMemo<InstrumentMarketCategory>(() => {
+    if (selectedTab === "cfd") return "cfd";
+    if (selectedTab === "crypto") return "crypto";
+    if (!panelInstrument) return "stocks";
+    return resolveMarketCategory({
+      symbol: panelInstrument.symbol,
+      exchange: panelInstrument.exchange,
+    });
+  }, [panelInstrument, selectedTab]);
+
   // Dynamiczne zakładki: lista z Yahoo, cache 10 min po stronie klienta i serwera
   const applyDynamicAssets = useCallback(
     (category: DynamicMarketTabKey, assets: DynamicTrendAsset[]) => {
@@ -302,56 +318,82 @@ export default function MarketScreen() {
   };
 
   // Funkcja otwierająca modal z wykresem dla wybranego instrumentu, pobierająca dane finansowe w tle
-  const openStockModal = useCallback(async (item: MarketInstrument) => {
-    const currency = item.currency || resolveCurrency(item);
+  const openStockModal = useCallback(
+    async (
+      item: MarketInstrument,
+      marketCategory: InstrumentMarketCategory = "stocks",
+    ) => {
+      const currency = item.currency || resolveCurrency(item);
 
-    const instrumentData = {
-      stock: item.symbol,
-      title: item.name.toUpperCase(),
-      currency,
-      symbol: item.symbol,
-      exchange: item.exchange,
-    };
+      const instrumentData = {
+        stock: item.symbol,
+        title: item.name.toUpperCase(),
+        currency,
+        symbol: item.symbol,
+        exchange: item.exchange,
+        marketCategory,
+      };
 
-    setModalInstrument(instrumentData);
-    setModalVisible(true);
+      setModalInstrument(instrumentData);
+      setModalVisible(true);
 
-    // Pobierz dane finansowe w tle
-    try {
-      const financialData = await getStockData(item.symbol, item.exchange);
-      if (financialData) {
-        setModalInstrument((curr) =>
-          curr
-            ? {
-                ...curr,
-                currency: financialData.currency || curr.currency,
-                financialData,
-              }
-            : null,
-        );
-      } else {
+      // Pobierz dane finansowe w tle
+      try {
+        const financialData = await getStockData(item.symbol, item.exchange);
+        if (financialData) {
+          setModalInstrument((curr) =>
+            curr
+              ? {
+                  ...curr,
+                  currency: financialData.currency || curr.currency,
+                  financialData,
+                }
+              : null,
+          );
+        } else {
+          notify({
+            variant: "warning",
+            title: "Brak danych finansowych",
+            category: NOTIFICATION_GROUPS.marketFinancials,
+            message: `Nie udało się pobrać szczegółów dla ${item.symbol}. Dostępne są tylko notowania.`,
+          });
+        }
+      } catch (err) {
+        console.warn("Błąd pobierania danych finansowych:", err);
         notify({
-          variant: "warning",
-          title: "Brak danych finansowych",
+          variant: "error",
+          title: "Błąd pobierania danych",
           category: NOTIFICATION_GROUPS.marketFinancials,
-          message: `Nie udało się pobrać szczegółów dla ${item.symbol}. Dostępne są tylko notowania.`,
+          message: `Nie udało się pobrać danych dla ${item.symbol}. Spróbuj ponownie później.`,
         });
       }
-    } catch (err) {
-      console.warn("Błąd pobierania danych finansowych:", err);
-      notify({
-        variant: "error",
-        title: "Błąd pobierania danych",
-        category: NOTIFICATION_GROUPS.marketFinancials,
-        message: `Nie udało się pobrać danych dla ${item.symbol}. Spróbuj ponownie później.`,
-      });
-    }
-  }, []);
+    },
+    [],
+  );
+
+  // Kategoria danych rynkowych dla wybranego instrumentu
+  const resolveInstrumentCategory = (
+    item: MarketInstrument,
+    tab: MarketTabKey,
+  ): InstrumentMarketCategory => {
+    if (tab === "cfd") return "cfd";
+    if (tab === "crypto") return "crypto";
+    return resolveMarketCategory({
+      symbol: item.symbol,
+      exchange: item.exchange,
+    });
+  };
 
   // Na desktopie kliknięcie wybiera instrument do prawego panelu, na mobile otwiera modal
-  const pressInstrument = (item: MarketInstrument) => {
+  const pressInstrument = (
+    item: MarketInstrument,
+    categoryOverride?: InstrumentMarketCategory,
+  ) => {
     if (!isDesktop) {
-      openStockModal(item);
+      openStockModal(
+        item,
+        categoryOverride ?? resolveInstrumentCategory(item, selectedTab),
+      );
       return;
     }
     setSelectedStock(withResolvedCurrency(item));
@@ -539,12 +581,18 @@ export default function MarketScreen() {
                         },
                       ]}
                       onPress={() =>
-                        pressInstrument({
-                          symbol: item.symbol,
-                          name: item.name,
-                          exchange: item.exchange,
-                          exchangeName: item.exchangeName,
-                        })
+                        pressInstrument(
+                          {
+                            symbol: item.symbol,
+                            name: item.name,
+                            exchange: item.exchange,
+                            exchangeName: item.exchangeName,
+                          },
+                          resolveMarketCategory({
+                            symbol: item.symbol,
+                            exchange: item.exchange,
+                          }),
+                        )
                       }
                       activeOpacity={0.6}
                     >
@@ -675,6 +723,7 @@ export default function MarketScreen() {
           (panelInstrument ? (
             <InstrumentPanel
               instrument={panelInstrument}
+              marketCategory={panelMarketCategory}
               paddingTop={top + PANEL_HEADER_HEIGHT + 8}
             />
           ) : (
@@ -694,7 +743,7 @@ export default function MarketScreen() {
       </BlurTargetView>
 
       {modalVisible && modalInstrument && (
-        <ModalChartView
+        <InstrumentCard
           instrument={modalInstrument}
           financialData={modalInstrument.financialData}
           onClose={closeModal}
@@ -707,9 +756,11 @@ export default function MarketScreen() {
 // Prawy panel na desktopie: wykres i szczegóły finansowe wybranego instrumentu (na mobile to samo jest w modalu)
 function InstrumentPanel({
   instrument,
+  marketCategory,
   paddingTop,
 }: {
   instrument: MarketInstrument & { currency: string };
+  marketCategory: InstrumentMarketCategory;
   paddingTop: number;
 }) {
   const { financialData, loading } = useInstrumentFinancialData({
@@ -730,7 +781,12 @@ function InstrumentPanel({
         currency={financialData?.currency ?? instrument.currency}
         exchange={instrument.exchange}
       />
-      <InstrumentDetails financialData={financialData} loading={loading} grid />
+      <InstrumentDetails
+        financialData={financialData}
+        loading={loading}
+        grid
+        category={marketCategory}
+      />
     </ScrollView>
   );
 }

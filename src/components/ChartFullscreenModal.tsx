@@ -1,5 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -486,17 +486,28 @@ export function ChartFullscreenModal({
                   contentContainerStyle={styles.controls}
                 >
                   {CHART_RANGES.map((item, index) => (
-                    <ChartButton
-                      key={item.label}
-                      label={item.label}
-                      active={index === safeRangeIndex}
-                      onPress={() => {
-                        setRangeIndex(index);
-                        if (item.days > 60 && isIntradayInterval(interval))
-                          setInterval("1d");
-                      }}
-                      colors={colors}
-                    />
+                    <Fragment key={item.label}>
+                      {index > 0 && (
+                        <Text
+                          style={[
+                            styles.controlSeparator,
+                            { color: colors.border },
+                          ]}
+                        >
+                          |
+                        </Text>
+                      )}
+                      <ChartButton
+                        label={item.label}
+                        active={index === safeRangeIndex}
+                        onPress={() => {
+                          setRangeIndex(index);
+                          if (item.days > 60 && isIntradayInterval(interval))
+                            setInterval("1d");
+                        }}
+                        colors={colors}
+                      />
+                    </Fragment>
                   ))}
                 </ScrollView>
 
@@ -510,17 +521,28 @@ export function ChartFullscreenModal({
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.controls}
                 >
-                  {CHART_INTERVALS.map((item) => (
-                    <ChartButton
-                      key={item.value}
-                      label={item.label}
-                      active={item.value === interval}
-                      disabled={
-                        intradayDisabled && isIntradayInterval(item.value)
-                      }
-                      onPress={() => setInterval(item.value)}
-                      colors={colors}
-                    />
+                  {CHART_INTERVALS.map((item, index) => (
+                    <Fragment key={item.value}>
+                      {index > 0 && (
+                        <Text
+                          style={[
+                            styles.controlSeparator,
+                            { color: colors.border },
+                          ]}
+                        >
+                          |
+                        </Text>
+                      )}
+                      <ChartButton
+                        label={item.label}
+                        active={item.value === interval}
+                        disabled={
+                          intradayDisabled && isIntradayInterval(item.value)
+                        }
+                        onPress={() => setInterval(item.value)}
+                        colors={colors}
+                      />
+                    </Fragment>
                   ))}
                 </ScrollView>
               </>
@@ -774,20 +796,14 @@ function ChartButton({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: active, disabled }}
-      style={[
-        styles.button,
-        {
-          backgroundColor: active ? colors.accent : colors.surfaceMutedGlass,
-          borderColor: active ? colors.accent : colors.borderGlass,
-          opacity: disabled ? 0.35 : 1,
-        },
-      ]}
+      hitSlop={6}
+      style={{ opacity: disabled ? 0.35 : 1 }}
     >
       <Text
         style={{
-          color: active ? "#ffffff" : colors.textMuted,
+          color: active ? colors.accent : colors.textMuted,
           fontSize: 12,
-          fontWeight: "700",
+          fontWeight: active ? "700" : "500",
         }}
       >
         {label}
@@ -940,16 +956,13 @@ const styles = StyleSheet.create({
   },
   controls: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    gap: 10,
     paddingRight: 8,
   },
-  button: {
-    minHeight: 32,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  controlSeparator: {
+    fontSize: 12,
+    fontWeight: "400",
   },
   chartWrap: {
     width: "100%",
