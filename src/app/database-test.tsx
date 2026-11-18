@@ -19,6 +19,7 @@ import {
   createWallet,
   deleteLocalDatabase,
   getCategories,
+  getFavoriteAssets,
   getNotificationSettings,
   getPortfolio,
   getPortfolioSnapshots,
@@ -30,6 +31,10 @@ import {
   getWallet,
   getWallets,
   initializeDatabase,
+  addCounterToFavoriteAsset,
+  addFavoriteAsset,
+  removeFavoriteAsset,
+  updateFavoriteAsset,
   updateNotificationSettings,
   updatePosition,
   updateSettings,
@@ -226,6 +231,83 @@ export default function DatabaseTestScreen() {
           if (settings === null) return;
           assertEqual(settings.currency, "USD", "Waluta nie została zaktualizowana");
           assertEqual(settings.dark_mode, 0, "Tryb ciemny nie został zaktualizowany");
+        },
+      ],
+      [
+        "Dodawanie ulubionego aktywa",
+        async () => {
+          const asset = await addFavoriteAsset(userId, " aapl ");
+
+          assertEqual(asset.user_id, userId, "Aktywo ma złego właściciela");
+          assertEqual(asset.symbol, "AAPL", "Symbol nie został znormalizowany");
+          assertEqual(asset.counter, 1, "Niepoprawny licznik początkowy");
+          assertEqual(asset.favorite, 0, "Aktywo powinno być domyślnie nieulubione");
+        },
+      ],
+      [
+        "Pobieranie ulubionych aktywów",
+        async () => {
+          const assets = await getFavoriteAssets(userId);
+          const asset = assets.find((item) => item.symbol === "AAPL");
+
+          assert(asset !== undefined, "Nie znaleziono dodanego aktywa");
+          if (asset === undefined) return;
+          assertEqual(asset.user_id, userId, "Aktywo ma złego właściciela");
+        },
+      ],
+      [
+        "Przełączanie statusu ulubionego aktywa",
+        async () => {
+          await updateFavoriteAsset(userId, "AAPL");
+
+          let assets = await getFavoriteAssets(userId);
+          let asset = assets.find((item) => item.symbol === "AAPL");
+          assert(asset !== undefined, "Nie znaleziono aktywa po aktualizacji");
+          if (asset === undefined) return;
+          assertEqual(asset.favorite, 1, "Aktywo nie zostało oznaczone jako ulubione");
+
+          await updateFavoriteAsset(userId, "AAPL");
+
+          assets = await getFavoriteAssets(userId);
+          asset = assets.find((item) => item.symbol === "AAPL");
+          assert(asset !== undefined, "Nie znaleziono aktywa po drugim przełączeniu");
+          if (asset === undefined) return;
+          assertEqual(asset.favorite, 0, "Aktywo nie zostało odznaczone");
+        },
+      ],
+      [
+        "Zwiększanie licznika ulubionego aktywa",
+        async () => {
+          await addCounterToFavoriteAsset(userId, "AAPL");
+
+          const assets = await getFavoriteAssets(userId);
+          const asset = assets.find((item) => item.symbol === "AAPL");
+
+          assert(asset !== undefined, "Nie znaleziono aktywa po zwiększeniu licznika");
+          if (asset === undefined) return;
+          assertEqual(asset.counter, 2, "Licznik nie został zwiększony");
+        },
+      ],
+      [
+        "Usuwanie ulubionego aktywa",
+        async () => {
+          await removeFavoriteAsset(userId, "AAPL");
+
+          const assets = await getFavoriteAssets(userId);
+          assert(
+            !assets.some((asset) => asset.symbol === "AAPL"),
+            "Aktywo nie zostało usunięte",
+          );
+        },
+      ],
+      [
+        "Odrzucanie niepoprawnych danych ulubionego aktywa",
+        async () => {
+          await expectError(() => getFavoriteAssets(0));
+          await expectError(() => addFavoriteAsset(userId, "AAPL; DROP TABLE users;--"));
+          await expectError(() => addFavoriteAsset(userId, "MSFT", 2));
+          await expectError(() => updateFavoriteAsset(userId, "AAPL"));
+          await expectError(() => addCounterToFavoriteAsset(userId, "AAPL"));
         },
       ],
       [

@@ -124,3 +124,10 @@ export function validateUserId(value: number): number {
 export function validateWalletId(value: number): number {
   return validateId(value, "identyfikator portfela");
 }
+
+export function validateBoolean(value: number): number {
+  if (value !== 0 && value !== 1) {
+    throw new Error("Nieprawidłowa wartość logiczna");
+  }
+  return value;
+}

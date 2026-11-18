@@ -13,6 +13,7 @@ import {
   validateUserName,
   validateWalletId,
   validateWalletName,
+  validateBoolean,
 } from "./checkSecurityParam";
 import { acquireDbLock } from "./dbLock";
 import {
@@ -80,6 +81,14 @@ export interface AssetCategory {
   id: number;
   name: string;
   wallet_id: number;
+}
+
+export interface FavoriteAsset {
+  id: number;
+  user_id: number;
+  symbol: string;
+  counter: number;
+  favorite: number;
 }
 
 export interface Position {
@@ -1519,6 +1528,161 @@ export async function createDailySnapshots(
   }
 
   return snapshots;
+}
+
+/**
+* Funkcja getFavoriteAssets pobiera wszystkie ulubione aktywa danego użytkownika z bazy danych.
+* @param {number} userId - Identyfikator użytkownika, dla którego pobierane są ulubione aktywa.
+* @returns {Promise<FavoriteAsset[]>} - Zwraca obietnicę, która rozwiązuje się z listą ulubionych aktywów.
+* @throws {Error} - Rzuca błąd, jeśli identyfikator użytkownika jest nieprawidłowy.
+*/
+export async function getFavoriteAssets(
+  userId: number
+): Promise<FavoriteAsset[]> {
+  validateUserId(userId);
+
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<FavoriteAsset>(
+    `SELECT * FROM favorite_assets WHERE user_id = ? ORDER BY id ASC`,
+    userId,
+  );
+  
+}
+
+/**
+* Funkcja addFavoriteAsset dodaje ulubione aktywo danego użytkownika do bazy danych.
+* @param {number} userId - Identyfikator użytkownika, dla którego dodawane jest ulubione aktywo.
+* @param {string} symbol - Symbol aktywa, które ma zostać dodane.
+* @param {number} [favorite] - Opcjonalny parametr określający, czy aktywo jest ulubionym (1) czy nie (0).
+* @returns {Promise<FavoriteAsset>} - Zwraca obietnicę, która rozwiązuje się po zakończeniu operacji dodawania.
+* @throws {Error} - Rzuca błąd, jeśli dane wejściowe są nieprawidłowe.
+*/
+export async function addFavoriteAsset(
+  userId: number,
+  symbol: string,
+  favorite?: number
+): Promise<FavoriteAsset> {
+  validateUserId(userId);
+  const normalizedSymbol = normalizeAndValidateSymbol(symbol);
+  if (favorite !== undefined) {
+    validateBoolean(favorite);
+  }
+
+  const database = await getReadyDatabase();
+  let counter = 1;
+
+  const result = await database.runAsync(
+    `INSERT INTO favorite_assets (user_id, symbol, counter, favorite) VALUES (?, ?, ?, ?)`,
+    userId,
+    normalizedSymbol,
+    counter,
+    favorite === undefined ? 0 : favorite
+  );
+
+  const favoriteAsset = await database.getFirstAsync<FavoriteAsset>(
+    `SELECT * FROM favorite_assets WHERE id = ?`,
+    result.lastInsertRowId
+  );
+
+  if (!favoriteAsset) {
+    throw new Error("Nie udało się dodać ulubionego aktywa");
+  }
+
+  return favoriteAsset;
+}
+
+/**
+* Funkcja removeFavoriteAsset usuwa ulubione aktywo danego użytkownika z bazy danych.
+* @param {number} userId - Identyfikator użytkownika, dla którego usuwane jest ulubione aktywo.
+* @param {string} symbol - Symbol aktywa, które ma zostać usunięte.
+* @returns {Promise<void>} - Zwraca obietnicę, która rozwiązuje się po zakończeniu operacji usuwania.
+* @throws {Error} - Rzuca błąd, jeśli dane wejściowe są nieprawidłowe.
+*/
+export async function removeFavoriteAsset(
+  userId: number,
+  symbol: string
+): Promise<void> {
+  validateUserId(userId);
+  const normalizedSymbol = normalizeAndValidateSymbol(symbol);
+
+  const database = await getReadyDatabase();
+
+  await database.runAsync(
+    `DELETE FROM favorite_assets WHERE user_id = ? AND symbol = ?`,
+    userId,
+    normalizedSymbol
+  );
+}
+
+/**
+* Funkcja updateFavoriteAsset aktualizuje status ulubionego aktywa dla danego użytkownika w bazie danych.
+* Działa jak przełącznik, umożliwiając użytkownikowi oznaczenie lub odznaczenie aktywa jako ulubionego.
+* @param {number} userId - Identyfikator użytkownika, dla którego aktualizowane jest ulubione aktywo.
+* @param {string} symbol - Symbol aktywa, które ma zostać zaktualizowane.
+* @returns {Promise<void>} - Zwraca obietnicę, która rozwiązuje się po zakończeniu aktualizacji.
+* @throws {Error} - Rzuca błąd, jeśli nie znaleziono ulubionego aktywa do aktualizacji lub jeśli dane wejściowe są nieprawidłowe.
+* 
+*/
+export async function updateFavoriteAsset(
+  userId: number,
+  symbol: string,
+): Promise<void> {
+  validateUserId(userId);
+  const normalizedSymbol = normalizeAndValidateSymbol(symbol);
+  
+
+  const database = await getReadyDatabase();
+
+  const existingAsset = await getFavoriteAssets(userId);
+
+
+  const currentAsset = existingAsset.find(
+    (asset) => asset.symbol === normalizedSymbol
+  );
+
+  if (!currentAsset) {
+    throw new Error("Nie znaleziono ulubionego aktywa do aktualizacji");
+  }
+
+  await database.runAsync(
+    `UPDATE favorite_assets SET favorite = ? WHERE user_id = ? AND symbol = ?`,
+    currentAsset.favorite === 1 ? 0 : 1,
+    userId,
+    normalizedSymbol
+  );
+}
+
+/**
+* Funkcja addCounterToFavoriteAsset zwiększa licznik (counter) dla ulubionego aktywa danego użytkownika w bazie danych.
+* @param {number} userId - Identyfikator użytkownika, dla którego zwiększany jest licznik ulubionego aktywa.
+* @param {string} symbol - Symbol aktywa, którego licznik ma zostać zwiększony.
+* @returns {Promise<void>} - Zwraca obietnicę, która rozwiązuje się po zakończeniu aktualizacji licznika.
+* @throws {Error} - Rzuca błąd, jeśli nie znaleziono ulubionego aktywa do aktualizacji lub jeśli dane wejściowe są nieprawidłowe.
+*/
+export async function addCounterToFavoriteAsset(
+  userId: number,
+  symbol: string
+): Promise<void> {
+  validateUserId(userId);
+  const normalizedSymbol = normalizeAndValidateSymbol(symbol);
+
+  const database = await getReadyDatabase();
+
+  const existingAsset = await getFavoriteAssets(userId);
+  const assetExists = existingAsset.some(
+    (asset) => asset.symbol === normalizedSymbol
+  );
+
+  if (!assetExists) {
+    throw new Error("Nie znaleziono ulubionego aktywa do aktualizacji");
+  }
+
+  await database.runAsync(
+    `UPDATE favorite_assets SET counter = counter + 1 WHERE user_id = ? AND symbol = ?`,
+    userId,
+    normalizedSymbol
+  );
 }
 
 export async function clearLocalDatabase(): Promise<void> {
