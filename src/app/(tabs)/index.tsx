@@ -40,6 +40,7 @@ import { useKeyboardShortcut } from "../../useKeyboardShortcut";
 import { useLayoutMode } from "../../useLayoutMode";
 import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
+import { addCounterToFavoriteAsset } from "@/database/database";
 
 export default function Index() {
   const { colors, defaultCurrency, multiCurrency, activeAccount } = useTheme();
@@ -135,6 +136,17 @@ export default function Index() {
         currency: financialData?.currency || resolvedCurrency,
         financialData: financialData ?? undefined,
       });
+
+      
+
+      if (activeAccount) {
+        void addCounterToFavoriteAsset(activeAccount.id, instrument.symbol).catch(
+          (error) => console.error("Błąd zapisania aktywa:", error),
+        );
+    
+      }
+
+
     } catch (error) {
       console.error("Błąd pobierania danych finansowych:", error);
       notify({

@@ -43,12 +43,12 @@ import { useLockScreenWhileActive } from "../interactionLock";
 import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
-import { useWatchlist } from "../watchlist";
 import { CategorySelector } from "./CategorySelector";
 import type { ChartInterval } from "./ChartFullscreenModal";
 import { Section } from "./Section";
 import { Skeleton } from "./Skeleton";
 import { StockCandleChart } from "./StockCandleChart";
+import { addFavoriteAsset, getFavoriteAsset,  updateFavoriteAsset } from "@/database/database";
 
 const RETURN_PERIODS = [
   { key: "1Y", label: "1Y" },
@@ -223,8 +223,12 @@ export function ModalChartView({
     "1Y" | "3Y" | "5Y"
   >("1Y");
 
-  const { isWatched, toggle: toggleWatchlist } = useWatchlist();
-  const isFavorite = isWatched(instrument.stock);
+  // const { isWatched, toggle: toggleWatchlist } = useWatchlist();
+  // const isFavorite = isWatched(instrument.stock);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const { activeAccount } = theme;
+  
+
   const [favScale] = useState(() => new Animated.Value(1));
 
   const { height: windowHeight } = useWindowDimensions();
@@ -250,6 +254,30 @@ export function ModalChartView({
       },
     );
   }, [finishClose, translateY, windowHeight]);
+
+  useEffect(() => {
+    let active = true;
+
+    const timeout = setTimeout(() => {
+
+      const loadFavoriteStatus = async () => {
+        if (!activeAccount) {
+          return;
+        }
+        const asset = await getFavoriteAsset(activeAccount.id, instrument.stock);
+        
+        
+        if (active) {
+          setIsFavorite(asset?.favorite === 1);
+        }
+      };
+      void loadFavoriteStatus();
+    }, 600);
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
+  }, [activeAccount, instrument.stock]);
 
   // Animacja wejścia
   useEffect(() => {
@@ -312,7 +340,7 @@ export function ModalChartView({
 
   const sheetAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
-  }));
+}));
 
   const backdropAnimatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
@@ -341,7 +369,7 @@ export function ModalChartView({
     ),
   }));
 
-  const toggleFavorite = () => {
+  const toggleFavorite = async () => {
     Animated.sequence([
       Animated.timing(favScale, {
         toValue: 1.2,
@@ -354,12 +382,22 @@ export function ModalChartView({
         useNativeDriver: true,
       }),
     ]).start();
-    toggleWatchlist({
-      symbol: instrument.stock,
-      name: instrument.title,
-      exchange: instrument.exchange,
-      currency: instrument.currency,
-    });
+    try {
+      if (activeAccount !== null && activeAccount !== undefined) {
+        const assets = await getFavoriteAsset(activeAccount.id, instrument.stock);
+        
+
+        if (assets) {
+          await updateFavoriteAsset(activeAccount.id, instrument.stock);
+          setIsFavorite((current) => !current);
+        } else {
+          await addFavoriteAsset(activeAccount.id, instrument.stock, 1);
+          setIsFavorite(true);
+        }
+      }
+    } catch (error) {
+      console.error("Nie udało się zmienić statusu ulubionego aktywa:", error);
+    }
   };
 
   useEffect(() => {
@@ -418,10 +456,11 @@ export function ModalChartView({
       }
     };
 
-    loadData();
+    void loadData();
 
     return () => {
       isMounted = false;
+      
     };
   }, [
     instrument.stock,

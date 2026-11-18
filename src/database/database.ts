@@ -1551,6 +1551,30 @@ export async function getFavoriteAssets(
 }
 
 /**
+ * Pobiera ulubione aktywo danego użytkownika z bazy danych.
+ * @param userId - Identyfikator użytkownika.
+ * @param symbol - Symbol aktywa.
+ * @returns - Zwraca obietnicę, która rozwiązuje się z ulubionym aktywem lub null, jeśli nie znaleziono.
+ */
+export async function getFavoriteAsset(
+  userId: number,
+  symbol: string
+): Promise<FavoriteAsset | null> {
+  validateUserId(userId);
+  const normalizedSymbol = normalizeAndValidateSymbol(symbol);
+
+  const database = await getReadyDatabase();
+
+  return (
+    (await database.getFirstAsync<FavoriteAsset>(
+      `SELECT * FROM favorite_assets WHERE user_id = ? AND symbol = ?`,
+      userId,
+      normalizedSymbol
+    )) ?? null
+  );
+}
+
+/**
 * Funkcja addFavoriteAsset dodaje ulubione aktywo danego użytkownika do bazy danych.
 * @param {number} userId - Identyfikator użytkownika, dla którego dodawane jest ulubione aktywo.
 * @param {string} symbol - Symbol aktywa, które ma zostać dodane.
@@ -1674,8 +1698,14 @@ export async function addCounterToFavoriteAsset(
     (asset) => asset.symbol === normalizedSymbol
   );
 
+
   if (!assetExists) {
-    throw new Error("Nie znaleziono ulubionego aktywa do aktualizacji");
+    await addFavoriteAsset(userId, normalizedSymbol, 0);
+
+    const newAsset = await getFavoriteAsset(userId, normalizedSymbol);
+    if (!newAsset) {
+      throw new Error("Nie udało się dodać nowego ulubionego aktywa");
+    }
   }
 
   await database.runAsync(
