@@ -117,6 +117,11 @@ export function validateId(value: number, label: string): number {
   return value;
 }
 
+export function validateNumberPositiveInteger(value: number): number {
+  validateId(value, "liczba całkowita dodatnia");
+  return value;
+}
+
 export function validateUserId(value: number): number {
   return validateId(value, "identyfikator użytkownika");
 }

@@ -14,6 +14,7 @@ import {
   validateWalletId,
   validateWalletName,
   validateBoolean,
+  validateNumberPositiveInteger,
 } from "./checkSecurityParam";
 import { acquireDbLock } from "./dbLock";
 import {
@@ -1712,6 +1713,58 @@ export async function addCounterToFavoriteAsset(
     `UPDATE favorite_assets SET counter = counter + 1 WHERE user_id = ? AND symbol = ?`,
     userId,
     normalizedSymbol
+  );
+}
+
+/**
+ * Pobiera listę najbardziej ulubionych aktywów użytkownika, posortowanych według liczby odwiedzin.
+ * @param userId - Identyfikator użytkownika.
+ * @param limit - Maksymalna liczba aktywów do zwrócenia (domyślnie 4).
+ * @returns - Zwraca obietnicę, która rozwiązuje się z listą ulubionych aktywów.
+ * @throws - Rzuca błąd, jeśli identyfikator użytkownika jest nieprawidłowy.
+ */
+export async function getTopFavoriteAssets(
+  userId: number,
+  limit = 4,
+): Promise<FavoriteAsset[]> {
+  validateUserId(userId);
+
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<FavoriteAsset>(
+    `SELECT *
+     FROM favorite_assets
+     WHERE user_id = ? AND favorite = 1
+     ORDER BY counter DESC, id DESC
+     LIMIT ?`,
+    userId,
+    limit,
+  );
+}
+
+/**
+ * Pobiera listę aktywów znajdujących się na liście obserwowanych przez użytkownika.
+ * @param userId - Identyfikator użytkownika.
+ * @returns - Zwraca obietnicę, która rozwiązuje się z listą aktywów na liście obserwowanych.
+ * @throws - Rzuca błąd, jeśli identyfikator użytkownika jest nieprawidłowy.
+ */
+export async function getWatchlistAssets(
+  userId: number,
+  limit = 10
+): Promise<FavoriteAsset[]> {
+  validateUserId(userId);
+  validateNumberPositiveInteger(limit);
+
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<FavoriteAsset>(
+    `SELECT *
+     FROM favorite_assets
+     WHERE user_id = ?
+     ORDER BY favorite DESC, counter DESC, id DESC
+     LIMIT ?`,
+    userId,
+    limit
   );
 }
 

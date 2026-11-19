@@ -44,6 +44,7 @@ import { Section } from "../../components/Section";
 import { Skeleton } from "../../components/Skeleton";
 import { StockCandleChart } from "../../components/StockCandleChart";
 import { resolveCurrency } from "../../currency";
+import { addCounterToFavoriteAsset, getWatchlistAssets } from "../../database/database";
 import {
   FIXED_MARKET_INSTRUMENTS,
   isDynamicMarketTab,
@@ -59,7 +60,7 @@ import { useKeyboardShortcut } from "../../useKeyboardShortcut";
 import { useLayoutMode } from "../../useLayoutMode";
 import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
-import { useWatchlist } from "../../watchlist";
+import { DEFAULT_WATCHLIST } from "../../watchlist";
 
 const quoteKey = (symbol: string, exchange?: string) =>
   `${symbol}_${exchange || ""}`;
@@ -81,12 +82,13 @@ const toMarketInstrument = (asset: DynamicTrendAsset): MarketInstrument => ({
 
 // Ekran "Rynek" wyświetlający notowania giełdowe i umożliwiający wyszukiwanie instrumentów
 export default function MarketScreen() {
-  const { colors } = useTheme();
+  const { colors, activeAccount } = useTheme();
+  const isFocused = useIsFocused();
   const { bottom, top } = useSafeAreaInsets();
   // Widok treści rozmywanej pod nagłówkiem (wymagane przez BlurView na Androidzie)
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
-  const { instruments: watchlistInstruments } = useWatchlist();
+ 
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -99,6 +101,8 @@ export default function MarketScreen() {
   const [dynamicInstruments, setDynamicInstruments] = useState<
     Record<DynamicMarketTabKey, MarketInstrument[]>
   >({ gainers: [], active: [] });
+  const [watchlistInstruments, setWatchlistInstruments] =
+  useState<MarketInstrument[]>([]);
   const [dynamicLoading, setDynamicLoading] = useState<
     Record<DynamicMarketTabKey, boolean>
   >({
@@ -167,6 +171,58 @@ export default function MarketScreen() {
     setCompletedQuery("");
     setSearchLoading(false);
   });
+
+  useEffect(() => {
+    let active = true;
+  
+    const loadWatchlist = async () => {
+      if (!activeAccount) {
+        setWatchlistInstruments([]);
+        return;
+      }
+  
+      const assets = await getWatchlistAssets(activeAccount.id);
+  
+      if (assets.length === 0) {
+        setWatchlistInstruments(
+          DEFAULT_WATCHLIST.map((instrument) => ({
+            ...instrument,
+            exchangeName: instrument.exchange,
+          })),
+        );
+        return;
+      }
+  
+      const resolved = await Promise.all(
+        assets.map(async (asset) => {
+          const results = await searchInstruments(asset.symbol);
+          const match = results.find(
+            (item) =>
+              item.symbol.trim().toUpperCase() ===
+              asset.symbol.trim().toUpperCase(),
+          );
+  
+          return {
+            symbol: asset.symbol,
+            name: match?.name ?? asset.symbol,
+            exchange: match?.exchange ?? match?.exchangeName ?? "",
+            exchangeName: match?.exchangeName ?? match?.exchange ?? "",
+            currency: resolveCurrency(match ?? { symbol: asset.symbol }),
+          };
+        }),
+      );
+  
+      if (active) {
+        setWatchlistInstruments(resolved);
+      }
+    };
+  
+    void loadWatchlist();
+  
+    return () => {
+      active = false;
+    };
+  }, [activeAccount, isFocused, selectedTab]);
 
   // Efekt wywoływany przy zmianie zapytania wyszukiwania; wprowadza opóźnienie 280ms przed wykonaniem wyszukiwania
   useEffect(() => {
@@ -392,7 +448,7 @@ export default function MarketScreen() {
   }, []);
 
   // Skróty na webie działają tylko na widocznej zakładce (pozostałe zostają zamontowane w tle)
-  const isFocused = useIsFocused();
+  
   const openSearchShortcut = useCallback((event: KeyboardEvent) => {
     event.preventDefault();
     setSearchOpen(true);
@@ -538,14 +594,23 @@ export default function MarketScreen() {
                           borderBottomColor: colors.borderGlass,
                         },
                       ]}
-                      onPress={() =>
+                      onPress={() => {
+                        if (activeAccount) {
+                          void addCounterToFavoriteAsset(
+                            activeAccount.id,
+                            item.symbol,
+                          ).catch((error) => {
+                            console.error("Nie udało się zwiększyć licznika aktywa:", error);
+                          });
+                        }
+
                         pressInstrument({
                           symbol: item.symbol,
                           name: item.name,
                           exchange: item.exchange,
                           exchangeName: item.exchangeName,
-                        })
-                      }
+                        });
+                      }}
                       activeOpacity={0.6}
                     >
                       <View style={styles.stockMeta}>

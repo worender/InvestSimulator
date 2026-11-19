@@ -9,6 +9,8 @@ import {
 } from "react-native";
 
 import {
+  addCounterToFavoriteAsset,
+  addFavoriteAsset,
   clearLocalDatabase,
   createCategory,
   createDailySnapshots,
@@ -18,6 +20,7 @@ import {
   createUserProfile,
   createWallet,
   deleteLocalDatabase,
+  deleteWallet,
   getCategories,
   getFavoriteAssets,
   getNotificationSettings,
@@ -25,14 +28,14 @@ import {
   getPortfolioSnapshots,
   getPositions,
   getSettings,
+  getTopFavoriteAssets,
   getTransactions,
   getUserProfile,
   getUserProfiles,
   getWallet,
   getWallets,
+  getWatchlistAssets,
   initializeDatabase,
-  addCounterToFavoriteAsset,
-  addFavoriteAsset,
   removeFavoriteAsset,
   updateFavoriteAsset,
   updateNotificationSettings,
@@ -40,7 +43,6 @@ import {
   updateSettings,
   updateUserProfile,
   updateWallet,
-  deleteWallet,
 } from "../database/database";
 
 type TestStatus = "PASS" | "FAIL";
@@ -307,7 +309,14 @@ export default function DatabaseTestScreen() {
           await expectError(() => addFavoriteAsset(userId, "AAPL; DROP TABLE users;--"));
           await expectError(() => addFavoriteAsset(userId, "MSFT", 2));
           await expectError(() => updateFavoriteAsset(userId, "AAPL"));
-          await expectError(() => addCounterToFavoriteAsset(userId, "AAPL"));
+          await addCounterToFavoriteAsset(userId, "AAPL");
+
+          const assets = await getFavoriteAssets(userId);
+          const asset = assets.find((item) => item.symbol === "AAPL");
+
+          assert(asset !== undefined, "Aktywo nie zostało utworzone");
+          assertEqual(asset?.favorite, 0, "Nowe aktywo nie powinno być ulubione");
+          assertEqual(asset?.counter, 2, "Nowe aktywo powinno mieć licznik 2");
         },
       ],
       [
@@ -1012,9 +1021,80 @@ export default function DatabaseTestScreen() {
           const user = await getUserProfile(1);
 
           assert(user !== null, "Baza nie została ponownie zainicjalizowana");
+
+          userId = 1;
         },
       ],
-      
+      [
+        "Najpopularniejsze ulubione aktywa",
+        async () => {
+          await removeFavoriteAsset(userId, "TEST-FAV-HIGH");
+          await removeFavoriteAsset(userId, "TEST-FAV-LOW");
+
+          await addFavoriteAsset(userId, "TEST-FAV-HIGH", 1);
+          await addFavoriteAsset(userId, "TEST-FAV-LOW", 1);
+
+          await addCounterToFavoriteAsset(userId, "TEST-FAV-HIGH");
+          await addCounterToFavoriteAsset(userId, "TEST-FAV-HIGH");
+
+          const assets = await getTopFavoriteAssets(userId, 4);
+
+          assert(
+            assets.some((asset) => asset.symbol === "TEST-FAV-HIGH"),
+            "Brak aktywa ulubionego o większym liczniku",
+          );
+          assert(
+            assets.some((asset) => asset.symbol === "TEST-FAV-LOW"),
+            "Brak drugiego ulubionego aktywa",
+          );
+
+          assertEqual(
+            assets[0].symbol,
+            "TEST-FAV-HIGH",
+            "Aktywa nie są sortowane malejąco według licznika",
+          );
+        },
+      ],
+      [
+        "Lista obserwowanych z licznikiem",
+        async () => {
+          await removeFavoriteAsset(userId, "TEST-NORMAL");
+          await removeFavoriteAsset(userId, "TEST-FAV");
+
+          await addFavoriteAsset(userId, "TEST-NORMAL", 0);
+          await addFavoriteAsset(userId, "TEST-FAV", 1);
+
+          await addCounterToFavoriteAsset(userId, "TEST-NORMAL");
+
+          const assets = await getWatchlistAssets(userId, 10);
+
+          assert(
+            assets.length <= 10,
+            "Lista obserwowanych przekroczyła limit 10",
+          );
+          assert(
+            assets.some((asset) => asset.symbol === "TEST-FAV"),
+            "Brak aktywa oznaczonego serduszkiem",
+          );
+
+          const favoriteIndex = assets.findIndex(
+            (asset) => asset.symbol === "TEST-FAV",
+          );
+          const normalIndex = assets.findIndex(
+            (asset) => asset.symbol === "TEST-NORMAL",
+          );
+
+          if (favoriteIndex >= 0 && normalIndex >= 0) {
+            assert(
+              favoriteIndex < normalIndex,
+              "Aktywa ulubione powinny poprzedzać pozostałe",
+            );
+          }
+
+          await removeFavoriteAsset(userId, "TEST-NORMAL");
+          await removeFavoriteAsset(userId, "TEST-FAV");
+        },
+      ],
     ];
 
     const completedResults: TestResult[] = [];
