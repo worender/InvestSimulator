@@ -12,6 +12,7 @@ import { ThemeProvider, useTheme } from "../theme";
 import { WatchlistProvider } from "../watchlist";
 import { WebGlobalStyles } from "../WebGlobalStyles";
 import "../webIsolation";
+import { LoadingScreen } from "../components/LoadingScreen";
 
 // Główny komponent aplikacji, który ustawia kontekst motywu, widoczności nawigacji i powiadomień. Zawiera również stos ekranów (Stack) dla nawigacji w aplikacji.
 function AppStack() {
@@ -45,6 +46,12 @@ function AppStack() {
 }
 
 export default function RootLayout() {
+  const isInitializing = true; // Replace with actual initialization logic
+
+  if (isInitializing) {
+    return <LoadingScreen />;
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>

@@ -222,6 +222,7 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: PropsWithChildren) {
+  const [isInitializing, setIsInitializing] = useState(true);
   const [mode, setModeState] = useState<ThemeMode>("dark");
   const [accent, setAccentState] = useState<ThemeAccent>(DEFAULT_ACCENT);
   const [customAccents, setCustomAccents] = useState<CustomAccentColor[]>([]);
@@ -309,6 +310,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       setRates({ ...FALLBACK_RATES });
     } finally {
       if (rateRequest.current === requestId) setRatesLoading(false);
+      setIsInitializing(false);
     }
   }, []);
 
