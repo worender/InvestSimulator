@@ -31,3 +31,23 @@ Jesteśmy otwarci na propozycje rozwoju.
 5. Ograniczenia
 Na obecnym etapie koncepcyjnym nie jesteśmy pewni, jak szeroko aplikacja będzie mogła popłynać. Nie znamy dokładnie możliwości dostępu do api z aktualnymi danymi giełdowymi. Nie wiemy również, jak szeroka bazę dostępnych instrumentów i aktywów zawrzeć w niniejszym projekcie. Jesteśmy świadomi, że z jednej strony zawarcie zbyt ograniczonej liczby instrumentów zabierze możliwości użytkownikowi do zbliżonej realnej zabawy i nauki w inwestowanie, jednakże obawiamy się, że dostęp do intrumentów niszowych mógłby z kolei zaburzyć wizję użytkownika, a zostawiajac jemu niemal nieskończone możliwości sprawiłoby pewien paraliż decyzyjny i poczucie zagubienia.
 O ostatecznej formie ograniczeń i wykluczeń zdecydujemy na przestrzeni najbliższych tygodni, gdy sam projekt i jego wizja zaczna klarować się w naszym rozumieniu i będziemy świadomi konkretnego celu, jaki planujemy osiagnąć, podejmując się tego wyzwania.
+
+6. Dokumentacja
+Dokumentacja kodu (frontend `src/` i backend `backend/`) jest generowana przez [TypeDoc](https://typedoc.org/) z komentarzy `/** ... */` w kodzie.
+
+Generowanie:
+
+```bash
+npm install
+npm run docs
+```
+
+Wynik trafia do katalogu `docs/` (jest w `.gitignore`) — otwórz `docs/index.html` w przeglądarce. Konfiguracja: `typedoc.json` oraz `tsconfig.typedoc.json` (włącza `allowJs`, żeby objąć backend w JavaScripcie).
+
+Zasady pisania komentarzy:
+- komentarze po polsku, w formacie JSDoc/TSDoc: opis, `@param` dla każdego parametru, `@returns`, w razie potrzeby `@throws` i `@example`,
+- na początku pliku opis modułu z tagiem `@module src/<ścieżka bez rozszerzenia>` (np. `@module src/api/marketService`),
+- TypeDoc pokazuje tylko eksportowane symbole — `{@link Nazwa}` wolno stosować tylko do nich, do pozostałych zwykły kod w backtickach,
+- komponenty: typ props z tagiem `@inline` i opisem każdego pola, a nad komponentem `@param props Właściwości komponentu.`,
+- parametr destrukturyzowany z typem wpisanym w miejscu (`{ a }: { a: string }`) opisujemy jako `@param props` i `@param props.a`,
+- po zmianach `npm run docs` nie powinno zgłaszać ostrzeżeń.

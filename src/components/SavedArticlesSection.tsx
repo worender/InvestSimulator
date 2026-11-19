@@ -1,3 +1,9 @@
+/**
+ * Sekcja zapisanych artykułów („do przeczytania później”).
+ *
+ * @module src/components/SavedArticlesSection
+ */
+
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { ReadableArticle } from "./NewsArticleModal";
@@ -6,6 +12,13 @@ import { useTheme } from "../theme";
 import { ArticleList } from "./ArticleList";
 import { NewsArticleModal } from "./NewsArticleModal";
 
+/**
+ * Tworzy linię informacji o artykule.
+ *
+ * @param item Artykuł.
+ * @returns Dla artykułu edukacyjnego `"Edukacja · N min czytania"`, dla newsa
+ * wydawca i data (np. `"Reuters · 15 sie"`).
+ */
 const formatMeta = (item: ReadableArticle) => {
   if ("readMinutes" in item) {
     return `Edukacja · ${item.readMinutes} min czytania`;
@@ -17,6 +30,13 @@ const formatMeta = (item: ReadableArticle) => {
   return [item.publisher, dateLabel].filter(Boolean).join(" · ");
 };
 
+/**
+ * Lista zapisanych artykułów aktywnego konta (pierwsze 3, z rozwijaniem).
+ *
+ * Dotknięcie artykułu otwiera {@link NewsArticleModal}, w którym można go
+ * usunąć z zapisanych. Gdy lista jest pusta, pokazuje podpowiedź, jak dodać
+ * artykuł. Wymaga `SavedArticlesProvider`.
+ */
 export function SavedArticlesSection() {
   const { colors } = useTheme();
   const { articles, isSaved, toggle } = useSavedArticles();

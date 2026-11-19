@@ -1,3 +1,9 @@
+/**
+ * Ekran „Rynek”: listy instrumentów, notowania i wyszukiwanie.
+ *
+ * @module src/app/(tabs)/market
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
 import { useIsFocused } from "expo-router";
@@ -61,9 +67,22 @@ import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 import { useWatchlist } from "../../watchlist";
 
+/**
+ * Tworzy klucz notowania w słowniku notowań.
+ *
+ * @param symbol Symbol instrumentu.
+ * @param exchange Giełda.
+ * @returns Tekst `symbol_giełda`.
+ */
 const quoteKey = (symbol: string, exchange?: string) =>
   `${symbol}_${exchange || ""}`;
 
+/**
+ * Uzupełnia walutę instrumentu (gdy brak — wyznacza ją `resolveCurrency`).
+ *
+ * @param instrument Instrument.
+ * @returns Instrument z pewną walutą.
+ */
 const withResolvedCurrency = (
   instrument: MarketInstrument,
 ): MarketInstrument & { currency: string } => ({
@@ -71,6 +90,12 @@ const withResolvedCurrency = (
   currency: instrument.currency || resolveCurrency(instrument),
 });
 
+/**
+ * Zamienia instrument z trendów Yahoo na instrument listy rynku.
+ *
+ * @param asset Instrument z trendów.
+ * @returns Instrument listy rynku z wyznaczoną walutą.
+ */
 const toMarketInstrument = (asset: DynamicTrendAsset): MarketInstrument => ({
   symbol: asset.symbol,
   name: asset.name,
@@ -79,7 +104,16 @@ const toMarketInstrument = (asset: DynamicTrendAsset): MarketInstrument => ({
   currency: resolveCurrency(asset),
 });
 
-// Ekran "Rynek" wyświetlający notowania giełdowe i umożliwiający wyszukiwanie instrumentów
+/**
+ * Ekran „Rynek” z notowaniami i wyszukiwarką instrumentów.
+ *
+ * Zakładki (`MARKET_TABS`): obserwowane, stałe listy (Polska, liderzy, CFD,
+ * krypto) oraz listy dynamiczne z Yahoo (zyskujące, najaktywniejsze; pamięć
+ * podręczna 10 min). Notowania są pobierane dla widocznej listy. Na telefonie
+ * dotknięcie instrumentu otwiera `ModalChartView`; na desktopie wybiera go do
+ * prawego panelu (`InstrumentPanel`), a strzałki góra/dół zmieniają wybór.
+ * Skróty klawiszowe działają tylko na widocznej zakładce.
+ */
 export default function MarketScreen() {
   const { colors } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
@@ -704,7 +738,14 @@ export default function MarketScreen() {
   );
 }
 
-// Prawy panel na desktopie: wykres i szczegóły finansowe wybranego instrumentu (na mobile to samo jest w modalu)
+/**
+ * Prawy panel na desktopie: wykres i szczegóły finansowe wybranego instrumentu
+ * (na mobile to samo jest w modalu).
+ *
+ * @param props Właściwości panelu.
+ * @param props.instrument Wybrany instrument (z walutą).
+ * @param props.paddingTop Górny odstęp pod nagłówkiem.
+ */
 function InstrumentPanel({
   instrument,
   paddingTop,

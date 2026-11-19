@@ -1,0 +1,19 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "InvestSimulator",
+  "tsconfig": "./tsconfig.typedoc.json",
+  "entryPoints": ["./src", "./backend/server.js", "./backend/newsQuality.js"],
+  "entryPointStrategy": "expand",
+  "exclude": ["**/__tests__/**", "**/node_modules/**"],
+  "out": "./docs",
+  "readme": "./README.md",
+  "lang": "en",
+  "excludePrivate": true,
+  "excludeExternals": true,
+  "sort": ["kind", "alphabetical"],
+  "validation": {
+    "notExported": false,
+    "invalidLink": true,
+    "notDocumented": false
+  }
+}

@@ -4,8 +4,11 @@
  * więc walutę wyznaczamy najpierw z sufiksu, potem z kodu giełdy,
  * a na końcu z jej nazwy. Dzięki temu ORLEN na GPW dostaje PLN,
  * a ten sam emitent na giełdzie praskiej CZK - bez zgadywania "USD".
+ *
+ * @module src/currency
  */
 
+/** Sufiks tickera Yahoo (po kropce) -> waluta, np. `WA` (Warszawa) -> PLN. */
 const CURRENCY_BY_SUFFIX: Record<string, string> = {
   WA: 'PLN',
   PR: 'CZK',
@@ -47,6 +50,7 @@ const CURRENCY_BY_SUFFIX: Record<string, string> = {
   MX: 'MXN',
 };
 
+/** Kod giełdy (Yahoo lub własny) -> waluta, np. `GPW` -> PLN, `NMS` (NASDAQ) -> USD. */
 const CURRENCY_BY_EXCHANGE: Record<string, string> = {
   GPW: 'PLN',
   WSE: 'PLN',
@@ -136,6 +140,7 @@ const CURRENCY_BY_EXCHANGE_NAME: [string, string][] = [
   ['new york', 'USD'],
 ];
 
+/** Kod waluty ISO 4217 -> symbol do wyświetlania, np. `PLN` -> `zł`. */
 const CURRENCY_SYMBOLS: Record<string, string> = {
   PLN: 'zł',
   EUR: '€',
@@ -160,13 +165,40 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   ILS: '₪',
 };
 
+/** Dane instrumentu potrzebne do wyznaczenia waluty; każde pole jest opcjonalne. */
 export type InstrumentCurrencyInput = {
+  /** Ticker, np. `"PKN.WA"`. */
   symbol?: string;
+  /** Kod giełdy, np. `"GPW"` lub `"NMS"`. */
   exchange?: string;
+  /** Pełna nazwa giełdy, np. `"Warszawa GPW"`. */
   exchangeName?: string;
 };
 
-// Funkcja wyznaczająca walutę instrumentu giełdowego na podstawie symbolu, giełdy i nazwy giełdy
+/**
+ * Wyznacza walutę instrumentu giełdowego na podstawie symbolu, giełdy i nazwy giełdy.
+ *
+ * Kolejność sprawdzania (wygrywa pierwsze trafienie):
+ * 1. sufiks tickera po ostatniej kropce (`CURRENCY_BY_SUFFIX`),
+ * 2. kod giełdy (`CURRENCY_BY_EXCHANGE`),
+ * 3. fragment nazwy giełdy (`CURRENCY_BY_EXCHANGE_NAME`),
+ * 4. w ostateczności `"USD"`.
+ *
+ * Wielkość liter i spacje na brzegach nie mają znaczenia.
+ *
+ * @param input Dane instrumentu.
+ * @param input.symbol Ticker.
+ * @param input.exchange Kod giełdy.
+ * @param input.exchangeName Nazwa giełdy.
+ * @returns Kod waluty ISO 4217.
+ *
+ * @example
+ * resolveCurrency({ symbol: "PKN.WA" });                    // "PLN"
+ * resolveCurrency({ symbol: "CEZ.PR" });                    // "CZK"
+ * resolveCurrency({ symbol: "CDR", exchange: "GPW" });      // "PLN"
+ * resolveCurrency({ symbol: "X", exchangeName: "Tokyo" });  // "JPY"
+ * resolveCurrency({ symbol: "AAPL" });                      // "USD"
+ */
 export function resolveCurrency({ symbol, exchange, exchangeName }: InstrumentCurrencyInput): string {
   const ticker = (symbol ?? '').trim().toUpperCase();
   const suffix = ticker.includes('.') ? ticker.split('.').pop() ?? '' : '';
@@ -183,7 +215,18 @@ export function resolveCurrency({ symbol, exchange, exchangeName }: InstrumentCu
   return 'USD';
 }
 
-// Funkcja zwracająca symbol waluty na podstawie jej kodu (np. "PLN" -> "zł")
+/**
+ * Zwraca symbol waluty na podstawie jej kodu.
+ *
+ * @param value Kod waluty (wielkość liter nie ma znaczenia).
+ * @returns Symbol waluty; pusty tekst dla braku wartości; nieznany kod jest
+ * zwracany bez zmian.
+ *
+ * @example
+ * currencySymbol("PLN"); // "zł"
+ * currencySymbol("usd"); // "$"
+ * currencySymbol("SAR"); // "SAR"
+ */
 export function currencySymbol(value?: string): string {
   if (!value) return '';
   const key = value.trim().toUpperCase();

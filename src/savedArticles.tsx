@@ -1,3 +1,12 @@
+/**
+ * Kontekst artykułów edukacyjnych i zakładek „do przeczytania później”.
+ *
+ * Wczytuje wszystkie artykuły edukacyjne z bazy (raz, przy starcie) oraz listę
+ * zapisanych artykułów aktywnego konta (przy każdej zmianie konta). Zmiany
+ * zakładek są widoczne od razu i cofane, gdy zapis do bazy się nie uda.
+ *
+ * @module src/savedArticles
+ */
 import {
   createContext,
   useCallback,
@@ -17,19 +26,32 @@ import type { EducationalArticle } from "./database/educationalArticles";
 import { notify } from "./notificationBus";
 import { useTheme } from "./theme";
 
+/** Wartość kontekstu zapisanych artykułów. */
 type SavedArticlesContextValue = {
-  // Wszystkie artykuły edukacyjne z bazy (null podczas ładowania)
+  /** Wszystkie artykuły edukacyjne z bazy (`null` podczas ładowania, pusta lista po błędzie). */
   educationalArticles: readonly EducationalArticle[] | null;
-  // Artykuły „do przeczytania później” aktywnego konta (tabela saved_article)
+  /** Artykuły „do przeczytania później” aktywnego konta (tabela `saved_article`), ostatnio zapisany pierwszy. */
   articles: readonly EducationalArticle[];
+  /** Sprawdza, czy artykuł o danym identyfikatorze (slug) jest zapisany. */
   isSaved: (id: string) => boolean;
+  /** Zapisuje artykuł albo usuwa go z zapisanych; bez aktywnego konta nic nie robi. */
   toggle: (article: ReadableArticle) => void;
 };
 
+/** Kontekst zapisanych artykułów; `null` poza {@link SavedArticlesProvider}. */
 const SavedArticlesContext = createContext<SavedArticlesContextValue | null>(
   null,
 );
 
+/**
+ * Dostawca artykułów edukacyjnych i zakładek aktywnego konta.
+ *
+ * Musi być umieszczony wewnątrz `ThemeProvider`, bo z niego bierze aktywne
+ * konto. Błędy odczytu są logowane i zgłaszane powiadomieniem. Lista
+ * `articles` zawiera tylko zapisane slugi, dla których istnieje artykuł w bazie.
+ *
+ * @param props Właściwości komponentu; `children` — drzewo aplikacji, które ma dostęp do kontekstu.
+ */
 export function SavedArticlesProvider({ children }: PropsWithChildren) {
   const { activeAccount } = useTheme();
   const userId = activeAccount?.id;
@@ -139,6 +161,12 @@ export function SavedArticlesProvider({ children }: PropsWithChildren) {
   );
 }
 
+/**
+ * Zwraca artykuły edukacyjne, zapisane artykuły i funkcje do zarządzania zakładkami.
+ *
+ * @returns Obiekt `{ educationalArticles, articles, isSaved, toggle }`.
+ * @throws {Error} Gdy hook użyto poza {@link SavedArticlesProvider}.
+ */
 export function useSavedArticles() {
   const value = useContext(SavedArticlesContext);
   if (!value) {

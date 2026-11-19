@@ -1,3 +1,14 @@
+/**
+ * Wyświetlanie powiadomień w aplikacji.
+ *
+ * `NotificationProvider` odbiera komunikaty z szyny `notificationBus`, kolejkuje je
+ * i pokazuje po jednym nad całą aplikacją. Natywny `Modal` tworzy osobną warstwę
+ * widoku, więc powiadomienie z korzenia aplikacji byłoby pod nim niewidoczne —
+ * dlatego wewnątrz modali umieszcza się `NotificationHost`, który przejmuje
+ * wyświetlanie, dopóki modal jest otwarty.
+ *
+ * @module src/notifications
+ */
 import type { PropsWithChildren } from "react";
 import {
   createContext,
@@ -19,37 +30,59 @@ import {
   type AppNotification,
 } from "./notificationBus";
 
+/** Wartość kontekstu powiadomień. */
 type NotificationContextValue = {
+  /** Wysyła powiadomienie (ta sama funkcja co {@link notify} z szyny). */
   notify: typeof notify;
 };
 
+/** Kontekst z funkcją `notify`; `null` poza {@link NotificationProvider}. */
 const NotificationContext = createContext<NotificationContextValue | null>(
   null,
 );
 
+/** Wartość kontekstu widoku: bieżące powiadomienie i sterowanie nim. */
 type NotificationViewContextValue = {
+  /** Powiadomienie aktualnie widoczne (pierwsze w kolejce). */
   notification?: AppNotification;
+  /** Ukrywa bieżące powiadomienie i pokazuje następne. */
   dismiss: () => void;
-  // Czas pozostały do ukrycia i informacja, czy powiadomienie było już widoczne
+  /** Czas pozostały do ukrycia i informacja, czy powiadomienie było już widoczne. */
   getTiming: (notification: AppNotification) => {
     duration: number;
     alreadyShown: boolean;
   };
 };
 
+/** Kontekst widoku powiadomień (wewnętrzny). */
 const NotificationViewContext =
   createContext<NotificationViewContextValue | null>(null);
 
+/** Wartość kontekstu warstw powiadomień w natywnych modalach. */
 type NotificationLayerContextValue = {
+  /** Warstwa, która teraz wyświetla powiadomienia (ostatnio zarejestrowana); `null` — korzeń aplikacji. */
   activeLayerId: number | null;
+  /** Rejestruje warstwę i czyni ją aktywną. */
   registerLayer: (id: number) => void;
+  /** Wyrejestrowuje warstwę; aktywna staje się poprzednia. */
   unregisterLayer: (id: number) => void;
 };
 
+/** Kontekst warstw powiadomień (wewnętrzny). */
 const NotificationLayerContext =
   createContext<NotificationLayerContextValue | null>(null);
 
-// Kolejkuje powiadomienia i renderuje je nad całą aplikacją
+/**
+ * Kolejkuje powiadomienia i renderuje je nad całą aplikacją.
+ *
+ * Subskrybuje szynę `notificationBus` i trzyma kolejkę (pierwszy element jest
+ * widoczny). Pamięta, kiedy każde powiadomienie zostało pokazane, dzięki czemu
+ * przeniesienie go między warstwami (np. przy otwarciu modala) nie resetuje
+ * licznika czasu ani nie odtwarza animacji wejścia. Gdy żaden
+ * {@link NotificationHost} nie jest aktywny, wyświetla powiadomienia sam.
+ *
+ * @param props Właściwości komponentu; `children` — drzewo aplikacji.
+ */
 export function NotificationProvider({ children }: PropsWithChildren) {
   const [queue, setQueue] = useState<AppNotification[]>([]);
   // Warstwy powiadomień wewnątrz natywnych modali. Modal tworzy osobną
@@ -137,6 +170,14 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   );
 }
 
+/**
+ * Zwraca funkcję `notify` z kontekstu powiadomień.
+ *
+ * Poza komponentami można użyć bezpośrednio {@link notify} z `notificationBus`.
+ *
+ * @returns Obiekt `{ notify }`.
+ * @throws {Error} Gdy hook użyto poza {@link NotificationProvider}.
+ */
 export function useNotifications(): NotificationContextValue {
   const context = useContext(NotificationContext);
   if (!context) {
@@ -147,11 +188,17 @@ export function useNotifications(): NotificationContextValue {
   return context;
 }
 
+/** Licznik używany do nadawania identyfikatorów warstw {@link NotificationHost}. */
 let layerSequence = 0;
 
 /**
  * Warstwa powiadomień dla natywnego modala. Należy umieścić ją wewnątrz
- * `<Modal>`, aby komunikaty były widoczne nad jego treścią
+ * `<Modal>`, aby komunikaty były widoczne nad jego treścią.
+ *
+ * Po zamontowaniu rejestruje się jako aktywna warstwa (przy zagnieżdżonych
+ * modalach wygrywa ostatnio otwarty), a po odmontowaniu oddaje wyświetlanie
+ * poprzedniej warstwie. Renderuje się tylko wtedy, gdy jest aktywna i jest
+ * co wyświetlić.
  */
 export function NotificationHost() {
   const layerContext = useContext(NotificationLayerContext);
@@ -187,15 +234,24 @@ export function NotificationHost() {
   );
 }
 
+/** Właściwości komponentu `NotificationViewport`. */
 type NotificationViewportProps = {
+  /** Powiadomienie do pokazania; brak — nic nie jest renderowane. */
   notification?: AppNotification;
+  /** Wywoływane po zamknięciu lub upływie czasu powiadomienia. */
   onDismiss: () => void;
+  /** Zwraca pozostały czas wyświetlania i informację, czy powiadomienie było już widoczne. */
   getTiming: (notification: AppNotification) => {
     duration: number;
     alreadyShown: boolean;
   };
 };
 
+/**
+ * Pozycjonuje kartę powiadomienia u góry ekranu, z uwzględnieniem bezpiecznego obszaru.
+ *
+ * @param props Właściwości komponentu (patrz `NotificationViewportProps`).
+ */
 function NotificationViewport({
   notification,
   onDismiss,
@@ -223,7 +279,7 @@ function NotificationViewport({
   );
 }
 
-// Styl dla widoku powiadomień, który jest absolutnie pozycjonowany nad całą aplikacją
+/** Style warstwy powiadomień, pozycjonowanej absolutnie nad całą aplikacją. */
 const styles = StyleSheet.create({
   hostRoot: {
     position: "absolute",

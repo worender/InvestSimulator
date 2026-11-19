@@ -1,3 +1,9 @@
+/**
+ * Ekran „Ustawienia”.
+ *
+ * @module src/app/(tabs)/settings
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
 import Constants from "expo-constants";
@@ -53,28 +59,49 @@ import { useLayoutMode } from "../../useLayoutMode";
 import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
+/** Opcje trybu kolorystycznego. */
 const THEME_OPTIONS: ChoiceOption<ThemeMode>[] = [
   { key: "light", label: "Jasny" },
   { key: "dark", label: "Ciemny" },
 ];
 
+/** Opcje rozmiaru czcionki (S / M / L). */
 const FONT_OPTIONS: ChoiceOption<FontSizePreference>[] = [
   { key: "small", label: "S" },
   { key: "medium", label: "M" },
   { key: "large", label: "L" },
 ];
 
+/** Opcje waluty rozliczeniowej. */
 const CURRENCY_OPTIONS: ChoiceOption<Currency>[] = [
   { key: "PLN", label: "PLN" },
   { key: "EUR", label: "EUR" },
   { key: "USD", label: "USD" },
 ];
 
+/** Waluty pokazywane w sekcji „Kursy walut”. */
 const RATE_CURRENCIES = [
   { code: "EUR", name: "Euro" },
   { code: "USD", name: "Dolar amerykański" },
 ] as const;
 
+/**
+ * Ekran „Ustawienia”.
+ *
+ * Kategorie:
+ * - **Konto** — przełączanie, dodawanie i edycja kont (`AccountSwitcher`, `AccountFormSheet`).
+ * - **Wygląd** — tryb jasny/ciemny, rozmiar czcionki, kolor akcentu (także własne kolory).
+ * - **Autoryzacja** — nazwa konta, hasło (`PasswordSheet`), zdjęcie profilowe, logowanie biometrią.
+ * - **Powiadomienia** — główny przełącznik i kategorie (powiadomienia push są niedostępne).
+ * - **Rynek** — tryb „Wiele walut”, waluta rozliczeniowa i bieżące kursy EUR/USD.
+ *
+ * Na dole: wylogowanie, opuszczenie aplikacji (na Androidzie zamyka aplikację,
+ * gdzie indziej pokazuje komunikat) i usunięcie lokalnej bazy danych (po
+ * potwierdzeniu; baza powstaje od nowa przy następnym uruchomieniu).
+ *
+ * Parametry trasy: `section=account` przewija do sekcji konta, a
+ * `openAccounts=1` otwiera listę kont (używane przez `AccountMenu`).
+ */
 export default function SettingsScreen() {
   const {
     mode,

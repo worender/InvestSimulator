@@ -1,3 +1,9 @@
+/**
+ * Karty trendów rynkowych na ekranie głównym.
+ *
+ * @module src/components/TrendCards
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -20,7 +26,9 @@ import { ModalChartView } from "./ModalChartView";
 import { Skeleton } from "./Skeleton";
 import { TrendChart, trendChangePercent } from "./TrendChart";
 
+/** Kategoria trendów: klucz i etykieta. */
 type Category = { key: string; label: string };
+/** Kategorie trendów; `cfd` i `crypto` mają stałe listy, pozostałe są pobierane z Yahoo Finance. */
 const categories: Category[] = [
   { key: "gainers", label: "Zyskujące" },
   { key: "active", label: "Zaskakujące" },
@@ -30,6 +38,7 @@ const categories: Category[] = [
   { key: "crypto", label: "Krypto" },
 ];
 
+/** Stałe listy instrumentów dla kategorii CFD i krypto (losowane są z nich 3). */
 const STATIC_TRENDS: Record<string, DynamicTrendAsset[]> = {
   cfd: [
     {
@@ -121,6 +130,14 @@ const STATIC_TRENDS: Record<string, DynamicTrendAsset[]> = {
   ],
 };
 
+/**
+ * Losuje `count` różnych elementów (tasowanie Fishera–Yatesa na kopii).
+ *
+ * @typeParam T Typ elementu.
+ * @param items Elementy.
+ * @param count Liczba elementów do wylosowania.
+ * @returns Wylosowane elementy (tablica wejściowa nie jest zmieniana).
+ */
 function pickRandom<T>(items: readonly T[], count: number): T[] {
   const next = [...items];
   for (let index = next.length - 1; index > 0; index -= 1) {
@@ -130,13 +147,23 @@ function pickRandom<T>(items: readonly T[], count: number): T[] {
   return next.slice(0, count);
 }
 
+/** Zakres wykresu otwieranego z karty trendu — indeks 1 miesiąca w `CHART_RANGES`. */
 const TREND_RANGE_INDEX = Math.max(
   0,
   CHART_RANGES.findIndex((range) => range.days === 30),
 );
 
+/** Liczba prób pobrania trendów. */
 const TREND_LOAD_ATTEMPTS = 3;
+/** Podstawowe opóźnienie (ms) między próbami; rośnie z numerem próby. */
 const TREND_RETRY_DELAY_MS = 1200;
+
+/**
+ * Czeka podaną liczbę milisekund.
+ *
+ * @param ms Czas oczekiwania.
+ * @returns Obietnica rozwiązywana po czasie.
+ */
 
 function delay(ms: number) {
   return new Promise<void>((resolve) => {
@@ -144,6 +171,13 @@ function delay(ms: number) {
   });
 }
 
+/**
+ * Zwraca dane kategorii z pamięci podręcznej (bez sieci), aby pokazać je od razu.
+ *
+ * @param cat Klucz kategorii.
+ * @returns Pierwsze 3 instrumenty, ich świece z 30 dni i flagę `isReady`
+ * (`true`, gdy w pamięci są świece wszystkich instrumentów).
+ */
 function getInitialCategoryData(cat: string) {
   const staticTrends = STATIC_TRENDS[cat];
   const cachedTrends = staticTrends
@@ -176,7 +210,13 @@ function getInitialCategoryData(cat: string) {
   };
 }
 
-// Komponent wyświetlający karty trendów dla różnych kategorii aktywów giełdowych
+/**
+ * Karty trendów: przełącznik kategorii i 3 instrumenty z mini-wykresem z 30 dni.
+ *
+ * Dane z pamięci podręcznej są pokazywane od razu. Trendy dynamiczne są pobierane
+ * do 3 razy z rosnącym opóźnieniem; gdy się nie uda, pokazywane jest
+ * powiadomienie i przycisk ponowienia. Dotknięcie karty otwiera {@link ModalChartView}.
+ */
 export function TrendCards() {
   const { colors } = useTheme();
   const [category, setCategory] = useState("gainers");
@@ -393,7 +433,17 @@ export function TrendCards() {
   );
 }
 
-// Komponent wyświetlający pojedynczą kartę trendu dla danego aktywa giełdowego
+/**
+ * Pojedyncza karta trendu: nazwa, zmiana procentowa z wykresu (albo z danych
+ * instrumentu, gdy brak świec) i mini-wykres.
+ *
+ * @param props Właściwości karty.
+ * @param props.asset Instrument.
+ * @param props.candles Świece z 30 dni.
+ * @param props.colors Kolory motywu.
+ * @param props.showSeparator Czy rysować linię oddzielającą.
+ * @param props.onPress Akcja po naciśnięciu.
+ */
 function TrendCard({
   asset,
   candles,
@@ -507,6 +557,12 @@ function TrendCard({
   );
 }
 
+/**
+ * Zamienia instrument trendu na dane dla {@link ModalChartView} (waluta z `resolveCurrency`).
+ *
+ * @param asset Instrument trendu.
+ * @returns Dane instrumentu dla modala.
+ */
 function toModalInstrument(asset: DynamicTrendAsset) {
   const currency = resolveCurrency(asset);
   return {
@@ -518,6 +574,13 @@ function toModalInstrument(asset: DynamicTrendAsset) {
   };
 }
 
+/**
+ * Skraca tekst do `limit` znaków, dodając wielokropek.
+ *
+ * @param value Tekst.
+ * @param limit Maksymalna długość (z wielokropkiem).
+ * @returns Tekst bez zmian albo skrócony.
+ */
 function truncate(value: string, limit: number) {
   return value.length > limit
     ? `${value.slice(0, limit - 1).trimEnd()}…`

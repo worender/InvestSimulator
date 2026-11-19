@@ -1,3 +1,12 @@
+/**
+ * Ekran ręcznych testów warstwy bazy danych (`/database-test`).
+ *
+ * **Uwaga:** testy usuwają i tworzą od nowa lokalną bazę, więc kasują dane
+ * użytkownika. Ekran jest przeznaczony wyłącznie do celów deweloperskich.
+ *
+ * @module src/app/database-test
+ */
+
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -43,22 +52,44 @@ import {
   deleteWallet,
 } from "../database/database";
 
+/** Wynik testu: zaliczony lub nie. */
 type TestStatus = "PASS" | "FAIL";
 
+/** Wynik pojedynczego testu. */
 type TestResult = {
+  /** Nazwa testu. */
   name: string;
+  /** Status. */
   status: TestStatus;
+  /** Komunikat błędu (dla `FAIL`). */
   error?: string;
 };
 
+/** Funkcja testu — kończy się błędem, gdy test nie przechodzi. */
 type TestFunction = () => Promise<void>;
 
+/**
+ * Rzuca błąd, gdy warunek nie jest spełniony.
+ *
+ * @param condition Warunek.
+ * @param message Komunikat błędu.
+ * @throws {Error} Gdy `condition` jest fałszywy.
+ */
 function assert(condition: boolean, message: string): void {
   if (!condition) {
     throw new Error(message);
   }
 }
 
+/**
+ * Rzuca błąd, gdy wartości nie są identyczne (`!==`).
+ *
+ * @typeParam T Typ porównywanych wartości.
+ * @param actual Wartość otrzymana.
+ * @param expected Wartość oczekiwana.
+ * @param message Komunikat błędu (uzupełniany o obie wartości).
+ * @throws {Error} Gdy wartości się różnią.
+ */
 function assertEqual<T>(actual: T, expected: T, message: string): void {
   if (actual !== expected) {
     throw new Error(
@@ -67,6 +98,13 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
   }
 }
 
+/**
+ * Sprawdza, że operacja kończy się błędem (opcjonalnie o podanym komunikacie).
+ *
+ * @param operation Operacja, która powinna się nie udać.
+ * @param expectedMessage Oczekiwany dokładny komunikat błędu.
+ * @throws {Error} Gdy operacja się powiodła albo błąd ma inny komunikat.
+ */
 async function expectError(
   operation: () => Promise<unknown>,
   expectedMessage?: string,
@@ -92,6 +130,12 @@ async function expectError(
   throw new Error("Operacja powinna zakończyć się błędem");
 }
 
+/**
+ * Ekran z przyciskiem „Uruchom wszystkie testy”, który kolejno wykonuje 34 testy
+ * bazy (użytkownicy, ustawienia, ulubione aktywa, portfele, kategorie, pozycje,
+ * kupno i sprzedaż z FIFO, snapshoty, usuwanie i czyszczenie bazy) i na bieżąco
+ * pokazuje wyniki oraz liczbę testów zaliczonych i niezaliczonych.
+ */
 export default function DatabaseTestScreen() {
   const [results, setResults] = useState<TestResult[]>([]);
   const [running, setRunning] = useState(false);

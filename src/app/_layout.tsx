@@ -1,3 +1,14 @@
+/**
+ * Główny układ aplikacji (Expo Router): dostawcy kontekstów i stos ekranów.
+ *
+ * Kolejność dostawców (od zewnątrz): `GestureHandlerRootView` → `ThemeProvider`
+ * → `WatchlistProvider` → `SavedArticlesProvider` → `InteractionLockProvider`
+ * → `NavigationVisibilityProvider` → `NotificationProvider`. Import
+ * `webIsolation` wymusza izolację strony na webie (wymaganą przez `expo-sqlite`).
+ *
+ * @module src/app/_layout
+ */
+
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
@@ -13,7 +24,14 @@ import { WatchlistProvider } from "../watchlist";
 import { WebGlobalStyles } from "../WebGlobalStyles";
 import "../webIsolation";
 
-// Główny komponent aplikacji, który ustawia kontekst motywu, widoczności nawigacji i powiadomień. Zawiera również stos ekranów (Stack) dla nawigacji w aplikacji.
+/**
+ * Zawartość aplikacji wewnątrz dostawców.
+ *
+ * Zalogowany użytkownik widzi stos ekranów z zakładkami `(tabs)`, a niezalogowany
+ * — `LoginScreen`. Po zalogowaniu wstępnie pobiera dane rynkowe
+ * (`preloadMarketData`). Pasek stanu dopasowuje się do motywu, a zmiana
+ * rozmiaru czcionki przebudowuje stos (`key`), żeby nowe style objęły wszystkie ekrany.
+ */
 function AppStack() {
   const { mode, loggedIn, fontSizePreference } = useTheme();
 
@@ -44,6 +62,9 @@ function AppStack() {
   );
 }
 
+/**
+ * Główny układ: owija aplikację we wszystkie dostawcy kontekstów.
+ */
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

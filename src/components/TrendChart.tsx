@@ -1,3 +1,9 @@
+/**
+ * Mini-wykres trendu (zmiana procentowa w czasie).
+ *
+ * @module src/components/TrendChart
+ */
+
 import { useId, useMemo, useState } from "react";
 import {
   LayoutChangeEvent,
@@ -17,27 +23,48 @@ import Svg, {
 } from "react-native-svg";
 import { useTheme } from "../theme";
 
+/** Punkt serii wykresu. */
 export type TrendPoint = {
+  /** Czas w ms od epoki. */
   timestamp: number;
+  /** Wartość. */
   value: number;
 };
 
+/** Właściwości {@link TrendChart}. */
 export type TrendChartProps = {
+  /** Punkty serii; mniej niż 2 — wykres pusty. */
   data: TrendPoint[];
+  /** Wysokość (px, domyślnie 88). */
   height?: number;
+  /** Czy pokazywać okres pod wykresem (np. „30 dni temu” – „dziś”; domyślnie `true`). */
   showPeriod?: boolean;
+  /** Styl kontenera — obecnie nieużywany przez komponent. */
   style?: StyleProp<ViewStyle>;
+  /** Opis dla czytników ekranu; domyślnie generowany ze zmiany. */
   accessibilityLabel?: string;
 };
 
+/** Szerokość (px) osi procentowej. */
 const AXIS_WIDTH = 46;
+/** Wysokość (px) etykiety osi. */
 const AXIS_LABEL_HEIGHT = 12;
+/** Górny odstęp (px) obszaru wykresu. */
 const TOP_PADDING = 6;
+/** Liczba milisekund w dniu. */
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Zmiana procentowa liczona z pierwszego i ostatniego punktu serii.
  * Dzięki temu nagłówek karty i kształt wykresu zawsze opowiadają tę samą historię.
+ *
+ * @param data Seria punktów.
+ * @param fallback Wartość zwracana, gdy punktów jest mniej niż 2, wartości są
+ * niepoprawne lub pierwsza wynosi 0 (domyślnie 0).
+ * @returns Zmiana w procentach.
+ *
+ * @example
+ * trendChangePercent([{ timestamp: 1, value: 100 }, { timestamp: 2, value: 110 }]); // 10
  */
 export function trendChangePercent(data: TrendPoint[], fallback = 0): number {
   if (data.length < 2) return fallback;
@@ -49,7 +76,13 @@ export function trendChangePercent(data: TrendPoint[], fallback = 0): number {
 }
 
 /**
- * Reużywalny mini-wykres trendu
+ * Reużywalny mini-wykres trendu.
+ *
+ * Rysuje zmianę procentową względem pierwszego punktu (gładka linia
+ * z wypełnieniem gradientem), z osią procentową zawierającą zawsze 0%.
+ * Kolor zależy od kierunku zmiany. Szerokość jest mierzona z kontenera.
+ *
+ * @param props Właściwości komponentu (patrz {@link TrendChartProps}).
  */
 export function TrendChart({
   data,
@@ -218,6 +251,19 @@ export function TrendChart({
   );
 }
 
+/**
+ * Wyznacza etykiety osi procentowej: maksimum, 0% (wyróżnione) i minimum.
+ *
+ * Wartości skrajne bliskie zeru (poniżej 8% rozpiętości) oraz etykiety
+ * nachodzące na poprzednią są pomijane.
+ *
+ * @param chart Geometria wykresu.
+ * @param chart.toY Zamienia zmianę procentową na współrzędną Y.
+ * @param chart.seriesMin Najmniejsza zmiana (≤ 0).
+ * @param chart.seriesMax Największa zmiana (≥ 0).
+ * @param height Wysokość wykresu (px).
+ * @returns Etykiety z kluczem, tekstem, położeniem i wyróżnieniem.
+ */
 function buildAxisMarks(
   chart: {
     toY: (value: number) => number;
@@ -267,7 +313,12 @@ function buildAxisMarks(
   return marks;
 }
 
-// Gładka krzywa bez przestrzeliwania
+/**
+ * Buduje gładką krzywą SVG bez przestrzeliwania (punkty kontrolne w połowie odcinków).
+ *
+ * @param points Punkty wykresu.
+ * @returns Atrybut `d` ścieżki SVG.
+ */
 function buildSmoothPath(points: { x: number; y: number }[]) {
   if (points.length === 0) return "";
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
@@ -282,6 +333,13 @@ function buildSmoothPath(points: { x: number; y: number }[]) {
   return path;
 }
 
+/**
+ * Formatuje zmianę procentową ze znakiem (`+` lub `−`).
+ *
+ * @param value Zmiana w procentach.
+ * @param compact Mniej miejsc po przecinku (dla etykiet osi).
+ * @returns Np. `"+2,35%"`; `"0%"` dla wartości bliskich zeru lub niepoprawnych.
+ */
 function formatSignedPercent(value: number, compact = false) {
   if (!Number.isFinite(value)) return "0%";
   if (Math.abs(value) < 0.05) return "0%";
@@ -300,11 +358,23 @@ function formatSignedPercent(value: number, compact = false) {
   return `${value > 0 ? "+" : "−"}${formatted}%`;
 }
 
+/**
+ * Etykieta początku okresu.
+ *
+ * @param days Długość okresu w dniach.
+ * @returns `"1 dzień temu"` albo `"N dni temu"`.
+ */
 function formatStartLabel(days: number) {
   if (days <= 1) return "1 dzień temu";
   return `${days} dni temu`;
 }
 
+/**
+ * Etykieta końca okresu.
+ *
+ * @param timestamp Czas ostatniego punktu (ms).
+ * @returns `"dziś"` albo data, np. `"15 sie"`.
+ */
 function formatEndLabel(timestamp: number) {
   const date = new Date(timestamp);
   const now = new Date();

@@ -1,22 +1,50 @@
+/**
+ * Lista artykułów z rozwijaniem.
+ *
+ * @module src/components/ArticleList
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../theme";
 import { ArticleRow } from "./ArticleRow";
 
+/** Minimalny kształt artykułu wymagany przez listę. */
 type ListArticle = {
+  /** Unikalny identyfikator (klucz wiersza). */
   id: string;
+  /** Tytuł. */
   title: string;
+  /** Zajawka. */
   summary: string;
+  /** Język artykułu. */
   language: "pl" | "en";
 };
 
+/**
+ * Właściwości {@link ArticleList}.
+ * @inline
+ */
 type ArticleListProps<T extends ListArticle> = {
+  /** Artykuły do wyświetlenia. */
   items: readonly T[];
+  /** Liczba artykułów widocznych przed rozwinięciem (domyślnie 4). */
   previewCount?: number;
+  /** Zwraca linię z dodatkowymi informacjami dla artykułu (np. wydawca, data). */
   getMeta: (item: T) => string;
+  /** Wywoływane po wybraniu artykułu. */
   onSelect: (item: T) => void;
 };
+
+/**
+ * Lista artykułów z przyciskiem „Pokaż wszystkie (N)” / „Pokaż mniej”.
+ *
+ * Przycisk pojawia się tylko wtedy, gdy artykułów jest więcej niż `previewCount`.
+ *
+ * @typeParam T Typ artykułu (np. news albo artykuł edukacyjny).
+ * @param props Właściwości komponentu.
+ */
 
 export function ArticleList<T extends ListArticle>({
   items,

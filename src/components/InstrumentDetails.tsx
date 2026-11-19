@@ -1,3 +1,10 @@
+/**
+ * Dane finansowe instrumentu: hook pobierający dane, funkcje formatujące
+ * i komponent z sekcjami danych.
+ *
+ * @module src/components/InstrumentDetails
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
@@ -16,7 +23,16 @@ import {
   useDisplayCurrency,
 } from "../displayCurrency";
 
-// Funkcja formatująca wartość pieniężną w walucie wyświetlania wybranej w ustawieniach
+/**
+ * Formatuje kwotę w walucie wyświetlania wybranej w ustawieniach (2 miejsca po przecinku).
+ *
+ * Korzysta z globalnego stanu walut, więc nie odświeża komponentu po zmianie
+ * ustawień — w komponentach lepiej użyć {@link useDisplayCurrency}.
+ *
+ * @param value Kwota w walucie źródłowej.
+ * @param currencyCode Waluta źródłowa.
+ * @returns Np. `"1 234,50 zł"`; `"-"`, gdy brak kwoty lub waluty.
+ */
 export const formatCurrency = (
   value?: number,
   currencyCode?: string,
@@ -27,13 +43,23 @@ export const formatCurrency = (
   return `${converted.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
 };
 
-// Funkcja formatująca wartość procentową z dwoma miejscami po przecinku
+/**
+ * Formatuje wartość procentową z dwoma miejscami po przecinku.
+ *
+ * @param value Wartość w procentach (np. `12.5` dla 12,5%).
+ * @returns Np. `"12.50%"` (kropka dziesiętna); `"-"`, gdy brak wartości.
+ */
 export const formatPercent = (value?: number): string => {
   if (value === undefined) return "-";
   return `${value.toFixed(2)}%`;
 };
 
-// Funkcja formatująca wartość liczbową z dwoma miejscami po przecinku
+/**
+ * Formatuje datę po polsku z pełną nazwą miesiąca.
+ *
+ * @param dateString Data w formacie zrozumiałym dla `new Date()` (np. ISO 8601).
+ * @returns Np. `"15 sierpnia 2023"`; `"-"`, gdy brak daty.
+ */
 export const formatDate = (dateString?: string): string => {
   if (!dateString) return "-";
   return new Date(dateString).toLocaleDateString("pl-PL", {
@@ -43,13 +69,23 @@ export const formatDate = (dateString?: string): string => {
   });
 };
 
-// Funkcja formatująca wartość liczbową z dwoma miejscami po przecinku
+/**
+ * Formatuje liczbę po polsku (separator tysięcy, domyślna liczba miejsc po przecinku).
+ *
+ * @param value Liczba.
+ * @returns Np. `"1 234 567"`; `"-"`, gdy brak wartości.
+ */
 export const formatNumber = (value?: number): string => {
   if (value === undefined || value === null) return "-";
   return value.toLocaleString("pl-PL");
 };
 
-// Funkcja formatująca wartość stosunku z dwoma miejscami po przecinku
+/**
+ * Formatuje wskaźnik (np. P/E) po polsku z dwoma miejscami po przecinku.
+ *
+ * @param value Wartość wskaźnika.
+ * @returns Np. `"12,34"`; `"-"`, gdy brak wartości lub `NaN`.
+ */
 export const formatRatio = (value?: number): string => {
   if (value === undefined || value === null || Number.isNaN(value)) return "-";
   return value.toLocaleString("pl-PL", {
@@ -58,14 +94,34 @@ export const formatRatio = (value?: number): string => {
   });
 };
 
+/** Instrument, dla którego pobierane są dane finansowe. */
 type InstrumentRef = {
+  /** Symbol instrumentu. */
   stock: string;
+  /** Giełda notowań. */
   exchange: string;
+  /** Waluta notowań (używana przy danych zastępczych). */
   currency: string;
+  /** Dane już dostępne (np. z listy rynku) — pomijają pierwsze pobranie. */
   financialData?: StockFinancialData;
 };
 
-// Pobiera i uzupełnia dane finansowe instrumentu (wspólne dla modala na mobile i panelu na desktopie)
+/**
+ * Pobiera i uzupełnia dane finansowe instrumentu (wspólne dla modala na mobile i panelu na desktopie).
+ *
+ * Kroki:
+ * 1. Gdy dane są już dostępne (`propFinancialData` lub `instrument.financialData`), są pokazywane od razu;
+ *    w przeciwnym razie są pobierane przez `getStockData`.
+ * 2. Dane są uzupełniane przez `enrichFinancialData` (wskaźniki, dywidendy itd.).
+ * 3. Gdy nic nie udało się pobrać, używane są dane zastępcze (`buildFallbackFinancialData`),
+ *    a gdy i to zawiedzie — pokazywane jest powiadomienie „Brak danych finansowych”.
+ *
+ * Przy zmianie instrumentu dane poprzedniego nie są pokazywane.
+ *
+ * @param instrument Instrument.
+ * @param propFinancialData Dane przekazane z zewnątrz (mają pierwszeństwo przed `instrument.financialData`).
+ * @returns Obiekt `{ financialData, loading }`.
+ */
 export function useInstrumentFinancialData(
   instrument: InstrumentRef,
   propFinancialData?: StockFinancialData,
@@ -139,14 +195,24 @@ export function useInstrumentFinancialData(
   return { financialData, loading };
 }
 
+/** Właściwości wiersza danych `DataItem`. */
 interface DataItemProps {
+  /** Etykieta (po lewej). */
   label: string;
+  /** Wartość (po prawej). */
   value: string;
+  /** Opcjonalna wartość podrzędna pod wartością. */
   subValue?: string;
+  /** Czy rysować linię oddzielającą (domyślnie `true`). */
   divider?: boolean;
 }
 
-// Komponent wyświetlający pojedynczy wiersz danych finansowych z etykietą, wartością i opcjonalną wartością podrzędną oraz linią podziału
+/**
+ * Pojedynczy wiersz danych finansowych z etykietą, wartością, opcjonalną
+ * wartością podrzędną i linią podziału.
+ *
+ * @param props Właściwości wiersza.
+ */
 function DataItem({ label, value, subValue, divider = true }: DataItemProps) {
   const theme = useTheme();
   return (
@@ -195,7 +261,7 @@ function DataItem({ label, value, subValue, divider = true }: DataItemProps) {
   );
 }
 
-// Stylesheet dla komponentu DataItem (pojedynczy wiersz danych finansowych)
+/** Style wiersza `DataItem`. */
 const dataItemStyles = StyleSheet.create({
   dataRow: {
     flexDirection: "row",
@@ -218,14 +284,28 @@ const dataItemStyles = StyleSheet.create({
   dataSubValue: {},
 });
 
+/**
+ * Właściwości {@link InstrumentDetails}.
+ * @inline
+ */
 type InstrumentDetailsProps = {
+  /** Dane finansowe (zwykle z {@link useInstrumentFinancialData}); `null` — brak danych. */
   financialData: StockFinancialData | null;
+  /** Pokazuje szkielety w trakcie ładowania. */
   loading: boolean;
-  // Na desktopie sekcje układają się w siatkę kolumn zamiast jednej długiej listy
+  /** Na desktopie sekcje układają się w siatkę kolumn zamiast jednej długiej listy. */
   grid?: boolean;
 };
 
-// Sekcje ze zwrotem i danymi finansowymi instrumentu (pod wykresem w modalu lub w panelu na desktopie)
+/**
+ * Sekcje ze zwrotem i danymi finansowymi instrumentu (pod wykresem w modalu lub w panelu na desktopie).
+ *
+ * Sekcje: „Zwrot” (przełącznik 1 rok / 3 lata / 5 lat), „Dane rynkowe”,
+ * „Wskaźniki wyceny”, „Dywidendy”, „Wycena i akcje”, „Wyniki historyczne”
+ * i „Dane dodatkowe”. Kwoty odświeżają się na żywo po zmianie ustawień walut.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function InstrumentDetails({
   financialData,
   loading,

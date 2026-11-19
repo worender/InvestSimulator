@@ -1,3 +1,12 @@
+/**
+ * Układ zakładek: Start, Rynek, Portfolio, Nauka i Ustawienia.
+ *
+ * Na telefonie (i wąskim oknie przeglądarki) pływający pasek na dole, na tablecie
+ * i desktopie w przeglądarce — boczny pasek (`SidebarTabBar`).
+ *
+ * @module src/app/(tabs)/_layout
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { usePathname, useRouter } from "expo-router";
 import { Tabs, type BottomTabBarProps } from "expo-router/js-tabs";
@@ -28,7 +37,7 @@ import { useNavigationVisibility } from "../../navigationVisibility";
 import { useTheme } from "../../theme";
 import { useLayoutMode } from "../../useLayoutMode";
 
-// Stałe określające dostępne zakładki w aplikacji
+/** Nazwy tras zakładek w kolejności wyświetlania (kolejność gestu przesuwania). */
 const TAB_ROUTES = [
   "index",
   "market",
@@ -37,7 +46,13 @@ const TAB_ROUTES = [
   "settings",
 ] as const;
 
-// Ikony zakładek wspólne dla dolnego paska (mobile) i bocznego (web)
+/**
+ * Zwraca ikonę zakładki, wspólną dla dolnego paska (mobile) i bocznego (web).
+ *
+ * @param routeName Nazwa trasy zakładki.
+ * @param focused Czy zakładka jest aktywna (wersja wypełniona ikony).
+ * @returns Nazwa ikony Ionicons; dla nieznanej trasy `"ellipse-outline"`.
+ */
 function tabIcon(
   routeName: string,
   focused: boolean,
@@ -52,7 +67,14 @@ function tabIcon(
   return icons[routeName] || "ellipse-outline";
 }
 
-// Komponent obsługujący układ zakładek w aplikacji, z możliwością przełączania między nimi gestami przesuwania
+/**
+ * Układ zakładek z przełączaniem gestem przesuwania w poziomie.
+ *
+ * Na telefonie przesunięcie palcem (dłuższe niż 20% szerokości ekranu, 64–128 px)
+ * przechodzi do sąsiedniej zakładki z animacją. Gest nie działa na webie, gdy
+ * otwarty jest modal (`useInteractionLock`) i gdy komponent zablokował go przez
+ * `acquireNavigationSwipeLock`. Każda zmiana zakładki pokazuje schowany pasek.
+ */
 export default function TabLayout() {
   const { colors } = useTheme();
   const router = useRouter();
@@ -250,9 +272,15 @@ export default function TabLayout() {
   );
 }
 
+/** Właściwości `FloatingTabBar`: stan nawigatora i funkcja przejścia do zakładki. */
 type FloatingTabBarProps = Pick<BottomTabBarProps, "state" | "navigateToTab">;
-
-// Komponent obsługujący pasek zakładek, który jest wyświetlany na dole ekranu i umożliwia przełączanie między zakładkami
+/**
+ * Pływający pasek zakładek na dole ekranu (mobile) z animowanym wskaźnikiem
+ * aktywnej zakładki. Chowa się podczas przewijania w dół (patrz
+ * `useScrollAwareNavigation`); na webie zawsze jest widoczny.
+ *
+ * @param props Właściwości paska.
+ */
 function FloatingTabBar({ state, navigateToTab }: FloatingTabBarProps) {
   const { colors } = useTheme();
   const { bottom } = useSafeAreaInsets();

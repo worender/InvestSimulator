@@ -1,3 +1,9 @@
+/**
+ * Komunikat o zamkniętym rynku przy składaniu zlecenia.
+ *
+ * @module src/components/MarketClosedNoticeModal
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurView } from "expo-blur";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
@@ -6,15 +12,36 @@ import { NotificationHost } from "../notifications";
 import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 
+/**
+ * Właściwości {@link MarketClosedNoticeModal}.
+ * @inline
+ */
 interface MarketClosedNoticeModalProps {
+  /** Czy komunikat jest widoczny. */
   visible: boolean;
+  /** Instrument zlecenia; `null` — nic nie jest renderowane. */
   instrument: SearchableInstrument | null;
+  /** Rodzaj zlecenia: kupno lub sprzedaż. */
   orderType: "BUY" | "SELL";
+  /** Liczba jednostek. */
   quantity: number;
+  /** Łączna wartość zlecenia w walucie instrumentu. */
   totalCost: number;
+  /** Wywoływane po wybraniu „złóż zlecenie oczekujące”. */
   onConfirmPendingOrder: () => void;
+  /** Wywoływane przy anulowaniu lub dotknięciu tła. */
   onClose: () => void;
 }
+
+/**
+ * Modal informujący, że rynek instrumentu jest zamknięty.
+ *
+ * Pokazuje informację o godzinach otwarcia (`marketOpenTimeInfo`), podsumowanie
+ * zlecenia (typ, wielkość, wartość w walucie wyświetlania) i pozwala złożyć
+ * zlecenie oczekujące albo anulować.
+ *
+ * @param props Właściwości komponentu.
+ */
 
 export function MarketClosedNoticeModal({
   visible,

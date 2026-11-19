@@ -1,3 +1,9 @@
+/**
+ * Modal do czytania newsa lub artykułu edukacyjnego.
+ *
+ * @module src/components/NewsArticleModal
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo } from "react";
@@ -35,21 +41,37 @@ import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
 
+/** Artykuł, który można otworzyć w modalu: news z Yahoo Finance albo artykuł edukacyjny. */
 export type ReadableArticle = YahooNewsItem | EducationalArticle;
 
+/**
+ * Właściwości {@link NewsArticleModal}.
+ * @inline
+ */
 type NewsArticleModalProps = {
+  /** Artykuł do wyświetlenia. */
   article: ReadableArticle;
+  /** Czy artykuł jest zapisany (ikona zakładki). */
   saved: boolean;
-  // Brak funkcji ukrywa przycisk zakładki (np. dla newsów spoza bazy)
+  /** Zapisuje lub usuwa artykuł z zapisanych. Brak funkcji ukrywa przycisk zakładki (np. dla newsów spoza bazy). */
   onToggleSaved?: (article: ReadableArticle) => void;
+  /** Wywoływane po zakończeniu animacji zamykania. */
   onClose: () => void;
 };
 
-// Koniec zdania: znak końca, opcjonalny cudzysłów/nawias, spacja i wielka litera.
-// Kropka bez spacji i wielkiej litery po niej ("5.6 billion", "Investing.com",
-// "U.S. equities") nie kończy zdania, więc tekst przed nią nie ginie.
+/**
+ * Koniec zdania: znak końca, opcjonalny cudzysłów/nawias, spacja i wielka litera.
+ * Kropka bez spacji i wielkiej litery po niej ("5.6 billion", "Investing.com",
+ * "U.S. equities") nie kończy zdania, więc tekst przed nią nie ginie.
+ */
 const SENTENCE_END = /[.!?…]["”')\]]?(?=\s+["“(]?[A-ZĄĆĘŁŃÓŚŹŻÀ-ÖØ-Þ])/g;
 
+/**
+ * Dzieli tekst na zdania według `SENTENCE_END` (białe znaki są najpierw ujednolicane).
+ *
+ * @param text Tekst.
+ * @returns Lista zdań; pusta dla pustego tekstu.
+ */
 const splitIntoSentences = (text: string): string[] => {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return [];
@@ -66,7 +88,12 @@ const splitIntoSentences = (text: string): string[] => {
   return sentences;
 };
 
-// Dzieli opis artykułu na akapity po 3 zdania
+/**
+ * Dzieli opis artykułu na akapity po 3 zdania.
+ *
+ * @param summary Opis newsa.
+ * @returns Lista akapitów.
+ */
 const buildParagraphs = (summary: string): string[] => {
   const sentences = splitIntoSentences(summary);
   const paragraphs: string[] = [];
@@ -77,6 +104,12 @@ const buildParagraphs = (summary: string): string[] => {
   return paragraphs;
 };
 
+/**
+ * Formatuje datę publikacji po polsku (np. `"15 sierpnia 2023"`).
+ *
+ * @param value Data (np. ISO 8601).
+ * @returns Sformatowana data albo pusty tekst dla niepoprawnej daty.
+ */
 const formatArticleDate = (value: string): string => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -87,6 +120,20 @@ const formatArticleDate = (value: string): string => {
   });
 };
 
+/**
+ * Modal do czytania artykułu, wysuwany od dołu.
+ *
+ * - **News** — opis podzielony na akapity, wydawca i data oraz przycisk
+ *   otwierający pełny artykuł w przeglądarce (`expo-web-browser`).
+ * - **Artykuł edukacyjny** — treść z bazy, autor, czas czytania i lista źródeł
+ *   (każde otwierane w przeglądarce).
+ *
+ * Pokazuje język artykułu i (gdy podano `onToggleSaved`) przycisk zakładki.
+ * Zamyka się przyciskiem, przeciągnięciem w dół lub przyciskiem „wstecz”;
+ * błąd otwarcia strony zgłasza powiadomieniem. Blokuje gesty ekranu pod spodem.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function NewsArticleModal({
   article,
   saved,

@@ -1,3 +1,9 @@
+/**
+ * Karta podsumowania jednego portfela.
+ *
+ * @module src/components/SinglePortfolioCard
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMemo } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
@@ -12,9 +18,25 @@ import {
   buildPortfolioSeries,
 } from "./PortfolioResultChart";
 
+/**
+ * Właściwości {@link SinglePortfolioCard}.
+ * @inline
+ */
 interface SinglePortfolioCardProps {
+  /** Portfel do pokazania. */
   portfolio: MockPortfolio;
 }
+
+/**
+ * Karta portfela: łączna wartość, część zainwestowana (wartość minus gotówka),
+ * wolna gotówka, wynik kwotowy i procentowy oraz wykres z 3 miesięcy.
+ *
+ * Wykres jest przykładową serią ({@link buildPortfolioSeries}) od wartości
+ * początkowej (wartość minus wynik) do bieżącej. Kwoty są przeliczane według
+ * ustawień walut.
+ *
+ * @param props Właściwości komponentu.
+ */
 
 export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {
   const { colors } = useTheme();

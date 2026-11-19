@@ -1,3 +1,23 @@
+/**
+ * Lokalna baza danych aplikacji (SQLite przez `expo-sqlite`, plik `invest-simulator.db`).
+ *
+ * Moduł zawiera schemat bazy i wszystkie operacje na danych: konta
+ * użytkowników, ustawienia, portfele, kategorie aktywów, pozycje (partie
+ * zakupu), transakcje, dzienne migawki wartości portfela, ulubione aktywa
+ * oraz artykuły edukacyjne i zakładki.
+ *
+ * Przed każdą operacją baza jest otwierana i inicjalizowana
+ * ({@link initializeDatabase}) — wywołujący nie musi tego robić sam.
+ * Dane wejściowe są walidowane funkcjami z `checkSecurityParam`, a zapytania
+ * używają wyłącznie parametrów `?` (bez sklejania SQL z danych użytkownika).
+ *
+ * Konwencje:
+ * - wartości logiczne są zapisywane jako `0` / `1`,
+ * - daty jako znaczniki czasu w ms (`Date.now()`),
+ * - konto domyślne ma `id = 1` i jest tworzone przy pierwszym uruchomieniu.
+ *
+ * @module src/database/database
+ */
 import { Platform } from "expo";
 import * as SQLite from "expo-sqlite";
 import { MAX_CUSTOM_ACCENTS, normalizeHexColor } from "../settings/color";
@@ -24,9 +44,25 @@ import {
   type EducationalArticle,
 } from "./educationalArticles";
 
+/**
+ * Otwarte połączenie z bazą — współdzielone przez cały moduł.
+ */
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
+/**
+ * Trwająca lub zakończona inicjalizacja bazy — wykonywana raz na uruchomienie.
+ */
 let initializationPromise: Promise<void> | null = null;
 
+/**
+ * Zwraca połączenie z bazą `invest-simulator.db`, otwierając ją przy pierwszym wywołaniu.
+ *
+ * Na webie najpierw przejmuje blokadę bazy (`acquireDbLock`), bo baza
+ * może być otwarta tylko w jednej karcie przeglądarki. Nie tworzy tabel —
+ * do zwykłych operacji używaj funkcji modułu, które wywołują {@link initializeDatabase}.
+ *
+ * @returns Połączenie z bazą SQLite.
+ * @throws `Error("DB_OPEN_IN_OTHER_TAB")`, gdy na webie baza jest otwarta w innej karcie.
+ */
 export async function getDatabase() {
   if (Platform.OS === "web") {
     const ok = await acquireDbLock();
@@ -41,148 +77,304 @@ export async function getDatabase() {
 //   return databasePromise;
 // }
 
+/**
+ * Typ transakcji: `BUY` — kupno, `SELL` — sprzedaż.
+ */
 export type TransactionType = "BUY" | "SELL";
 
+/**
+ * Konto użytkownika (tabela `users`).
+ */
 export interface UserProfile {
+  /** Identyfikator konta; konto domyślne ma `1`. */
   id: number;
+  /** Unikalna nazwa konta. */
   username: string;
+  /** Nieużywane — hasła są w SecureStore (`src/database/passwords`). */
   pass_hash: string | null;
+  /** Adres zdjęcia profilowego albo `null`. */
   avatar_uri: string | null;
+  /** Czy konto jest aktywne (`1`/`0`). */
   active: number;
+  /** Data utworzenia (ms). */
   created_at: number;
 }
 
+/**
+ * Zapis transakcji kupna lub sprzedaży (tabela `transactions`).
+ */
 export interface Transaction {
+  /** Identyfikator transakcji. */
   id: number;
+  /** Symbol instrumentu (wielkie litery). */
   symbol: string;
+  /** Kupno lub sprzedaż. */
   type: TransactionType;
+  /** Liczba jednostek. */
   quantity: number;
+  /** Cena jednostkowa. */
   price: number;
+  /** Data transakcji (ms). */
   created_at: number;
+  /** Portfel, którego dotyczy transakcja. */
   id_wallet: number;
 }
 
+/**
+ * Zagregowana pozycja w portfelu — wynik {@link getPortfolio}.
+ */
 export interface PortfolioItem {
+  /** Symbol instrumentu. */
   symbol: string;
+  /** Posiadana liczba jednostek (kupione minus sprzedane). */
   quantity: number;
+  /** Średnia ważona cena zakupu. */
   average_price: number;
 }
 
+/**
+ * Portfel użytkownika z wolną gotówką (tabela `wallet`).
+ */
 export interface Wallet {
+  /** Identyfikator portfela. */
   id: number;
+  /** Wolna gotówka (domyślnie 10 000). */
   balance: number;
+  /** Kod waluty portfela, np. `"PLN"`. */
   currency: string;
+  /** Właściciel portfela. */
   id_user: number;
+  /** Nazwa portfela. */
   name: string;
+  /** Nazwa ikony Ionicons, domyślnie `"wallet-outline"`. */
   icon: string;
 }
 
+/**
+ * Kategoria aktywów w portfelu, np. „Akcje” (tabela `category_assets`).
+ */
 export interface AssetCategory {
+  /** Identyfikator kategorii. */
   id: number;
+  /** Nazwa kategorii. */
   name: string;
+  /** Portfel, do którego należy kategoria. */
   wallet_id: number;
 }
 
+/**
+ * Aktywo obserwowane przez użytkownika wraz z licznikiem odwiedzin (tabela `favorite_assets`).
+ */
 export interface FavoriteAsset {
+  /** Identyfikator wpisu. */
   id: number;
+  /** Użytkownik. */
   user_id: number;
+  /** Symbol instrumentu. */
   symbol: string;
+  /** Licznik odwiedzin lub interakcji z aktywem. */
   counter: number;
+  /** `1` — ulubione, `0` — tylko odwiedzane. */
   favorite: number;
 }
 
+/**
+ * Partia zakupu aktywa (tabela `positions`).
+ *
+ * Każde kupno tworzy nową pozycję. Sprzedaż zmniejsza `remaining_quantity`
+ * pozycji od najstarszej (FIFO) — patrz {@link createTransaction}.
+ */
 export interface Position {
+  /** Identyfikator pozycji. */
   id: number;
+  /** Kategoria aktywów (przez nią pozycja należy do portfela). */
   category_id: number;
+  /** Symbol instrumentu. */
   symbol: string;
+  /** Liczba jednostek kupiona w tej partii. */
   initial_quantity: number;
+  /** Liczba jednostek z tej partii, która jeszcze nie została sprzedana. */
   remaining_quantity: number;
+  /** Cena zakupu jednostki. */
   buy_price: number;
+  /** Data zakupu (ms). */
   opened_at: number;
 }
 
+/**
+ * Dzienna migawka wartości portfela do wykresów historii (tabela `portfolio_snapshots`).
+ */
 export interface PortfolioSnapshot {
+  /** Portfel. */
   wallet_id: number;
+  /** Numer dnia od 1970-01-01 (UTC); w bazie zapisany jako liczba całkowita. */
   snapshot_date: string;
+  /** Wolna gotówka w danym dniu. */
   cash_balance: number;
+  /** Rynkowa wartość wszystkich aktywów w danym dniu. */
   assets_value: number;
 }
 
+/**
+ * Dane nowego portfela dla {@link createWallet}.
+ */
 export interface CreateWalletInput {
+  /** Nazwa portfela (1–30 znaków). */
   name: string;
+  /** Kod waluty (3 litery). */
   currency: string;
+  /** Początkowa gotówka; domyślnie 10 000. */
   balance?: number;
+  /** Nazwa ikony; domyślnie `"wallet-outline"`. */
   icon?: string;
 }
 
+/**
+ * Dane nowej kategorii aktywów dla {@link createCategory}.
+ */
 export interface CreateCategoryInput {
+  /** Nazwa kategorii (1–50 znaków). */
   name: string;
 }
 
+/**
+ * Dane nowej pozycji dla {@link createPosition} (tylko do testów).
+ */
 export interface CreatePositionInput {
+  /** Kategoria aktywów. */
   category_id: number;
+  /** Symbol instrumentu. */
   symbol: string;
+  /** Liczba jednostek (> 0). */
   quantity: number;
+  /** Cena zakupu (> 0). */
   buy_price: number;
+  /** Data zakupu (ms); domyślnie teraz. */
   opened_at?: number;
 }
 
+/**
+ * Zmiany pozycji dla {@link updatePosition} (tylko do testów).
+ */
 export interface UpdatePositionInput {
+  /** Nowa pozostała liczba jednostek (≥ 0). */
   remaining_quantity?: number;
 }
 
+/**
+ * Dane migawki portfela dla {@link createPortfolioSnapshot}.
+ */
 export interface CreateSnapshotInput {
+  /** Portfel. */
   wallet_id: number;
+  /** Wolna gotówka (≥ 0). */
   cash_balance: number;
+  /** Wartość aktywów (≥ 0). */
   assets_value: number;
 }
 
+/**
+ * Dane transakcji dla {@link createTransaction}.
+ */
 export interface CreateTransactionInput {
+  /** Symbol instrumentu. */
   symbol: string;
+  /** Kupno lub sprzedaż. */
   type: TransactionType;
+  /** Liczba jednostek (> 0). */
   quantity: number;
+  /** Cena jednostkowa (> 0). */
   price: number;
+  /** Data transakcji (ms); domyślnie teraz. */
   createdAt?: number;
+  /** Portfel. */
   id_wallet: number;
+  /** Kategoria aktywów — wymagana przy kupnie, ignorowana przy sprzedaży. */
   category_id?: number;
 }
 
+/**
+ * Ustawienia wyglądu i działania aplikacji dla konta (tabela `settings`).
+ */
 export interface Settings {
+  /** Identyfikator wpisu. */
   id: number;
+  /** Użytkownik (jeden wpis na konto). */
   user_id: number;
+  /** Ciemny motyw (`1`/`0`). */
   dark_mode: number;
+  /** Kolor akcentu: klucz gotowego koloru (domyślnie `"default"`) albo kolor HEX. */
   color_mode: string;
+  /** Wyświetlanie wielu walut (`1`/`0`). */
   multi_currency: number;
+  /** Rozmiar czcionki: `"small"`, `"medium"` lub `"large"`. */
   font_size: string;
+  /** Logowanie biometryczne (`1`/`0`). */
   biometric_enabled: number;
+  /** Waluta wyświetlania, domyślnie `"PLN"`. */
   currency: string;
 }
 
+/**
+ * Własny kolor akcentu zapisany na koncie (tabela `custom_accent_colors`).
+ */
 export interface CustomAccentColor {
+  /** Identyfikator koloru. */
   id: number;
+  /** Użytkownik. */
   user_id: number;
+  /** Kolor w formacie HEX (znormalizowany). */
   color: string;
+  /** Kolejność na liście kolorów. */
   position: number;
 }
 
+/**
+ * Ustawienia powiadomień dla konta (tabela `notification_settings`). Wszystkie flagi to `1`/`0`.
+ */
 export interface NotificationSettings {
+  /** Identyfikator wpisu. */
   id: number;
+  /** Użytkownik (jeden wpis na konto). */
   user_id: number;
+  /** Główny przełącznik powiadomień w aplikacji. */
   notifications_enabled: number;
+  /** Powiadomienia push. */
   push_notifications_enabled: number;
+  /** Powiadomienia o portfelu. */
   portfolio: number;
+  /** Powiadomienia rynkowe. */
   market: number;
+  /** Powiadomienia o newsach. */
   news: number;
+  /** Powiadomienia o transakcjach. */
   transactions: number;
+  /** Przypomnienia. */
   reminders: number;
 }
 
+/**
+ * Wycena jednego portfela dla {@link createDailySnapshots}.
+ */
 export interface DailySnapshotValue {
+  /** Portfel. */
   wallet_id: number;
+  /** Wolna gotówka. */
   cash_balance: number;
+  /** Wartość aktywów. */
   assets_value: number;
 }
 
+/**
+ * Tworzy tabele (jeśli nie istnieją), dane domyślne i synchronizuje artykuły edukacyjne.
+ *
+ * Wykonywana raz na uruchomienie aplikacji — kolejne wywołania zwracają tę
+ * samą obietnicę. Tabele: `users`, `wallet`, `category_assets`,
+ * `positions`, `portfolio_snapshots`, `transactions`, `favorite_assets`,
+ * `notification_settings`, `settings`, `custom_accent_colors`,
+ * `category_article`, `article`, `source`, `article_source`, `saved_article`.
+ * Włącza też sprawdzanie kluczy obcych (`PRAGMA foreign_keys = ON`).
+ */
 export async function initializeDatabase(): Promise<void> {
   initializationPromise ??= (async () => {
     const database = await getDatabase();
@@ -350,6 +542,13 @@ export async function initializeDatabase(): Promise<void> {
   return initializationPromise;
 }
 
+/**
+ * Tworzy konto domyślne (`id = 1`, „Investor”) z portfelem „Główny portfel”
+ * (10 000 PLN), domyślnymi ustawieniami i ustawieniami powiadomień.
+ * Używa `INSERT OR IGNORE`, więc istniejące dane nie są nadpisywane.
+ *
+ * @param database Otwarta baza danych.
+ */
 async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
   await database.runAsync(
     `INSERT OR IGNORE INTO users
@@ -379,10 +578,17 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
   );
 }
 
-// Zapisuje artykuły edukacyjne dostarczane z aplikacją do tabel
-// `category_article`, `article` i `article_source`. Artykuły są
-// dopasowywane po `slug`, więc ich `id` (i zapisane zakładki) się nie zmienia.
-// Artykuły usunięte z aplikacji znikają z bazy razem ze źródłami i zakładkami.
+/**
+ * Zapisuje artykuły edukacyjne dostarczane z aplikacją (`EDUCATIONAL_ARTICLE_SEED`)
+ * do tabel `category_article`, `article`, `source` i `article_source`.
+ *
+ * Artykuły są dopasowywane po `slug`, więc ich `id` (i zapisane zakładki)
+ * się nie zmienia. Artykuły usunięte z aplikacji znikają z bazy razem ze
+ * źródłami i zakładkami, a źródła, których nie cytuje już żaden artykuł, są
+ * usuwane. Całość wykonuje się w jednej transakcji.
+ *
+ * @param database Otwarta baza danych.
+ */
 async function syncEducationalArticles(
   database: SQLite.SQLiteDatabase,
 ): Promise<void> {
@@ -490,11 +696,25 @@ async function syncEducationalArticles(
   });
 }
 
+/**
+ * Zwraca bazę po inicjalizacji ({@link initializeDatabase}) — używana przez wszystkie operacje modułu.
+ *
+ * @returns Połączenie z gotową bazą.
+ */
 async function getReadyDatabase(): Promise<SQLite.SQLiteDatabase> {
   await initializeDatabase();
   return getDatabase();
 }
 
+/**
+ * Zwraca posiadane instrumenty wyliczone z historii transakcji.
+ *
+ * Dla każdego symbolu liczy ilość (kupione minus sprzedane) i średnią ważoną
+ * cenę zakupu (tylko z transakcji `BUY`). Pomija symbole z ilością ≤ 0.
+ * Uwzględnia transakcje ze wszystkich portfeli.
+ *
+ * @returns Pozycje posortowane alfabetycznie po symbolu.
+ */
 export async function getPortfolio(): Promise<PortfolioItem[]> {
   const database = await getReadyDatabase();
 
@@ -512,7 +732,13 @@ export async function getPortfolio(): Promise<PortfolioItem[]> {
   );
 }
 
-///Get user profile by userId, returns null if not found. Default userId is 1.
+/**
+ * Zwraca profil użytkownika.
+ *
+ * @param userId Identyfikator użytkownika (domyślnie 1).
+ * @returns Profil albo `null`, gdy nie istnieje.
+ * @throws Gdy identyfikator jest niepoprawny.
+ */
 export async function getUserProfile(userId = 1): Promise<UserProfile | null> {
   validateUserId(userId);
 
@@ -528,6 +754,11 @@ export async function getUserProfile(userId = 1): Promise<UserProfile | null> {
   );
 }
 
+/**
+ * Zwraca wszystkie konta zapisane na urządzeniu (np. do przełącznika kont).
+ *
+ * @returns Profile posortowane po identyfikatorze.
+ */
 export async function getUserProfiles(): Promise<UserProfile[]> {
   const database = await getReadyDatabase();
 
@@ -538,7 +769,16 @@ export async function getUserProfiles(): Promise<UserProfile[]> {
   );
 }
 
-///Create a new user profile with the given username and optional avatar URI. Returns the created UserProfile.
+/**
+ * Tworzy nowe konto wraz z portfelem „Główny portfel” (10 000 PLN), domyślnymi
+ * ustawieniami i ustawieniami powiadomień — wszystko w jednej transakcji.
+ *
+ * @param input Dane konta.
+ * @param input.username Nazwa konta (patrz `validateUserName`); musi być unikalna.
+ * @param input.avatar_uri Opcjonalny adres zdjęcia profilowego.
+ * @returns Utworzony profil.
+ * @throws Gdy nazwa lub adres zdjęcia są niepoprawne albo nazwa jest zajęta.
+ */
 export async function createUserProfile(input: {
   username: string;
   avatar_uri?: string | null;
@@ -603,7 +843,18 @@ export async function createUserProfile(input: {
   return profile;
 }
 
-///Update user profile with the given changes. Returns the updated UserProfile.
+/**
+ * Zmienia nazwę lub zdjęcie profilowe konta.
+ *
+ * Pola nieobecne w `changes` zostają bez zmian. Zmieniane są tylko
+ * `username` i `avatar_uri`; `avatar_uri: null` nie usuwa zdjęcia
+ * (zostaje dotychczasowe).
+ *
+ * @param changes Pola do zmiany.
+ * @param userId Identyfikator użytkownika (domyślnie 1).
+ * @returns Zaktualizowany profil.
+ * @throws Gdy konto nie istnieje lub dane są niepoprawne.
+ */
 export async function updateUserProfile(
   changes: Partial<Omit<UserProfile, "id">>,
   userId = 1,
@@ -645,6 +896,18 @@ export async function updateUserProfile(
   return profile;
 }
 
+/**
+ * Zapisuje zmienione ustawienia konta.
+ *
+ * Pola nieobecne w `settings` zachowują obecną wartość (lub domyślną).
+ * Pole `user_id` jest wymagane.
+ *
+ * @param settings Zmienione ustawienia z `user_id`.
+ * @throws Gdy brak lub niepoprawny `user_id` albo nie udało się odczytać zapisu.
+ *
+ * @example
+ * await updateSettings({ user_id: 1, dark_mode: 0, font_size: "large" });
+ */
 export async function updateSettings(
   settings: Partial<Settings>,
 ): Promise<void> {
@@ -694,6 +957,12 @@ export async function updateSettings(
   }
 }
 
+/**
+ * Zwraca ustawienia konta.
+ *
+ * @param userId Identyfikator użytkownika (domyślnie 1).
+ * @returns Ustawienia albo `null`, gdy brak wpisu.
+ */
 export async function getSettings(userId = 1): Promise<Settings | null> {
   validateUserId(userId);
 
@@ -707,6 +976,12 @@ export async function getSettings(userId = 1): Promise<Settings | null> {
   );
 }
 
+/**
+ * Odczytuje własne kolory akcentu konta w kolejności `position`.
+ *
+ * @param userId Identyfikator użytkownika.
+ * @returns Zapisane kolory.
+ */
 async function selectCustomAccentColors(
   userId: number,
 ): Promise<CustomAccentColor[]> {
@@ -721,7 +996,12 @@ async function selectCustomAccentColors(
   );
 }
 
-/// Własne kolory motywu zapisane na koncie
+/**
+ * Zwraca własne kolory akcentu (motywu) zapisane na koncie.
+ *
+ * @param userId Identyfikator użytkownika (domyślnie 1).
+ * @returns Kolory w kolejności dodania.
+ */
 export async function getCustomAccentColors(
   userId = 1,
 ): Promise<CustomAccentColor[]> {
@@ -729,6 +1009,15 @@ export async function getCustomAccentColors(
   return selectCustomAccentColors(userId);
 }
 
+/**
+ * Dodaje własny kolor akcentu na koniec listy konta.
+ *
+ * @param userId Identyfikator użytkownika.
+ * @param color Kolor HEX, np. `"#ff8800"` (jest normalizowany).
+ * @returns Zapisany kolor.
+ * @throws Gdy kolor jest niepoprawny, już zapisany albo osiągnięto limit
+ *   `MAX_CUSTOM_ACCENTS` kolorów.
+ */
 export async function addCustomAccentColor(
   userId: number,
   color: string,
@@ -768,6 +1057,15 @@ export async function addCustomAccentColor(
   };
 }
 
+/**
+ * Zmienia wartość zapisanego koloru akcentu (pozycja na liście zostaje).
+ *
+ * @param userId Identyfikator użytkownika.
+ * @param id Identyfikator koloru.
+ * @param color Nowy kolor HEX.
+ * @returns Kolor po zmianie.
+ * @throws Gdy kolor jest niepoprawny, nie istnieje albo taki kolor jest już zapisany.
+ */
 export async function updateCustomAccentColor(
   userId: number,
   id: number,
@@ -799,6 +1097,15 @@ export async function updateCustomAccentColor(
   return { ...target, color: normalized };
 }
 
+/**
+ * Zapisuje zmienione ustawienia powiadomień konta.
+ *
+ * Pola nieobecne w `settings` zachowują obecną wartość (lub `0`).
+ * Pole `user_id` jest wymagane.
+ *
+ * @param settings Zmienione ustawienia z `user_id`.
+ * @throws Gdy brak lub niepoprawny `user_id` albo nie udało się odczytać zapisu.
+ */
 export async function updateNotificationSettings(
   settings: Partial<NotificationSettings>,
 ): Promise<void> {
@@ -856,6 +1163,12 @@ export async function updateNotificationSettings(
   }
 }
 
+/**
+ * Zwraca ustawienia powiadomień konta.
+ *
+ * @param userId Identyfikator użytkownika (domyślnie 1).
+ * @returns Ustawienia albo `null`, gdy brak wpisu.
+ */
 export async function getNotificationSettings(
   userId = 1,
 ): Promise<NotificationSettings | null> {
@@ -871,6 +1184,13 @@ export async function getNotificationSettings(
   );
 }
 
+/**
+ * Zwraca portfel, jeśli należy do użytkownika.
+ *
+ * @param userId Identyfikator użytkownika.
+ * @param walletId Identyfikator portfela.
+ * @returns Portfel albo `null`.
+ */
 export async function getWallet(
   userId: number,
   walletId: number,
@@ -889,6 +1209,12 @@ export async function getWallet(
   );
 }
 
+/**
+ * Zwraca wszystkie portfele użytkownika.
+ *
+ * @param userId Identyfikator użytkownika.
+ * @returns Portfele posortowane po identyfikatorze (najstarszy pierwszy).
+ */
 export async function getWallets(userId: number): Promise<Wallet[]> {
   validateUserId(userId);
 
@@ -900,6 +1226,15 @@ export async function getWallets(userId: number): Promise<Wallet[]> {
   );
 }
 
+/**
+ * Zmienia saldo, walutę, nazwę lub ikonę portfela. Pola nieobecne w
+ * `changes` zostają bez zmian. Wykonuje się w transakcji.
+ *
+ * @param walletId Identyfikator portfela.
+ * @param userId Identyfikator właściciela.
+ * @param changes Pola do zmiany.
+ * @throws Gdy portfel nie należy do użytkownika lub dane są niepoprawne.
+ */
 export async function updateWallet(
   walletId: number,
   userId: number,
@@ -964,6 +1299,14 @@ export async function updateWallet(
   });
 }
 
+/**
+ * Tworzy nowy portfel użytkownika.
+ *
+ * @param userId Identyfikator użytkownika.
+ * @param data Dane portfela.
+ * @returns Utworzony portfel.
+ * @throws Gdy dane są niepoprawne.
+ */
 export async function createWallet(
   userId: number,
   data: CreateWalletInput,
@@ -1004,6 +1347,14 @@ export async function createWallet(
   return wallet;
 }
 
+/**
+ * Usuwa portfel razem z jego kategoriami, pozycjami, transakcjami i migawkami
+ * (w jednej transakcji). Operacji nie można cofnąć.
+ *
+ * @param walletId Identyfikator portfela.
+ * @param userId Identyfikator właściciela.
+ * @throws Gdy portfel nie należy do użytkownika.
+ */
 export async function deleteWallet(
   walletId: number,
   userId: number,
@@ -1054,6 +1405,12 @@ export async function deleteWallet(
   });
 }
 
+/**
+ * Zwraca kategorie aktywów portfela.
+ *
+ * @param walletId Identyfikator portfela.
+ * @returns Kategorie posortowane po identyfikatorze.
+ */
 export async function getCategories(
   walletId: number,
 ): Promise<AssetCategory[]> {
@@ -1069,6 +1426,14 @@ export async function getCategories(
   );
 }
 
+/**
+ * Tworzy kategorię aktywów w portfelu (np. „Akcje”, „Kryptowaluty”).
+ *
+ * @param walletId Identyfikator portfela.
+ * @param data Dane kategorii.
+ * @returns Utworzona kategoria.
+ * @throws Gdy nazwa jest pusta lub dłuższa niż 50 znaków albo portfel nie istnieje.
+ */
 export async function createCategory(
   walletId: number,
   data: CreateCategoryInput,
@@ -1108,6 +1473,12 @@ export async function createCategory(
   return category;
 }
 
+/**
+ * Sprawdza, czy portfel istnieje (bez sprawdzania właściciela).
+ *
+ * @param walletId Identyfikator portfela.
+ * @returns `true`, gdy portfel istnieje.
+ */
 async function databaseWalletExists(walletId: number): Promise<boolean> {
   validateWalletId(walletId);
 
@@ -1121,6 +1492,12 @@ async function databaseWalletExists(walletId: number): Promise<boolean> {
   return wallet !== null;
 }
 
+/**
+ * Zwraca wszystkie pozycje (partie zakupu) portfela, także już sprzedane w całości.
+ *
+ * @param walletId Identyfikator portfela.
+ * @returns Pozycje od najnowszej.
+ */
 export async function getPositions(walletId: number): Promise<Position[]> {
   validateWalletId(walletId);
 
@@ -1144,7 +1521,16 @@ export async function getPositions(walletId: number): Promise<Position[]> {
   );
 }
 
-// Tylko do testów, nie używać w produkcji
+/**
+ * Tworzy pozycję bezpośrednio, bez transakcji i bez zmiany salda.
+ *
+ * **Tylko do testów** — w aplikacji kupno odbywa się przez {@link createTransaction}.
+ *
+ * @param categoryId Identyfikator kategorii aktywów.
+ * @param data Dane pozycji (`data.category_id` jest ignorowane — liczy się `categoryId`).
+ * @returns Utworzona pozycja.
+ * @throws Gdy dane są niepoprawne lub kategoria nie istnieje.
+ */
 export async function createPosition(
   categoryId: number,
   data: CreatePositionInput,
@@ -1197,7 +1583,15 @@ export async function createPosition(
   return position;
 }
 
-// Tylko do testów, nie używać w produkcji
+/**
+ * Zmienia pozostałą ilość pozycji bezpośrednio, bez transakcji i bez zmiany salda.
+ *
+ * **Tylko do testów** — w aplikacji sprzedaż odbywa się przez {@link createTransaction}.
+ *
+ * @param positionId Identyfikator pozycji.
+ * @param changes Zmiany pozycji.
+ * @throws Gdy brak danych, ilość jest ujemna lub pozycja nie istnieje.
+ */
 export async function updatePosition(
   positionId: number,
   changes: UpdatePositionInput,
@@ -1229,6 +1623,12 @@ export async function updatePosition(
   }
 }
 
+/**
+ * Zwraca historię transakcji portfela.
+ *
+ * @param walletId Identyfikator portfela.
+ * @returns Transakcje od najnowszej.
+ */
 export async function getTransactions(
   walletId: number,
 ): Promise<Transaction[]> {
@@ -1244,8 +1644,30 @@ export async function getTransactions(
   );
 }
 
-// Główna funkcja do tworzenia transakcji kupna lub sprzedaży aktywów.
-// Obsługuje zarówno transakcje typu "BUY", jak i "SELL", aktualizując odpowiednio stan portfela, pozycji oraz zapisując transakcję w bazie danych.
+/**
+ * Wykonuje transakcję kupna lub sprzedaży i zapisuje ją w historii.
+ *
+ * Wszystko dzieje się w jednej transakcji bazy danych:
+ * - **BUY** — sprawdza, czy w portfelu jest dość gotówki (`quantity * price`)
+ *   i czy kategoria należy do portfela; tworzy nową pozycję i zmniejsza saldo,
+ * - **SELL** — sprawdza, czy w portfelu jest dość jednostek danego symbolu;
+ *   zmniejsza pozostałe ilości pozycji od najstarszej (FIFO) i zwiększa saldo.
+ *
+ * @param input Dane transakcji; przy kupnie wymagane `category_id`.
+ * @returns Zapisana transakcja.
+ * @throws Gdy dane są niepoprawne, portfel nie istnieje, brakuje środków lub
+ *   jednostek do sprzedaży, albo kategoria nie należy do portfela.
+ *
+ * @example
+ * await createTransaction({
+ *   id_wallet: 1,
+ *   category_id: 2,
+ *   symbol: "PKO.WA",
+ *   type: "BUY",
+ *   quantity: 10,
+ *   price: 59.2,
+ * });
+ */
 export async function createTransaction(
   input: CreateTransactionInput,
 ): Promise<Transaction> {
@@ -1419,9 +1841,12 @@ export async function createTransaction(
   return transaction;
 }
 
-// Funkcja do pobierania wszystkich snapshotów portfela dla danego identyfikatora portfela.
-// Snapshoty beda wykorzystane do analizy historycznej portfela,
-// np. do tworzenia wykresów wartości portfela w czasie.
+/**
+ * Zwraca dzienne migawki wartości portfela — dane do wykresu wartości portfela w czasie.
+ *
+ * @param walletId Identyfikator portfela.
+ * @returns Migawki od najnowszego dnia.
+ */
 export async function getPortfolioSnapshots(
   walletId: number,
 ): Promise<PortfolioSnapshot[]> {
@@ -1437,10 +1862,24 @@ export async function getPortfolioSnapshots(
   );
 }
 
+/**
+ * Zwraca numer bieżącego dnia od 1970-01-01 (UTC), np. 2023-08-15 → 19584.
+ *
+ * @returns Numer dnia.
+ */
 function getCurrentDayNumber(): number {
   return Math.floor(Date.now() / 86_400_000);
 }
 
+/**
+ * Zapisuje migawkę wartości portfela dla bieżącego dnia.
+ *
+ * Jeśli migawka z dzisiaj już istnieje, jest nadpisywana (jedna na portfel i dzień).
+ *
+ * @param input Wartości portfela.
+ * @returns Zapisana migawka.
+ * @throws Gdy wartości są ujemne lub niepoprawne albo portfel nie istnieje.
+ */
 export async function createPortfolioSnapshot(
   input: CreateSnapshotInput,
 ): Promise<PortfolioSnapshot> {
@@ -1498,8 +1937,17 @@ export async function createPortfolioSnapshot(
   return snapshot;
 }
 
-// Funkcja do tworzenia codziennych snapshotów portfela.
-// Trzeba ją wywoływać codziennie, aby zapisywać stan portfela w danym dniu.
+/**
+ * Zapisuje dzisiejsze migawki dla wszystkich portfeli użytkownika.
+ *
+ * Trzeba ją wywoływać codziennie, aby historia wartości portfeli była ciągła.
+ *
+ * @param userId Identyfikator użytkownika.
+ * @param values Wycena każdego portfela użytkownika.
+ * @returns Zapisane migawki.
+ * @throws Gdy brakuje wyceny dla któregoś portfela (migawki zapisane przed
+ *   błędem zostają).
+ */
 export async function createDailySnapshots(
   userId: number,
   values: DailySnapshotValue[],
@@ -1531,11 +1979,12 @@ export async function createDailySnapshots(
 }
 
 /**
-* Funkcja getFavoriteAssets pobiera wszystkie ulubione aktywa danego użytkownika z bazy danych.
-* @param {number} userId - Identyfikator użytkownika, dla którego pobierane są ulubione aktywa.
-* @returns {Promise<FavoriteAsset[]>} - Zwraca obietnicę, która rozwiązuje się z listą ulubionych aktywów.
-* @throws {Error} - Rzuca błąd, jeśli identyfikator użytkownika jest nieprawidłowy.
-*/
+ * Zwraca wszystkie obserwowane i odwiedzane aktywa użytkownika.
+ *
+ * @param userId Identyfikator użytkownika.
+ * @returns Wpisy w kolejności dodania.
+ * @throws Gdy identyfikator jest niepoprawny.
+ */
 export async function getFavoriteAssets(
   userId: number
 ): Promise<FavoriteAsset[]> {
@@ -1551,13 +2000,17 @@ export async function getFavoriteAssets(
 }
 
 /**
-* Funkcja addFavoriteAsset dodaje ulubione aktywo danego użytkownika do bazy danych.
-* @param {number} userId - Identyfikator użytkownika, dla którego dodawane jest ulubione aktywo.
-* @param {string} symbol - Symbol aktywa, które ma zostać dodane.
-* @param {number} [favorite] - Opcjonalny parametr określający, czy aktywo jest ulubionym (1) czy nie (0).
-* @returns {Promise<FavoriteAsset>} - Zwraca obietnicę, która rozwiązuje się po zakończeniu operacji dodawania.
-* @throws {Error} - Rzuca błąd, jeśli dane wejściowe są nieprawidłowe.
-*/
+ * Dodaje aktywo do listy użytkownika z licznikiem ustawionym na 1.
+ *
+ * Nie sprawdza, czy symbol jest już na liście — przed dodaniem warto sprawdzić
+ * {@link getFavoriteAssets}, aby uniknąć duplikatów.
+ *
+ * @param userId Identyfikator użytkownika.
+ * @param symbol Symbol aktywa.
+ * @param favorite `1` — ulubione, `0` — tylko odwiedzane (domyślnie `0`).
+ * @returns Dodany wpis.
+ * @throws Gdy dane wejściowe są niepoprawne.
+ */
 export async function addFavoriteAsset(
   userId: number,
   symbol: string,
@@ -1593,12 +2046,12 @@ export async function addFavoriteAsset(
 }
 
 /**
-* Funkcja removeFavoriteAsset usuwa ulubione aktywo danego użytkownika z bazy danych.
-* @param {number} userId - Identyfikator użytkownika, dla którego usuwane jest ulubione aktywo.
-* @param {string} symbol - Symbol aktywa, które ma zostać usunięte.
-* @returns {Promise<void>} - Zwraca obietnicę, która rozwiązuje się po zakończeniu operacji usuwania.
-* @throws {Error} - Rzuca błąd, jeśli dane wejściowe są nieprawidłowe.
-*/
+ * Usuwa aktywo z listy użytkownika (wszystkie wpisy z tym symbolem).
+ *
+ * @param userId Identyfikator użytkownika.
+ * @param symbol Symbol aktywa.
+ * @throws Gdy dane wejściowe są niepoprawne.
+ */
 export async function removeFavoriteAsset(
   userId: number,
   symbol: string
@@ -1616,14 +2069,12 @@ export async function removeFavoriteAsset(
 }
 
 /**
-* Funkcja updateFavoriteAsset aktualizuje status ulubionego aktywa dla danego użytkownika w bazie danych.
-* Działa jak przełącznik, umożliwiając użytkownikowi oznaczenie lub odznaczenie aktywa jako ulubionego.
-* @param {number} userId - Identyfikator użytkownika, dla którego aktualizowane jest ulubione aktywo.
-* @param {string} symbol - Symbol aktywa, które ma zostać zaktualizowane.
-* @returns {Promise<void>} - Zwraca obietnicę, która rozwiązuje się po zakończeniu aktualizacji.
-* @throws {Error} - Rzuca błąd, jeśli nie znaleziono ulubionego aktywa do aktualizacji lub jeśli dane wejściowe są nieprawidłowe.
-* 
-*/
+ * Przełącza flagę „ulubione” aktywa (`0` ↔ `1`).
+ *
+ * @param userId Identyfikator użytkownika.
+ * @param symbol Symbol aktywa.
+ * @throws Gdy aktywa nie ma na liście lub dane są niepoprawne.
+ */
 export async function updateFavoriteAsset(
   userId: number,
   symbol: string,
@@ -1654,12 +2105,12 @@ export async function updateFavoriteAsset(
 }
 
 /**
-* Funkcja addCounterToFavoriteAsset zwiększa licznik (counter) dla ulubionego aktywa danego użytkownika w bazie danych.
-* @param {number} userId - Identyfikator użytkownika, dla którego zwiększany jest licznik ulubionego aktywa.
-* @param {string} symbol - Symbol aktywa, którego licznik ma zostać zwiększony.
-* @returns {Promise<void>} - Zwraca obietnicę, która rozwiązuje się po zakończeniu aktualizacji licznika.
-* @throws {Error} - Rzuca błąd, jeśli nie znaleziono ulubionego aktywa do aktualizacji lub jeśli dane wejściowe są nieprawidłowe.
-*/
+ * Zwiększa o 1 licznik odwiedzin aktywa (np. po otwarciu szczegółów instrumentu).
+ *
+ * @param userId Identyfikator użytkownika.
+ * @param symbol Symbol aktywa.
+ * @throws Gdy aktywa nie ma na liście lub dane są niepoprawne.
+ */
 export async function addCounterToFavoriteAsset(
   userId: number,
   symbol: string
@@ -1685,6 +2136,14 @@ export async function addCounterToFavoriteAsset(
   );
 }
 
+/**
+ * Usuwa wszystkie dane ze wszystkich tabel (konta, portfele, transakcje,
+ * ustawienia, artykuły) w jednej transakcji. Tabele zostają.
+ *
+ * **Uwaga:** operacji nie można cofnąć. Dane domyślne i artykuły zostaną
+ * odtworzone dopiero przy następnym uruchomieniu aplikacji, bo
+ * {@link initializeDatabase} wykonuje się raz na uruchomienie.
+ */
 export async function clearLocalDatabase(): Promise<void> {
   const database = await getReadyDatabase();
   await database.withTransactionAsync(async () => {
@@ -1708,13 +2167,12 @@ export async function clearLocalDatabase(): Promise<void> {
   });
 }
 
-///Uwaga: Funkcja clearLocalDatabase() usuwa wszystkie
-// dane z lokalnej bazy danych, w tym transakcje, portfel i profil użytkownika.
-// Po jej wywołaniu baza danych zostanie zresetowana do stanu początkowego,
-// a saldo portfela zostanie ustawione na 10000. Używaj tej funkcji ostrożnie,
-// ponieważ spowoduje to utratę wszystkich danych użytkownika.
-// void clearLocalDatabase();
-
+/**
+ * Zamyka i usuwa plik bazy `invest-simulator.db`.
+ *
+ * Następne wywołanie dowolnej funkcji modułu utworzy bazę od nowa, z kontem
+ * domyślnym i artykułami. Operacji nie można cofnąć.
+ */
 export async function deleteLocalDatabase(): Promise<void> {
   const database = await getDatabase();
 
@@ -1725,6 +2183,9 @@ export async function deleteLocalDatabase(): Promise<void> {
   initializationPromise = null;
 }
 
+/**
+ * Wiersz zapytania o artykuł (tabela `article` z nazwą kategorii).
+ */
 interface ArticleRow {
   id: number;
   slug: string;
@@ -1737,12 +2198,22 @@ interface ArticleRow {
   category: string;
 }
 
+/**
+ * Wiersz zapytania o źródło artykułu (tabele `article_source` + `source`).
+ */
 interface ArticleSourceRow extends ArticleSource {
   article_id: number;
   url: string | undefined;
 }
 
-/// Artykuły edukacyjne z tabel `article`, `category_article`, `article_source` i `source`.
+/**
+ * Zwraca artykuły edukacyjne z tabel `article`, `category_article`,
+ * `article_source` i `source` — dane zakładki „Nauka”.
+ *
+ * Treść jest dzielona na akapity, a źródła są dołączane w kolejności z artykułu.
+ *
+ * @returns Artykuły w kolejności wyświetlania (`id` to `slug` artykułu).
+ */
 export async function getEducationalArticles(): Promise<EducationalArticle[]> {
   const database = await getReadyDatabase();
 
@@ -1780,7 +2251,12 @@ export async function getEducationalArticles(): Promise<EducationalArticle[]> {
   }));
 }
 
-/// Identyfikatory (slug) artykułów zapisanych przez użytkownika, od najnowszych.
+/**
+ * Zwraca identyfikatory (`slug`) artykułów zapisanych przez użytkownika na później.
+ *
+ * @param userId Identyfikator użytkownika (domyślnie 1).
+ * @returns Identyfikatory od ostatnio zapisanego.
+ */
 export async function getSavedArticleSlugs(userId = 1): Promise<string[]> {
   validateUserId(userId);
   const database = await getReadyDatabase();
@@ -1796,7 +2272,16 @@ export async function getSavedArticleSlugs(userId = 1): Promise<string[]> {
   return rows.map((row) => row.slug);
 }
 
-/// Dodaje lub usuwa artykuł z listy „do przeczytania później”.
+/**
+ * Dodaje lub usuwa artykuł z listy „do przeczytania później”.
+ *
+ * Ponowne zapisanie już zapisanego artykułu nic nie zmienia.
+ *
+ * @param slug Identyfikator artykułu, np. `"edu-01"`.
+ * @param saved `true` — zapisz, `false` — usuń z listy.
+ * @param userId Identyfikator użytkownika (domyślnie 1).
+ * @throws Gdy przy zapisie artykuł nie istnieje.
+ */
 export async function setArticleSaved(
   slug: string,
   saved: boolean,

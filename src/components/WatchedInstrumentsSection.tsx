@@ -1,3 +1,9 @@
+/**
+ * Sekcja obserwowanych instrumentów na ekranie głównym.
+ *
+ * @module src/components/WatchedInstrumentsSection
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
@@ -15,17 +21,23 @@ import { useWatchlist, type WatchlistInstrument } from "../watchlist";
 import { InstrumentRow } from "./InstrumentRow";
 import { ModalChartView } from "./ModalChartView";
 
+/** Posiadana pozycja w instrumencie. */
 type Holding = {
+  /** Liczba jednostek. */
   quantity: number;
+  /** Średnia cena zakupu. */
   averagePrice: number;
+  /** Waluta ceny zakupu. */
   currency?: string;
 };
 
+/** Symbole Yahoo, które w portfelu występują pod inną nazwą (np. `BTC-USD` → `BTC`). */
 const HOLDING_ALIASES: Record<string, string> = {
   "BTC-USD": "BTC",
   "ETH-USD": "ETH",
 };
 
+/** Pozycje z przykładowych portfeli (`MOCK_PORTFOLIOS`), używane, gdy nie ma ich w bazie. */
 const MOCK_HOLDINGS = new Map<string, Holding>();
 for (const portfolio of MOCK_PORTFOLIOS) {
   for (const category of portfolio.categories) {
@@ -41,9 +53,25 @@ for (const portfolio of MOCK_PORTFOLIOS) {
   }
 }
 
+/**
+ * Formatuje procent ze znakiem `+` dla wartości nieujemnych.
+ *
+ * @param value Wartość w procentach.
+ * @returns Np. `"+2.35%"`.
+ */
 const formatPercent = (value: number) =>
   `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 
+/**
+ * Lista obserwowanych instrumentów z bieżącą ceną, zmianą dzienną i — jeśli
+ * instrument jest w portfelu — wynikiem pozycji (kwotowym i procentowym).
+ *
+ * Notowania z pamięci podręcznej są pokazywane od razu, a potem odświeżane.
+ * Pozycje są brane z bazy (`getPortfolio`, wszystkie portfele), a gdy ich tam
+ * nie ma — z przykładowych portfeli. Gdy waluta notowania różni się od waluty
+ * zakupu, cena jest przeliczana po bieżących kursach. Dotknięcie wiersza otwiera
+ * {@link ModalChartView}. Wymaga `WatchlistProvider`.
+ */
 export function WatchedInstrumentsSection() {
   const { colors, rates } = useTheme();
   const display = useDisplayCurrency();

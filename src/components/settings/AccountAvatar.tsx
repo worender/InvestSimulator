@@ -1,15 +1,34 @@
+/**
+ * Okrągły awatar konta.
+ *
+ * @module src/components/settings/AccountAvatar
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
 import { StyleSheet, View } from "react-native";
 import { useTheme } from "../../theme";
 
+/**
+ * Właściwości {@link AccountAvatar}.
+ * @inline
+ */
 type AccountAvatarProps = {
+  /** Adres zdjęcia; brak — wyświetlana jest pierwsza litera nazwy. */
   uri?: string | null;
+  /** Nazwa konta (źródło inicjału). */
   name: string;
+  /** Średnica w px. */
   size?: number;
+  /** Obwódka w kolorze akcentu zamiast domyślnej. */
   accentBorder?: boolean;
 };
 
+/**
+ * Okrągły awatar konta: zdjęcie albo pierwsza litera nazwy (dla pustej nazwy `I`).
+ *
+ * @param props Właściwości komponentu.
+ */
 export function AccountAvatar({
   uri,
   name,

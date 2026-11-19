@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "backend/*.js",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ],
+  "exclude": ["node_modules", "backend/node_modules", "**/__tests__/**"]
+}
