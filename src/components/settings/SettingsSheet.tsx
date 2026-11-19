@@ -1,3 +1,9 @@
+/**
+ * Wysuwany arkusz ustawień (podstawa formularzy w ustawieniach).
+ *
+ * @module src/components/settings/SettingsSheet
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { PropsWithChildren } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -35,13 +41,30 @@ import { useLockScreenWhileActive } from "../../interactionLock";
 import { NotificationHost } from "../../notifications";
 import { useTheme } from "../../theme";
 
+/**
+ * Właściwości {@link SettingsSheet}.
+ * @inline
+ */
 type SettingsSheetProps = PropsWithChildren<{
+  /** Tytuł w nagłówku. */
   title: string;
+  /** Podtytuł nad tytułem. */
   subtitle?: string;
+  /** Wywoływane po zakończeniu animacji zamykania. */
   onClose: () => void;
+  /** Wysokość arkusza (px lub procent ekranu). */
   height?: `${number}%` | number;
 }>;
 
+/**
+ * Arkusz wysuwany od dołu w natywnym `Modal`, z przyciskiem zamknięcia.
+ *
+ * Zamyka się przyciskiem, dotknięciem tła, przeciągnięciem w dół lub przyciskiem
+ * „wstecz”. Gdy klawiatura jest otwarta, zajmuje całą przestrzeń nad nią.
+ * Zawiera `NotificationHost` i blokuje gesty ekranu pod spodem.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function SettingsSheet({
   title,
   subtitle,

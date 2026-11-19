@@ -6,33 +6,50 @@
  * normalizuje odpowiedź i wykrywa język każdego artykułu (PL/EN).
  *
  * Moduł nie zależy od Reacta — można go używać w dowolnym miejscu aplikacji.
+ * Hook Reacta z odświeżaniem listy: `useNewsFeed`.
+ *
+ * @module src/api/newsService
  */
 
 import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { authenticatedFetch } from "./marketService";
 
+/** Język artykułu: `pl` — polski, `en` — angielski. */
 export type NewsLanguage = "pl" | "en";
+
+/** Temat newsów: `poland` — rynek polski, `world` — rynki światowe. */
 export type NewsTopic = "poland" | "world";
 
+/** Tematy newsów z etykietami do przełącznika kategorii w interfejsie. */
 export const NEWS_TOPICS: readonly { id: NewsTopic; label: string }[] = [
   { id: "poland", label: "Polska" },
   { id: "world", label: "Świat" },
 ];
 
+/** Znormalizowany artykuł z Yahoo Finance, gotowy do wyświetlenia. */
 export interface YahooNewsItem {
+  /** Unikalny identyfikator (`guid` z RSS albo link). */
   id: string;
+  /** Temat, w ramach którego pobrano artykuł. */
   topic: NewsTopic;
+  /** Tytuł artykułu. */
   title: string;
+  /** Treść (opis z RSS oczyszczony przez backend); może być pusta. */
   summary: string;
+  /** Nazwa wydawcy, domyślnie `"Yahoo Finance"`. */
   publisher: string;
+  /** Adres artykułu u wydawcy. */
   link: string;
+  /** Data publikacji w ISO 8601 (bieżąca, gdy brak poprawnej daty). */
   publishedAt: string;
+  /** Wykryty język artykułu (patrz {@link detectNewsLanguage}). */
   language: NewsLanguage;
 }
 
+/** Polskie znaki diakrytyczne — ich obecność od razu oznacza tekst polski. */
 const PL_DIACRITICS = /[ąćęłńóśźż]/i;
 
-// Najczęstsze słowa funkcyjne i tematyczne
+/** Najczęstsze polskie słowa funkcyjne i tematyczne (do wykrywania języka). */
 const PL_WORDS = new Set([
   "i",
   "w",
@@ -99,6 +116,7 @@ const PL_WORDS = new Set([
   "polsce",
 ]);
 
+/** Najczęstsze angielskie słowa funkcyjne i tematyczne (do wykrywania języka). */
 const EN_WORDS = new Set([
   "the",
   "and",
@@ -161,8 +179,17 @@ const EN_WORDS = new Set([
 
 /**
  * Wykrywa język tekstu newsa (tytuł + opis).
- * Zwraca `pl`, gdy tekst zawiera polskie znaki lub więcej polskich słów niż angielskich,
- * w przeciwnym razie `en`.
+ *
+ * Zwraca `pl`, gdy tekst zawiera polskie znaki (`PL_DIACRITICS`) lub
+ * więcej słów z `PL_WORDS` niż z `EN_WORDS`; w przeciwnym razie
+ * (także dla pustego tekstu) `en`.
+ *
+ * @param parts Fragmenty tekstu do połączenia; puste i `null` są pomijane.
+ * @returns Wykryty język.
+ *
+ * @example
+ * detectNewsLanguage("Stocks rise", "Investors cheer the news"); // "en"
+ * detectNewsLanguage("Akcje PKO rosną");                          // "pl"
  */
 export function detectNewsLanguage(
   ...parts: readonly (string | null | undefined)[]
@@ -185,6 +212,10 @@ export function detectNewsLanguage(
   return polishScore > englishScore ? "pl" : "en";
 }
 
+/**
+ * Element listy `items` z odpowiedzi `GET /api/news` przed walidacją —
+ * każde pole może mieć dowolny typ.
+ */
 interface RawNewsItem {
   id?: unknown;
   title?: unknown;
@@ -194,9 +225,27 @@ interface RawNewsItem {
   publishedAt?: unknown;
 }
 
+/**
+ * Zwraca wartość, jeśli jest tekstem, a w przeciwnym razie wartość zastępczą.
+ *
+ * @param value Dowolna wartość z odpowiedzi API.
+ * @param fallback Wartość zastępcza (domyślnie pusty tekst).
+ * @returns Tekst.
+ */
 const asString = (value: unknown, fallback = ""): string =>
   typeof value === "string" ? value : fallback;
 
+/**
+ * Waliduje i normalizuje surowy element odpowiedzi `/api/news`.
+ *
+ * Elementy bez tytułu lub linku są odrzucane. Brak wydawcy → `"Yahoo Finance"`,
+ * niepoprawna data → bieżąca data, brak `id` → link. Dodaje temat
+ * i wykryty język ({@link detectNewsLanguage}).
+ *
+ * @param raw Surowy element z odpowiedzi.
+ * @param topic Temat, dla którego pobrano newsy.
+ * @returns Artykuł albo `null`, gdy element jest niepoprawny.
+ */
 const toNewsItem = (raw: unknown, topic: NewsTopic): YahooNewsItem | null => {
   if (!raw || typeof raw !== "object") return null;
 
@@ -225,11 +274,16 @@ const toNewsItem = (raw: unknown, topic: NewsTopic): YahooNewsItem | null => {
 };
 
 /**
- * Pobiera newsy Yahoo Finance dla wybranego tematu.
+ * Pobiera newsy Yahoo Finance dla wybranego tematu (`GET /api/news`).
  *
- * @param topic  `poland` (Polska) lub `world` (Świat)
- * @param limit  maksymalna liczba artykułów (1–30)
- * @param silent gdy `true`, błąd nie pokazuje powiadomienia (przydatne przy równoległym pobieraniu)
+ * Newsy bez sensownej treści są odrzucane już przez backend. Przy błędzie
+ * zwraca pustą listę i (o ile nie `silent`) pokazuje powiadomienie.
+ *
+ * @param topic `poland` (Polska) lub `world` (Świat).
+ * @param limit Maksymalna liczba artykułów; wartość jest ograniczana do 1–30 (domyślnie 15).
+ * @param options Opcje pobierania.
+ * @param options.silent Gdy `true`, błąd nie pokazuje powiadomienia (przydatne przy równoległym pobieraniu).
+ * @returns Lista artykułów od najnowszego; pusta przy błędzie.
  */
 export async function getYahooNews(
   topic: NewsTopic,
@@ -274,9 +328,14 @@ export async function getYahooNews(
 
 /**
  * Pobiera obie kategorie newsów równolegle.
- * Zwraca obiekt z gotowymi listami
  *
- * @param silent gdy `true`, brak newsów nie pokazuje powiadomienia (np. przy odświeżaniu w tle)
+ * Pojedyncze błędy są wyciszone — powiadomienie pojawia się tylko raz, gdy
+ * obie listy są puste (i nie ustawiono `silent`).
+ *
+ * @param limit Maksymalna liczba artykułów w każdej kategorii (domyślnie 15).
+ * @param options Opcje pobierania.
+ * @param options.silent Gdy `true`, brak newsów nie pokazuje powiadomienia (np. przy odświeżaniu w tle).
+ * @returns Obiekt `{ poland, world }` z listami artykułów.
  */
 export async function getYahooNewsByTopic(
   limit = 15,

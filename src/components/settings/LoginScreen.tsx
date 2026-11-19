@@ -1,3 +1,9 @@
+/**
+ * Ekran logowania.
+ *
+ * @module src/components/settings/LoginScreen
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useEffect, useState } from "react";
@@ -17,6 +23,16 @@ import { hasPassword, verifyPassword } from "../../database/passwords";
 import { useTheme } from "../../theme";
 import { AccountAvatar } from "./AccountAvatar";
 
+/**
+ * Ekran logowania pokazywany po wylogowaniu.
+ *
+ * Pozwala wybrać konto (domyślnie aktywne). Konto bez hasła loguje się od razu,
+ * a konto z hasłem wymaga jego wpisania (`verifyPassword`). Gdy w ustawieniach
+ * włączono biometrię, dostępne jest też logowanie odciskiem palca lub twarzą
+ * (`expo-local-authentication`). Logowanie przełącza aktywne konto (jeśli
+ * wybrano inne) i oznacza użytkownika jako zalogowanego. Błędy są pokazywane
+ * pod formularzem.
+ */
 export function LoginScreen() {
   const {
     colors,

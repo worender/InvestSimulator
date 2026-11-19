@@ -1,10 +1,22 @@
+/**
+ * Globalne style CSS dla wersji webowej aplikacji (hover, fokus, scrollbar).
+ *
+ * @module src/WebGlobalStyles
+ */
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { useTheme } from './theme';
 
+/** Identyfikator elementu `<style>` wstawianego do `<head>`. */
 const STYLE_ELEMENT_ID = 'web-global-styles';
 
-// Zamienia kolor #rrggbb na rgba(r, g, b, alpha)
+/**
+ * Zamienia kolor `#rrggbb` na `rgba(r, g, b, alpha)`.
+ *
+ * @param hex Kolor w formacie `#rrggbb`.
+ * @param alpha Przezroczystość 0–1.
+ * @returns Kolor w formacie `rgba(...)`.
+ */
 function withAlpha(hex: string, alpha: number) {
   const value = parseInt(hex.slice(1), 16);
   return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
@@ -17,6 +29,9 @@ function withAlpha(hex: string, alpha: number) {
  * - obwódka fokusu tylko przy nawigacji klawiaturą,
  * - cienki scrollbar w kolorach motywu.
  * Na platformach natywnych komponent nic nie robi.
+ *
+ * Style są wstawiane do jednego elementu `<style>` i aktualizowane przy każdej
+ * zmianie kolorów motywu. Komponent niczego nie renderuje (zwraca `null`).
  */
 export function WebGlobalStyles() {
   const { colors } = useTheme();

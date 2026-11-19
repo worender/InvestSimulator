@@ -1,3 +1,9 @@
+/**
+ * Karta pojedynczego powiadomienia.
+ *
+ * @module src/components/NotificationCard
+ */
+
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -16,16 +22,25 @@ import Reanimated, {
 import type { AppNotification, NotificationVariant } from '../notificationBus';
 import { useTheme } from '../theme';
 
+/**
+ * Właściwości {@link NotificationCard}.
+ * @inline
+ */
 type NotificationCardProps = {
+  /** Powiadomienie do wyświetlenia. */
   notification: AppNotification;
+  /** Wywoływane po zakończeniu animacji zamykania. */
   onDismiss: () => void;
-  // Pozostały czas wyświetlania. Pozwala kontynuować odliczanie po przejściu
-  // powiadomienia do warstwy modala zamiast zaczynać je od nowa.
+  /**
+   * Pozostały czas wyświetlania (ms). Pozwala kontynuować odliczanie po przejściu
+   * powiadomienia do warstwy modala zamiast zaczynać je od nowa.
+   */
   duration?: number;
-  // Powiadomienie było już widoczne przed otwarciem modala — nie animujemy go ponownie.
+  /** Powiadomienie było już widoczne przed otwarciem modala — nie animujemy go ponownie. */
   alreadyShown?: boolean;
 };
 
+/** Sprężyna powrotu karty po puszczeniu, gdy nie zamknięto jej gestem. */
 const SPRING_CONFIG = {
   damping: 24,
   stiffness: 240,
@@ -33,8 +48,10 @@ const SPRING_CONFIG = {
   overshootClamping: true,
 };
 
+/** Odległość (px), na jaką karta wyjeżdża w górę przy zamykaniu. */
 const EXIT_DISTANCE = 220;
 
+/** Ikona Ionicons dla każdego rodzaju powiadomienia. */
 const VARIANT_ICONS: Record<NotificationVariant, keyof typeof Ionicons.glyphMap> = {
   error: 'alert-circle',
   success: 'checkmark-circle',
@@ -42,7 +59,16 @@ const VARIANT_ICONS: Record<NotificationVariant, keyof typeof Ionicons.glyphMap>
   info: 'information-circle',
 };
 
-// Komponent karty powiadomienia, wyświetlany w górnej części ekranu
+/**
+ * Karta powiadomienia wyświetlana w górnej części ekranu.
+ *
+ * Wjeżdża od góry, a po upływie czasu wyjeżdża w górę i wywołuje `onDismiss`.
+ * Można ją zamknąć przeciągnięciem w górę (ponad 60 px lub szybkim ruchem);
+ * podczas przeciągania odliczanie jest wstrzymane, a puszczona bez zamknięcia
+ * wraca na miejsce i odlicza pełny czas od nowa. Kolor i ikona zależą od rodzaju.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function NotificationCard({
   notification,
   onDismiss,
@@ -196,7 +222,7 @@ export function NotificationCard({
   );
 }
 
-// Stylesheet dla komponentu NotificationCard (karta powiadomienia)
+/** Style karty powiadomienia. */
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',

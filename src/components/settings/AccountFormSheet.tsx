@@ -1,3 +1,9 @@
+/**
+ * Formularz tworzenia lub edycji konta (nazwa i zdjęcie).
+ *
+ * @module src/components/settings/AccountFormSheet
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useState } from "react";
 import {
@@ -13,16 +19,34 @@ import { useTheme } from "../../theme";
 import { AccountAvatar } from "./AccountAvatar";
 import { SettingsSheet } from "./SettingsSheet";
 
+/**
+ * Właściwości {@link AccountFormSheet}.
+ * @inline
+ */
 type AccountFormSheetProps = {
+  /** Tytuł arkusza. */
   title: string;
+  /** Podtytuł arkusza. */
   subtitle: string;
+  /** Etykieta przycisku zapisu. */
   submitLabel: string;
+  /** Początkowa nazwa (domyślnie pusta). */
   initialName?: string;
+  /** Początkowe zdjęcie (domyślnie brak). */
   initialAvatar?: string | null;
+  /** Wywoływane przy zamknięciu, także po udanym zapisie. */
   onClose: () => void;
+  /** Zapisuje dane (nazwa jest przycięta); gdy obietnica zostanie odrzucona, arkusz zostaje otwarty. */
   onSaved: (input: { name: string; avatarUri: string | null }) => Promise<void>;
 };
 
+/**
+ * Arkusz z nazwą konta i zdjęciem profilowym (wybieranym z galerii przez `pickAvatar`).
+ *
+ * Zapis jest możliwy tylko z niepustą nazwą; po sukcesie arkusz się zamyka.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function AccountFormSheet({
   title,
   subtitle,

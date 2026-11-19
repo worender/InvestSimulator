@@ -1,3 +1,9 @@
+/**
+ * Arkusz wyszukiwania instrumentów.
+ *
+ * @module src/components/InstrumentSearchSheet
+ */
+
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurView } from 'expo-blur';
 import { useEffect, useState } from 'react';
@@ -19,16 +25,30 @@ import { NotificationHost } from '../notifications';
 import { useTheme } from '../theme';
 import { Skeleton } from './Skeleton';
 
+/**
+ * Właściwości {@link InstrumentSearchSheet}.
+ * @inline
+ */
 interface InstrumentSearchSheetProps {
+  /** Czy arkusz jest otwarty. */
   visible: boolean;
+  /** Wywoływane przy zamknięciu arkusza. */
   onClose: () => void;
+  /** Wywoływane po wybraniu instrumentu z wyników (klawiatura jest wtedy chowana). */
   onSelect: (instrument: InstrumentSearchResult) => void;
 }
 
+/** Opóźnienie (ms) wyszukiwania po ostatnim wpisanym znaku. */
 const SEARCH_DEBOUNCE_MS = 280;
 
 /**
- * Overlay do wyszukiwania i wyboru instrumentu, który ma zostać dodany do portfela
+ * Overlay do wyszukiwania i wyboru instrumentu, który ma zostać dodany do portfela.
+ *
+ * Wyszukiwanie (`searchInstruments`) startuje od 2 znaków, 280 ms po ostatniej
+ * zmianie tekstu; wyniki starszych zapytań są ignorowane. Błąd wyszukiwania daje
+ * pustą listę. Zawiera `NotificationHost`, więc powiadomienia są widoczne nad arkuszem.
+ *
+ * @param props Właściwości komponentu.
  */
 export function InstrumentSearchSheet({ visible, onClose, onSelect }: InstrumentSearchSheetProps) {
   const { colors, mode } = useTheme();
@@ -39,7 +59,7 @@ export function InstrumentSearchSheet({ visible, onClose, onSelect }: Instrument
   const [results, setResults] = useState<InstrumentSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Wyszukiwanie z opóźnieniem
+  // Wyszukiwanie z opóźnieniem (debounce)
   useEffect(() => {
     const trimmed = query.trim();
     if (trimmed.length < 2) return;

@@ -1,3 +1,9 @@
+/**
+ * Kursor (crosshair) i elementy rysujące wykresu świecowego `react-native-wagmi-charts`.
+ *
+ * @module src/components/CandleHoverCrosshair
+ */
+
 import { useContext, type ComponentProps, type ReactNode } from 'react';
 import { Platform, StyleSheet, type GestureResponderEvent, type PointerEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
@@ -8,18 +14,33 @@ import {
   CandlestickChartDimensionsContext,
 } from 'react-native-wagmi-charts';
 
-// Jak w wagmi: przy lewej krawędzi dymek z ceną przeskakuje na prawą stronę kursora
+/** Jak w wagmi: przy lewej krawędzi (px) dymek z ceną przeskakuje na prawą stronę kursora. */
 const TOOLTIP_POSITION_THRESHOLD = 100;
 
-// wagmi przekazuje do elementów SVG swoje pomocnicze propsy (useAnimations, candle), które na webie trafiają do DOM
-// i wywołują błąd Reacta. Animacji świec i tak nie używamy, więc rysujemy zwykłe Line/Rect bez tych propsów.
+/** Właściwości `CandlestickChart.Candles` z wagmi. */
 type CandlesProps = ComponentProps<typeof CandlestickChart.Candles>;
+/**
+ * Rysuje knot świecy jako zwykłe `<Line>` (do `CandlestickChart.Candles renderLine`).
+ *
+ * wagmi przekazuje do elementów SVG swoje pomocnicze propsy (`useAnimations`,
+ * `candle`), które na webie trafiają do DOM i wywołują błąd Reacta. Animacji
+ * świec i tak nie używamy, więc te propsy są odrzucane.
+ */
 export const renderCandleLine: NonNullable<CandlesProps['renderLine']> = ({ useAnimations, candle, ...props }) => <Line {...props} />;
+/** Rysuje korpus świecy jako zwykłe `<Rect>` (do `renderRect`); patrz {@link renderCandleLine}. */
 export const renderCandleRect: NonNullable<CandlesProps['renderRect']> = ({ useAnimations, candle, ...props }) => <Rect {...props} />;
 
-// CandlestickChart.Line z wagmi nadaje <Svg> tylko styl absoluteFill. Na webie to nie rozciąga elementu SVG,
-// który dostaje domyślne 300×150 px, więc kreski kursora były ucinane i się nie przecinały. Tu wymiary są jawne.
+/** Właściwości `DashedLine`: kolor, wymiary SVG i koniec linii (`x2`, `y2`) — początek to (0, 0). */
 type DashedLineProps = { color?: string; width: number; height: number; x2: number; y2: number };
+/**
+ * Przerywana linia kursora w SVG o jawnych wymiarach.
+ *
+ * `CandlestickChart.Line` z wagmi nadaje `<Svg>` tylko styl `absoluteFill`. Na webie
+ * to nie rozciąga elementu SVG, który dostaje domyślne 300×150 px, więc kreski
+ * kursora były ucinane i się nie przecinały.
+ *
+ * @param props Właściwości linii.
+ */
 function DashedLine({ color = 'gray', width, height, x2, y2 }: DashedLineProps) {
   return (
     <Svg width={width} height={height} style={styles.line}>
@@ -28,13 +49,29 @@ function DashedLine({ color = 'gray', width, height, x2, y2 }: DashedLineProps) 
   );
 }
 
-type CrosshairProps ={ color?: string; minDurationMs?: number; children?: ReactNode };
+/**
+ * Właściwości kursora wykresu (zgodne z `CandlestickChart.Crosshair`).
+ * @inline
+ */
+type CrosshairProps = {
+  /** Kolor linii kursora (domyślnie szary). */
+  color?: string;
+  /** Czas przytrzymania przed pokazaniem kursora (tylko mobile; na webie ignorowany). */
+  minDurationMs?: number;
+  /** Zawartość, zwykle `CandlestickChart.Tooltip`. */
+  children?: ReactNode;
+};
 
 /**
  * Kursor wykresu świecowego dla webu: pokazuje się po najechaniu myszą, a nie po przytrzymaniu
  * (wbudowany Crosshair z wagmi reaguje tylko na long press). Zasila ten sam stan wykresu,
  * więc dymek z ceną (Tooltip) i data pod wykresem (DatetimeText) działają bez zmian.
  * `minDurationMs` jest ignorowane — prop zostaje dla zgodności z Crosshair z wagmi.
+ *
+ * Pozycja kursora jest przyciągana do środka świecy pod myszą, a po opuszczeniu
+ * wykresu kursor znika.
+ *
+ * @param props Właściwości komponentu.
  */
 export function CandleHoverCrosshair({ color, children }: CrosshairProps) {
   const { width, height } = useContext(CandlestickChartDimensionsContext);
@@ -88,7 +125,7 @@ export function CandleHoverCrosshair({ color, children }: CrosshairProps) {
   );
 }
 
-// Kursor odpowiedni dla platformy: najechanie myszą na webie, przytrzymanie palcem na mobile
+/** Kursor odpowiedni dla platformy: najechanie myszą na webie ({@link CandleHoverCrosshair}), przytrzymanie palcem na mobile (`CandlestickChart.Crosshair`). */
 export const ChartCrosshair: (props: CrosshairProps) => ReactNode =
   Platform.OS === 'web' ? CandleHoverCrosshair : CandlestickChart.Crosshair;
 

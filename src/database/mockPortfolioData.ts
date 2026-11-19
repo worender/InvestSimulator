@@ -1,67 +1,131 @@
+/**
+ * Przykładowe (statyczne) dane portfeli dla ekranu „Portfel”.
+ *
+ * Używane do czasu podłączenia ekranu do prawdziwych danych z bazy
+ * (`src/database/database`). Wartości są wymyślone i nie zmieniają się.
+ *
+ * @module src/database/mockPortfolioData
+ */
+
+/** Kategoria aktywów w portfelu: akcje, obligacje, CFD i kryptowaluty, ETF-y i fundusze. */
 export type AssetCategoryKey = 'stocks' | 'bonds' | 'cfd_crypto' | 'etf_funds';
 
+/** Pojedyncza operacja kupna lub sprzedaży w historii aktywa. */
 export interface TransactionHistoryItem {
+  /** Unikalny identyfikator operacji. */
   id: string;
+  /** Data operacji (tekst do wyświetlenia). */
   date: string;
+  /** Rodzaj operacji: kupno lub sprzedaż. */
   type: 'BUY' | 'SELL';
+  /** Liczba jednostek. */
   quantity: number;
+  /** Cena jednostkowa. */
   price: number;
+  /** Wartość operacji (`quantity * price`). */
   total: number;
 }
 
+/** Aktywo posiadane w portfelu wraz z wynikami i historią operacji. */
 export interface PortfolioAssetItem {
+  /** Unikalny identyfikator pozycji. */
   id: string;
+  /** Symbol instrumentu. */
   symbol: string;
+  /** Nazwa instrumentu. */
   name: string;
+  /** Giełda notowań. */
   exchange: string;
+  /** Kategoria aktywa. */
   category: AssetCategoryKey;
+  /** Waluta notowań. */
   currency: string;
+  /** Posiadana liczba jednostek. */
   ownedQuantity: number;
+  /** Średnia cena zakupu. */
   averageBuyPrice: number;
+  /** Bieżąca cena. */
   currentPrice: number;
+  /** Bieżąca wartość pozycji. */
   totalValue: number;
+  /** Zysk/strata w walucie. */
   profitCurrency: number;
+  /** Zysk/strata w procentach. */
   profitPercent: number;
+  /** Data pierwszego zakupu. */
   firstPurchasedDate: string;
+  /** Stopy zwrotu w procentach za różne okresy. */
   returns: {
+    /** Zwrot za 1 miesiąc. */
     oneMonth: number;
+    /** Zwrot za 3 miesiące. */
     threeMonths: number;
+    /** Zwrot za 1 rok. */
     oneYear: number;
+    /** Zwrot za 3 lata (brak, gdy pozycja jest krótsza lub brak danych). */
     threeYears?: number;
+    /** Zwrot za 5 lat (brak, gdy pozycja jest krótsza lub brak danych). */
     fiveYears?: number;
   };
+  /** Opis instrumentu. */
   description: string;
+  /** Opis klasy aktywów (edukacyjny). */
   assetClassInfo: string;
+  /** Poziom ryzyka wyświetlany użytkownikowi. */
   riskLevel: 'Niski' | 'Umiarkowany' | 'Wysoki' | 'Bardzo wysoki';
+  /** Historia zakupów. */
   purchaseHistory: TransactionHistoryItem[];
+  /** Historia sprzedaży. */
   salesHistory: TransactionHistoryItem[];
 }
 
+/** Kategoria aktywów w portfelu z podsumowaniem i kolorami karty. */
 export interface PortfolioCategory {
+  /** Klucz kategorii. */
   id: AssetCategoryKey;
+  /** Tytuł karty kategorii. */
   title: string;
+  /** Podtytuł karty kategorii. */
   subtitle: string;
+  /** Kolor tła karty w jasnym motywie. */
   pastelBgLight: string;
+  /** Kolor tła karty w ciemnym motywie. */
   pastelBgDark: string;
+  /** Kolor akcentu kategorii. */
   accentColor: string;
+  /** Łączna wartość aktywów w kategorii. */
   totalValue: number;
+  /** Łączny zysk/strata w walucie. */
   profitCurrency: number;
+  /** Łączny zysk/strata w procentach. */
   profitPercent: number;
+  /** Aktywa w kategorii. */
   items: PortfolioAssetItem[];
 }
 
+/** Przykładowy portfel z gotówką i kategoriami aktywów. */
 export interface MockPortfolio {
+  /** Unikalny identyfikator portfela. */
   id: string;
+  /** Nazwa portfela. */
   name: string;
+  /** Kod waluty portfela, np. `"PLN"`. */
   currency: string;
+  /** Symbol waluty do wyświetlania, np. `"zł"`. */
   currencySymbol: string;
+  /** Wolna gotówka. */
   cashBalance: number;
+  /** Łączna wartość portfela. */
   totalValue: number;
+  /** Łączny zysk/strata w walucie. */
   profitCurrency: number;
+  /** Łączny zysk/strata w procentach. */
   profitPercent: number;
+  /** Kategorie aktywów. */
   categories: PortfolioCategory[];
 }
 
+/** Lista przykładowych portfeli wyświetlanych na ekranie „Portfel”. */
 export const MOCK_PORTFOLIOS: MockPortfolio[] = [
   {
     id: 'port-1',

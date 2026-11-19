@@ -9,28 +9,47 @@
  * Konwencje w `content`:
  *  - akapit zaczynający się od "## " jest renderowany jako śródtytuł,
  *  - akapit zaczynający się od "• " jest punktem listy.
+ *
+ * @module src/database/educationalArticles
  */
 
+/** Pozycja literatury lub dokument cytowany w artykule (tabela `source`). */
 export type ArticleSource = {
+  /** Autor książki lub instytucja (nie autor artykułu). */
   author: string;
+  /** Tytuł książki lub dokumentu. */
   title: string;
+  /** Wydawca. */
   publisher: string;
+  /** Rok wydania. */
   year: number;
+  /** Opcjonalny adres dokumentu w internecie. */
   url?: string;
 };
 
+/** Artykuł edukacyjny wyświetlany w zakładce „Nauka”. */
 export type EducationalArticle = {
+  /** Stały identyfikator artykułu (`slug` w bazie), np. `"edu-01"`. */
   id: string;
+  /** Tytuł artykułu. */
   title: string;
+  /** Krótkie podsumowanie wyświetlane na liście. */
   summary: string;
+  /** Akapity treści (`"## "` — śródtytuł, `"• "` — punkt listy). */
   content: readonly string[];
+  /** Szacowany czas czytania w minutach (patrz {@link estimateReadMinutes}). */
   readMinutes: number;
+  /** Język artykułu. */
   language: "pl" | "en";
+  /** Autor artykułu. */
   author: string;
+  /** Nazwa kategorii (tabela `category_article`). */
   category: string;
+  /** Literatura cytowana w artykule, w kolejności wyświetlania. */
   sources: readonly ArticleSource[];
 };
 
+/** Artykuł w danych źródłowych — bez czasu czytania, który jest liczony przy zapisie do bazy. */
 export type EducationalArticleSeed = Omit<EducationalArticle, "readMinutes">;
 
 /** Separator akapitów w kolumnie `article.text`. */
@@ -40,7 +59,13 @@ export const ARTICLE_PARAGRAPH_SEPARATOR = "\n\n";
 // Niższe niż dla prozy, bo artykuły zawierają definicje, wzory i liczby.
 const WORDS_PER_MINUTE = 150;
 
-/** Szacowany czas czytania na podstawie liczby słów (min. 1 minuta). */
+/**
+ * Szacuje czas czytania artykułu na podstawie liczby słów w tytule i treści
+ * przy tempie 150 słów na minutę.
+ *
+ * @param article Artykuł (wystarczy tytuł i treść).
+ * @returns Liczba minut zaokrąglona w górę, co najmniej 1.
+ */
 export const estimateReadMinutes = (
   article: Pick<EducationalArticleSeed, "title" | "content">,
 ): number => {
@@ -51,6 +76,9 @@ export const estimateReadMinutes = (
   return Math.max(1, Math.ceil(words / WORDS_PER_MINUTE));
 };
 
+/**
+ * Domyślny autor artykułów.
+ */
 const AUTHOR = "Redakcja InvestSimulator";
 
 // Źródła używane w kilku artykułach
@@ -105,6 +133,13 @@ const KNF_WARNINGS: ArticleSource = {
   url: "https://www.knf.gov.pl/dla_rynku/Ostrzezenia_publiczne",
 };
 
+/**
+ * Wszystkie artykuły edukacyjne dostarczane z aplikacją, w kolejności wyświetlania.
+ *
+ * Przy starcie aplikacji są synchronizowane z bazą przez `initializeDatabase()`
+ * (dopasowanie po `id`). Aby dodać artykuł, dopisz go tutaj z nowym, unikalnym
+ * `id`; usunięcie z listy usuwa artykuł z bazy razem z zakładkami użytkowników.
+ */
 export const EDUCATIONAL_ARTICLE_SEED: readonly EducationalArticleSeed[] = [
   {
     id: "edu-01",

@@ -1,3 +1,9 @@
+/**
+ * Ekran „Start” (strona główna).
+ *
+ * @module src/app/(tabs)/index
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
 import { useIsFocused } from "expo-router";
@@ -41,6 +47,16 @@ import { useLayoutMode } from "../../useLayoutMode";
 import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
+/**
+ * Ekran „Start”.
+ *
+ * Sekcje: „Portfel” (`PortfolioOverviewCard`), „Obserwowane”, „Zapisane artykuły”
+ * i „Warte uwagi” (`TrendCards`). W nagłówku: menu konta (`AccountMenu`)
+ * i wyszukiwarka instrumentów (od 2 znaków, 300 ms po ostatnim znaku) — podczas
+ * wyszukiwania wyniki zastępują sekcje. Wybór wyniku otwiera `ModalChartView`,
+ * a dane finansowe są dociągane w tle. Po opuszczeniu zakładki menu
+ * i wyszukiwanie wracają do stanu początkowego.
+ */
 export default function Index() {
   const { colors, defaultCurrency, multiCurrency, activeAccount } = useTheme();
   const { isDesktop } = useLayoutMode();

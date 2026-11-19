@@ -1,3 +1,9 @@
+/**
+ * Wybór koloru akcentu motywu.
+ *
+ * @module src/components/settings/AccentColorPicker
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { CustomAccentColor } from "../../database/database";
@@ -10,14 +16,30 @@ import {
   useTheme,
 } from "../../theme";
 
+/**
+ * Właściwości {@link AccentColorPicker}.
+ * @inline
+ */
 type AccentColorPickerProps = {
+  /** Wybrany kolor akcentu (klucz presetu lub kolor hex). */
   accent: ThemeAccent;
+  /** Własne kolory konta. */
   customAccents: CustomAccentColor[];
+  /** Wywoływane po wybraniu presetu (klucz) lub własnego koloru (hex). */
   onChange: (accent: ThemeAccent) => void;
+  /** Wywoływane po naciśnięciu „dodaj kolor” (widoczne, gdy jest mniej niż `MAX_CUSTOM_ACCENTS` własnych kolorów). */
   onAddCustom: () => void;
+  /** Wywoływane po naciśnięciu przycisku edycji własnego koloru. */
   onEditCustom: (custom: CustomAccentColor) => void;
 };
 
+/**
+ * Siatka kolorów akcentu: predefiniowane kolory (w wersji dla bieżącego trybu),
+ * własne kolory z przyciskiem edycji i przycisk dodania nowego koloru.
+ * Wybrany kolor jest obwiedziony.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function AccentColorPicker({
   accent,
   customAccents,
@@ -140,6 +162,14 @@ export function AccentColorPicker({
   );
 }
 
+/**
+ * Zwraca kolor CSS akcentu dla trybu (to samo co `resolveAccentColor` z `theme`).
+ * Obecnie nieużywana w aplikacji.
+ *
+ * @param accent Klucz presetu lub kolor hex.
+ * @param mode Tryb kolorystyczny.
+ * @returns Kolor CSS.
+ */
 export function accentPreviewColor(
   accent: ThemeAccent,
   mode: "dark" | "light",

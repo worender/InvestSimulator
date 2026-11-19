@@ -1,3 +1,9 @@
+/**
+ * Hook listy newsów z automatycznym odświeżaniem.
+ *
+ * @module src/useNewsFeed
+ */
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import {
@@ -6,13 +12,15 @@ import {
   type YahooNewsItem,
 } from "./api/newsService";
 
-// Po tym czasie lista newsów jest uznawana za nieaktualną i pobierana ponownie
+/** Po tym czasie (30 min) lista newsów jest uznawana za nieaktualną i pobierana ponownie. */
 export const NEWS_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
-// Jak często sprawdzamy, czy minęło już 30 minut (timer sam w sobie bywa niedokładny)
+/** Jak często sprawdzamy, czy minęło już 30 minut (timer sam w sobie bywa niedokładny). */
 const STALE_CHECK_INTERVAL_MS = 60 * 1000;
 
+/** Newsy pogrupowane według tematu. */
 type NewsByTopic = Record<NewsTopic, YahooNewsItem[]>;
 
+/** Pusty stan początkowy. */
 const EMPTY_NEWS: NewsByTopic = { poland: [], world: [] };
 
 /**
@@ -23,6 +31,12 @@ const EMPTY_NEWS: NewsByTopic = { poland: [], world: [] };
  * aplikacji z tła (na telefonie timery w tle są wstrzymywane).
  * Odświeżanie jest ciche — bez szkieletu ładowania i powiadomień; przy błędzie
  * zostaje poprzednia lista.
+ *
+ * Pierwsze pobranie (nie ciche) pokazuje powiadomienie, gdy obie listy są puste.
+ * Równoległe pobrania są pomijane — trwa najwyżej jedno naraz.
+ *
+ * @param limit Maksymalna liczba artykułów w każdej kategorii.
+ * @returns Obiekt `{ newsByTopic, loading }` — `loading` jest `true` do końca pierwszego pobrania.
  */
 export function useNewsFeed(limit: number) {
   const [newsByTopic, setNewsByTopic] = useState<NewsByTopic>(EMPTY_NEWS);

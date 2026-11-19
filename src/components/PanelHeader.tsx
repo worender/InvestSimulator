@@ -1,3 +1,9 @@
+/**
+ * Nagłówek panelu (ekranu zakładki) z opcjonalnym wyszukiwaniem.
+ *
+ * @module src/components/PanelHeader
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurView } from "expo-blur";
 import type { ComponentRef, ReactNode, RefObject } from "react";
@@ -17,26 +23,53 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme";
 
+/** Stan pola wyszukiwania w nagłówku (komponent kontrolowany). */
 type HeaderSearch = {
+  /** Czy pole wyszukiwania jest otwarte (zastępuje tytuł). */
   open: boolean;
+  /** Bieżący tekst zapytania. */
   value: string;
+  /** Wywoływane przy zmianie tekstu. */
   onChangeText: (value: string) => void;
+  /** Wywoływane po naciśnięciu przycisku zamknięcia wyszukiwania (klawiatura jest chowana). */
   onClose: () => void;
+  /** Tekst podpowiedzi w pustym polu. */
   placeholder?: string;
 };
 
+/**
+ * Właściwości {@link PanelHeader}.
+ * @inline
+ */
 type PanelHeaderProps = {
+  /** Tytuł panelu (wyśrodkowany). */
   title: string;
+  /** Element po lewej stronie (np. awatar konta). */
   left?: ReactNode;
+  /** Element po prawej stronie (np. przycisk wyszukiwania). */
   right?: ReactNode;
+  /** Konfiguracja wyszukiwania; brak — nagłówek bez wyszukiwania. */
   search?: HeaderSearch;
+  /** Widok rozmywany pod nagłówkiem (wymagany przez rozmycie `BlurView` na Androidzie). */
   blurTarget?: RefObject<ComponentRef<typeof View> | null>;
 };
 
+/** Czas (ms) animacji otwierania i zamykania wyszukiwania. */
 const SEARCH_ANIMATION_MS = 180;
+/** Szerokość (px) obszarów po lewej i prawej stronie nagłówka. */
 const SIDE_WIDTH = 84;
+/** Wysokość nagłówka (px) bez górnego bezpiecznego obszaru. */
 export const PANEL_HEADER_HEIGHT = 50;
 
+/**
+ * Nagłówek panelu z rozmytym tłem.
+ *
+ * Po otwarciu wyszukiwania tytuł i boczne elementy płynnie ustępują polu
+ * tekstowemu, które dostaje fokus po zakończeniu animacji. Ponowne wejście
+ * w pole zaznacza całe zapamiętane zapytanie, gotowe do podmiany.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function PanelHeader({
   title,
   left,

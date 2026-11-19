@@ -1,13 +1,29 @@
+/**
+ * Sekcja z opcjonalnym nagłówkiem.
+ *
+ * @module src/components/Section
+ */
+
 import type { PropsWithChildren } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme';
 
+/**
+ * Właściwości {@link Section}.
+ * @inline
+ */
 type SectionProps = PropsWithChildren<{
+  /** Nagłówek sekcji; brak — sekcja bez nagłówka. */
   label?: string;
+  /** Pierwsza sekcja na ekranie — bez górnego odstępu (domyślnie `false`). */
   first?: boolean;
 }>;
 
-// Komponent sekcji z opcjonalnym nagłówkiem, używany do grupowania elementów w interfejsie użytkownika
+/**
+ * Sekcja z opcjonalnym nagłówkiem, używana do grupowania elementów interfejsu.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function Section({ label, first = false, children }: SectionProps) {
   const { colors } = useTheme();
 

@@ -1,3 +1,10 @@
+/**
+ * Kategorie powiadomień w ustawieniach.
+ *
+ * @module src/settings/notificationSettings
+ */
+
+/** Klucz kategorii powiadomień (odpowiada kolumnie w ustawieniach powiadomień w bazie). */
 export type NotificationCategoryKey =
   | 'portfolio'
   | 'market'
@@ -5,12 +12,18 @@ export type NotificationCategoryKey =
   | 'transactions'
   | 'reminders';
 
+/** Włączenie (`true`) lub wyłączenie każdej kategorii powiadomień. */
 export type NotificationCategories = Record<NotificationCategoryKey, boolean>;
 
+/** Opcje kategorii wyświetlane na ekranie ustawień powiadomień. */
 export const NOTIFICATION_CATEGORY_OPTIONS: {
+  /** Klucz kategorii. */
   key: NotificationCategoryKey;
+  /** Nazwa kategorii. */
   label: string;
+  /** Krótki opis pod nazwą. */
   description: string;
+  /** Nazwa ikony Ionicons. */
   icon:
     | 'wallet-outline'
     | 'trending-up-outline'
@@ -50,6 +63,7 @@ export const NOTIFICATION_CATEGORY_OPTIONS: {
   },
 ];
 
+/** Domyślnie wszystkie kategorie są włączone. */
 export const DEFAULT_NOTIFICATION_CATEGORIES: NotificationCategories = {
   portfolio: true,
   market: true,
@@ -58,6 +72,16 @@ export const DEFAULT_NOTIFICATION_CATEGORIES: NotificationCategories = {
   reminders: true,
 };
 
+/**
+ * Odczytuje kategorie powiadomień zapisane jako JSON.
+ *
+ * Brakujące klucze są włączone; pusty lub niepoprawny JSON daje wartości domyślne.
+ * Obecnie nieużywana (ustawienia powiadomień są w osobnej tabeli) — zostawiona
+ * dla starszego formatu zapisu.
+ *
+ * @param raw Tekst JSON albo `null`/`undefined`.
+ * @returns Kompletny zestaw kategorii.
+ */
 export function parseNotificationCategories(
   raw: string | null | undefined,
 ): NotificationCategories {
@@ -77,6 +101,12 @@ export function parseNotificationCategories(
   }
 }
 
+/**
+ * Zapisuje kategorie powiadomień jako JSON (odwrotność {@link parseNotificationCategories}).
+ *
+ * @param categories Kategorie.
+ * @returns Tekst JSON.
+ */
 export function serializeNotificationCategories(
   categories: NotificationCategories,
 ): string {

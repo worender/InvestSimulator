@@ -1,19 +1,38 @@
+/**
+ * Wiersz artykułu na liście.
+ *
+ * @module src/components/ArticleRow
+ */
+
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../theme";
 
+/** Język artykułu (wyświetlany jako plakietka). */
 type ArticleLanguage = "pl" | "en";
 
+/**
+ * Właściwości {@link ArticleRow}.
+ * @inline
+ */
 type ArticleRowProps = {
+  /** Tytuł (najwyżej 2 linie). */
   title: string;
+  /** Zajawka (najwyżej 2 linie); pusta — niewyświetlana. */
   summary?: string;
+  /** Język artykułu; pokazywany jako plakietka `PL`/`EN`. */
   language?: ArticleLanguage;
+  /** Dodatkowa linia, np. wydawca i data. */
   meta?: string;
+  /** Wywoływane po naciśnięciu wiersza. */
   onPress: () => void;
+  /** Czy rysować linię oddzielającą pod wierszem (domyślnie `true`). */
   divider?: boolean;
 };
 
 /**
- * Pojedynczy artykuł w bloku kategorii
+ * Pojedynczy artykuł w bloku kategorii.
+ *
+ * @param props Właściwości komponentu.
  */
 export function ArticleRow({
   title,

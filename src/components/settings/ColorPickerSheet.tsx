@@ -1,3 +1,9 @@
+/**
+ * Arkusz wyboru własnego koloru (suwaki HSV).
+ *
+ * @module src/components/settings/ColorPickerSheet
+ */
+
 import { useMemo, useState } from "react";
 import {
   PanResponder,
@@ -11,28 +17,53 @@ import { hexToHsv, hsvToHex, readableTextColor } from "../../settings/color";
 import { useTheme } from "../../theme";
 import { SettingsSheet } from "./SettingsSheet";
 
+/**
+ * Właściwości {@link ColorPickerSheet}.
+ * @inline
+ */
 type ColorPickerSheetProps = {
+  /** Kolor początkowy `#RRGGBB` (niepoprawny — domyślny niebieski). */
   initialColor: string;
+  /** Tytuł (domyślnie „Własny kolor akcentu”). */
   title?: string;
+  /** Podtytuł (domyślnie „Color picker”). */
   subtitle?: string;
+  /** Etykieta przycisku (domyślnie „Dodaj ten kolor”). */
   submitLabel?: string;
+  /** Wywoływane przy zamknięciu. */
   onClose: () => void;
+  /** Wywoływane z wybranym kolorem `#RRGGBB`. */
   onSelect: (color: string) => void;
 };
 
+/**
+ * Właściwości suwaka `ColorSlider`.
+ */
 type ColorSliderProps = {
+  /** Bieżąca wartość. */
   value: number;
+  /** Wartość minimalna. */
   min: number;
+  /** Wartość maksymalna. */
   max: number;
+  /** Kolory gradientu tła suwaka. */
   colors: string[];
+  /** Etykieta dostępności. */
   label: string;
+  /** Wywoływane przy przesuwaniu (wartość zaokrąglona do 0,01). */
   onChange: (value: number) => void;
 };
 
+/** 36 kolorów pełnej tęczy (co 10°) — tło suwaka odcienia. */
 const HUE_STOPS = Array.from({ length: 36 }, (_, index) =>
   hsvToHex((index / 36) * 360, 1, 1),
 );
 
+/**
+ * Suwak z gradientowym tłem, sterowany dotknięciem i przeciąganiem.
+ *
+ * @param props Właściwości suwaka.
+ */
 function ColorSlider({
   value,
   min,
@@ -100,6 +131,12 @@ function ColorSlider({
   );
 }
 
+/**
+ * Arkusz z podglądem koloru i trzema suwakami: odcień, nasycenie i jasność
+ * (gradienty nasycenia i jasności zależą od pozostałych składowych).
+ *
+ * @param props Właściwości komponentu.
+ */
 export function ColorPickerSheet({
   initialColor,
   title = "Własny kolor akcentu",

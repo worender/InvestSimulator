@@ -1,3 +1,9 @@
+/**
+ * Wysuwany modal z wykresem i danymi finansowymi instrumentu (ekran rynku i ekran główny).
+ *
+ * @module src/components/ModalChartView
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -50,13 +56,19 @@ import { Section } from "./Section";
 import { Skeleton } from "./Skeleton";
 import { StockCandleChart } from "./StockCandleChart";
 
+/** Okresy do wyboru w sekcji „Zwrot”. */
 const RETURN_PERIODS = [
   { key: "1Y", label: "1Y" },
   { key: "3Y", label: "3Y" },
   { key: "5Y", label: "5Y" },
 ] as const;
 
+/**
+ * Właściwości {@link ModalChartView}.
+ * @inline
+ */
 interface ModalChartViewProps {
+  /** Instrument: symbol (`stock`), tytuł, waluta, symbol waluty, giełda i opcjonalne dane finansowe. */
   instrument: {
     stock: string;
     title: string;
@@ -65,13 +77,26 @@ interface ModalChartViewProps {
     exchange: string;
     financialData?: StockFinancialData;
   };
+  /** Dane finansowe przekazane z zewnątrz (mają pierwszeństwo przed `instrument.financialData`). */
   financialData?: StockFinancialData;
+  /** Wywoływane po zakończeniu animacji zamykania. */
   onClose: () => void;
+  /** Początkowy zakres wykresu — indeks w `CHART_RANGES`. */
   initialRangeIndex?: number;
+  /** Początkowy interwał świec. */
   initialInterval?: ChartInterval;
 }
 
-// Funkcja formatująca wartość pieniężną zgodnie z ustawieniami regionalnymi i symbolem waluty
+/**
+ * Formatuje kwotę w walucie wyświetlania (2 miejsca po przecinku).
+ *
+ * Ta sama funkcja co `formatCurrency` w `InstrumentDetails`; korzysta z globalnego
+ * stanu walut, więc nie odświeża komponentu po zmianie ustawień.
+ *
+ * @param value Kwota w walucie źródłowej.
+ * @param currencyCode Waluta źródłowa.
+ * @returns Np. `"1 234,50 zł"`; `"-"`, gdy brak kwoty lub waluty.
+ */
 export const formatCurrency = (
   value?: number,
   currencyCode?: string,
@@ -82,13 +107,23 @@ export const formatCurrency = (
   return `${converted.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
 };
 
-// Funkcja formatująca wartość procentową z dwoma miejscami po przecinku
+/**
+ * Formatuje wartość procentową z dwoma miejscami po przecinku.
+ *
+ * @param value Wartość w procentach.
+ * @returns Np. `"12.50%"` (kropka dziesiętna); `"-"`, gdy brak wartości.
+ */
 export const formatPercent = (value?: number): string => {
   if (value === undefined) return "-";
   return `${value.toFixed(2)}%`;
 };
 
-// Funkcja formatująca wartość liczbową z dwoma miejscami po przecinku
+/**
+ * Formatuje datę po polsku z pełną nazwą miesiąca.
+ *
+ * @param dateString Data (np. ISO 8601).
+ * @returns Np. `"15 sierpnia 2023"`; `"-"`, gdy brak daty.
+ */
 export const formatDate = (dateString?: string): string => {
   if (!dateString) return "-";
   return new Date(dateString).toLocaleDateString("pl-PL", {
@@ -98,13 +133,23 @@ export const formatDate = (dateString?: string): string => {
   });
 };
 
-// Funkcja formatująca wartość liczbową z dwoma miejscami po przecinku
+/**
+ * Formatuje liczbę po polsku (separator tysięcy).
+ *
+ * @param value Liczba.
+ * @returns Np. `"1 234 567"`; `"-"`, gdy brak wartości.
+ */
 export const formatNumber = (value?: number): string => {
   if (value === undefined || value === null) return "-";
   return value.toLocaleString("pl-PL");
 };
 
-// Funkcja formatująca wartość stosunku z dwoma miejscami po przecinku
+/**
+ * Formatuje wskaźnik z dwoma miejscami po przecinku.
+ *
+ * @param value Wartość wskaźnika.
+ * @returns Np. `"12,34"`; `"-"`, gdy brak wartości lub `NaN`.
+ */
 export const formatRatio = (value?: number): string => {
   if (value === undefined || value === null || Number.isNaN(value)) return "-";
   return value.toLocaleString("pl-PL", {
@@ -113,14 +158,24 @@ export const formatRatio = (value?: number): string => {
   });
 };
 
+/** Właściwości wiersza danych `DataItem`. */
 interface DataItemProps {
+  /** Etykieta (po lewej). */
   label: string;
+  /** Wartość (po prawej). */
   value: string;
+  /** Opcjonalna wartość podrzędna. */
   subValue?: string;
+  /** Czy rysować linię oddzielającą (domyślnie `true`). */
   divider?: boolean;
 }
 
-// Komponent wyświetlający pojedynczy wiersz danych finansowych z etykietą, wartością i opcjonalną wartością podrzędną oraz linią podziału
+/**
+ * Pojedynczy wiersz danych finansowych z etykietą, wartością, opcjonalną
+ * wartością podrzędną i linią podziału.
+ *
+ * @param props Właściwości wiersza.
+ */
 function DataItem({ label, value, subValue, divider = true }: DataItemProps) {
   const theme = useTheme();
   return (
@@ -169,7 +224,7 @@ function DataItem({ label, value, subValue, divider = true }: DataItemProps) {
   );
 }
 
-// Stylesheet dla komponentu DataItem (pojedynczy wiersz danych finansowych)
+/** Style wiersza `DataItem`. */
 const dataItemStyles = StyleSheet.create({
   dataRow: {
     flexDirection: "row",
@@ -192,7 +247,18 @@ const dataItemStyles = StyleSheet.create({
   dataSubValue: {},
 });
 
-// Komponent wyświetlający widok wykresu w formie modala
+/**
+ * Wysuwany od dołu modal z wykresem świecowym i danymi finansowymi instrumentu.
+ *
+ * Zawiera przycisk dodania do obserwowanych (serce), wykres (`StockCandleChart`),
+ * sekcję „Zwrot” (1Y / 3Y / 5Y) i sekcje danych finansowych jak w
+ * `InstrumentDetails`. Dane są pobierane tak jak w `useInstrumentFinancialData`,
+ * z tą różnicą, że najpierw pokazywana jest kopia z pamięci podręcznej
+ * (`getCachedStockData`), jeśli istnieje. Modal zamyka się przeciągnięciem w dół
+ * (powyżej 12% wysokości ekranu lub szybkim ruchem); blokuje gesty ekranu pod spodem.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function ModalChartView({
   instrument,
   financialData: propFinancialData,

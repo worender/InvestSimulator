@@ -1,20 +1,49 @@
+/**
+ * Przykładowa (statyczna) lista instrumentów do handlu i wyszukiwania.
+ *
+ * Używana w widoku transakcji i oknach szczegółów instrumentu, gdy nie ma
+ * danych z backendu. Ceny i wykresy są wymyślone.
+ *
+ * @module src/database/mockSearchableInstruments
+ */
+
+/** Filtr kategorii na liście instrumentów (`ALL` — wszystkie). */
 export type InstrumentFilterCategory = 'ALL' | 'STOCKS' | 'BONDS' | 'CFD' | 'CRYPTO';
 
+/** Instrument dostępny w wyszukiwarce i widoku transakcji. */
 export interface SearchableInstrument {
+  /** Unikalny identyfikator, np. `"stock-pko"`. */
   id: string;
+  /** Symbol instrumentu. */
   symbol: string;
+  /** Nazwa instrumentu. */
   name: string;
+  /** Kategoria instrumentu. */
   category: 'STOCKS' | 'BONDS' | 'CFD' | 'CRYPTO';
+  /** Etykieta kategorii do wyświetlania, np. `"Akcje GPW"`. */
   categoryLabel: string;
+  /** Giełda notowań. */
   exchange: string;
+  /** Waluta notowań. */
   currency: string;
+  /** Bieżąca cena. */
   price: number;
+  /** Dzienna zmiana ceny w procentach. */
   changePercent: number;
+  /** Czy rynek jest teraz otwarty. */
   isMarketOpen: boolean;
+  /** Informacja o godzinach otwarcia rynku. */
   marketOpenTimeInfo: string;
-  chartPoints: { timestamp: number; value: number }[];
+  /** Punkty mini-wykresu (znacznik czasu w ms, wartość). */
+  chartPoints: {
+    /** Znacznik czasu (ms lub kolejny numer punktu). */
+    timestamp: number;
+    /** Wartość. */
+    value: number;
+  }[];
 }
 
+/** Lista przykładowych instrumentów: akcje, obligacje, CFD i kryptowaluty. */
 export const SEARCHABLE_INSTRUMENTS: SearchableInstrument[] = [
   // Akcje
   {

@@ -1,3 +1,9 @@
+/**
+ * Arkusz ustawiania lub zmiany hasła konta.
+ *
+ * @module src/components/settings/PasswordSheet
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useState } from "react";
 import {
@@ -17,19 +23,38 @@ import { NOTIFICATION_GROUPS, notify } from "../../notificationBus";
 import { useTheme } from "../../theme";
 import { SettingsSheet } from "./SettingsSheet";
 
+/**
+ * Właściwości {@link PasswordSheet}.
+ * @inline
+ */
 type PasswordSheetProps = {
+  /** Konto, którego hasło jest zmieniane. */
   userId: number;
+  /** Wywoływane przy zamknięciu, także po udanym zapisie. */
   onClose: () => void;
+  /** Wywoływane po zapisaniu hasła. */
   onSaved?: () => void;
 };
 
+/**
+ * Właściwości pola `PasswordField`.
+ */
 type PasswordFieldProps = {
+  /** Etykieta nad polem. */
   label: string;
+  /** Wartość. */
   value: string;
+  /** Wywoływane przy zmianie tekstu. */
   onChangeText: (value: string) => void;
+  /** Podpowiedź w pustym polu. */
   placeholder: string;
 };
 
+/**
+ * Pole hasła z etykietą i przyciskiem pokazania hasła (bez autokorekty i wielkich liter).
+ *
+ * @param props Właściwości pola.
+ */
 function PasswordField({
   label,
   value,
@@ -80,6 +105,16 @@ function PasswordField({
   );
 }
 
+/**
+ * Arkusz ustawiania hasła (gdy konto go nie ma) albo zmiany hasła (wymaga
+ * podania obecnego).
+ *
+ * Nowe hasło musi mieć co najmniej 6 znaków i zgadzać się z potwierdzeniem.
+ * Hasło jest zapisywane przez `setPassword` (sól + SHA-256). Każdy wynik
+ * (błąd walidacji, złe obecne hasło, sukces) jest zgłaszany powiadomieniem.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function PasswordSheet({
   userId,
   onClose,

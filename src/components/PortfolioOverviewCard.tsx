@@ -1,3 +1,9 @@
+/**
+ * Talia kart portfeli w trzech walutach (PLN, EUR, USD) na ekranie głównym.
+ *
+ * @module src/components/PortfolioOverviewCard
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -20,21 +26,34 @@ import {
   buildPortfolioSeries,
 } from "./PortfolioResultChart";
 
+/** Kolejność walut w talii. */
 const currencyOrder: Currency[] = ["PLN", "EUR", "USD"];
+/** Dane karty portfela. */
 type Portfolio = {
+  /** Nazwa portfela. */
   name: string;
+  /** Waluta portfela. */
   currency: Currency;
+  /** Symbol waluty. */
   symbol: string;
+  /** Łączna wartość. */
   totalValue: number;
+  /** Wolna gotówka. */
   cashBalance: number;
+  /** Wynik kwotowy. */
   profitCurrency: number;
+  /** Wynik procentowy. */
   profitPercent: number;
+  /** Kolor akcentu karty. */
   accent: string;
+  /** Symbol instrumentu pokazywanego na wykresie pod kartą. */
   stock: string;
+  /** Nazwa tego instrumentu. */
   stockName: string;
+  /** Giełda tego instrumentu. */
   exchange: string;
 };
-// Przykładowe dane portfela dla każdej waluty
+/** Przykładowe (stałe) dane portfela dla każdej waluty. */
 const cards: Record<Currency, Portfolio> = {
   PLN: {
     name: "Portfel podstawowy",
@@ -77,21 +96,37 @@ const cards: Record<Currency, Portfolio> = {
   },
 };
 
+/** Czas (ms) animacji tasowania talii. */
 const SHUFFLE_MS = 380;
 
-// Funkcje animacji kart portfela w talii: wierzch, środek, spód
+/**
+ * Animuje kartę na wierzch talii (pozycja 0).
+ *
+ * @param phase Pozycja karty w talii (0 — wierzch, 1 — środek, 2 — spód).
+ */
 function moveToFront(phase: SharedValue<number>) {
   phase.value = withTiming(0, {
     duration: SHUFFLE_MS,
     easing: Easing.out(Easing.back(1.05)),
   });
 }
+/**
+ * Animuje kartę na środek talii (pozycja 1).
+ *
+ * @param phase Pozycja karty w talii.
+ */
 function moveToMiddle(phase: SharedValue<number>) {
   phase.value = withTiming(1, {
     duration: SHUFFLE_MS,
     easing: Easing.out(Easing.cubic),
   });
 }
+/**
+ * Animuje kartę na spód talii (pozycja 2).
+ *
+ * @param phase Pozycja karty w talii.
+ * @param onDone Wywoływane (w wątku JS) po zakończeniu animacji.
+ */
 function moveToBack(phase: SharedValue<number>, onDone: () => void) {
   phase.value = withTiming(
     2,
@@ -104,28 +139,47 @@ function moveToBack(phase: SharedValue<number>, onDone: () => void) {
     },
   );
 }
-// Funkcje animacji krycia kart portfela w talii: wierzch, środek, spód
+/**
+ * Wygasza kartę (po 40 ms opóźnienia) — używane dla karty zjeżdżającej z wierzchu.
+ *
+ * @param opacity Krycie karty.
+ */
 function fadeCardOut(opacity: SharedValue<number>) {
   opacity.value = withDelay(
     40,
     withTiming(0, { duration: 280, easing: Easing.in(Easing.quad) }),
   );
 }
+/**
+ * Przywraca pełne krycie karty.
+ *
+ * @param opacity Krycie karty.
+ */
 function fadeCardIn(opacity: SharedValue<number>) {
   opacity.value = withTiming(1, { duration: 200 });
 }
 
+/** Właściwości karty `PortfolioCard`. */
 type PortfolioCardProps = {
+  /** Dane portfela. */
   data: Portfolio;
+  /** Pozycja w talii po ostatnim tasowaniu. */
   index: number;
+  /** Czy karta jest na wierzchu. */
   isFront: boolean;
-  // Pozycja karty w talii
+  /** Animowana pozycja karty w talii. */
   phase: SharedValue<number>;
+  /** Animowane krycie karty. */
   opacity: SharedValue<number>;
+  /** Wywoływane po naciśnięciu karty. */
   onPress: () => void;
 };
 
-// Komponent pojedynczej karty portfela w talii
+/**
+ * Pojedyncza karta portfela w talii: wartość, wynik i wykres z ostatnich 3 miesięcy.
+ *
+ * @param props Właściwości karty.
+ */
 function PortfolioCard({
   data,
   index,
@@ -252,6 +306,18 @@ function PortfolioCard({
   );
 }
 
+/**
+ * Talia kart portfeli w walutach PLN, EUR i USD (dane przykładowe).
+ *
+ * W trybie „Wiele walut” widoczne są wszystkie trzy karty; podwójne dotknięcie
+ * (na webie pojedyncze kliknięcie) przekłada wierzchnią kartę na spód. W trybie
+ * jednej waluty widoczna jest tylko karta waluty rozliczeniowej. Na starcie na
+ * wierzchu jest waluta rozliczeniowa.
+ *
+ * @param props Właściwości komponentu.
+ * @param props.onStockChange Wywoływane przy zmianie wierzchniej karty z instrumentem,
+ * który rodzic ma pokazać na wykresie (symbol, nazwa, waluta, giełda).
+ */
 export function PortfolioOverviewCard({
   onStockChange,
 }: {
