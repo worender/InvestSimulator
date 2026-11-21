@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useCallback, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { preloadMarketData } from "../api/marketService";
 import { LoginScreen } from "../components/settings/LoginScreen";
@@ -16,13 +17,15 @@ import { LoadingScreen } from "../components/LoadingScreen";
 
 // Główny komponent aplikacji, który ustawia kontekst motywu, widoczności nawigacji i powiadomień. Zawiera również stos ekranów (Stack) dla nawigacji w aplikacji.
 function AppStack() {
-  const { mode, loggedIn, fontSizePreference } = useTheme();
+  const { mode, loggedIn } = useTheme();
+  const [loadingPromises, setLoadingPromises] = useState<
+    readonly Promise<unknown>[]
+  >(() => (loggedIn ? [preloadMarketData()] : []));
 
-  useEffect(() => {
-    if (loggedIn) {
-      void preloadMarketData();
-    }
-  }, [loggedIn]);
+  const finishLoading = useCallback(() => {
+    setLoadingPromises([]);
+  }, []);
+
 
   return (
     <>
@@ -30,7 +33,6 @@ function AppStack() {
       <WebGlobalStyles />
       {loggedIn ? (
         <Stack
-          key={`app-${fontSizePreference}`}
           screenOptions={{
             gestureEnabled: true,
             fullScreenGestureEnabled: true,
@@ -41,16 +43,28 @@ function AppStack() {
       ) : (
         <LoginScreen />
       )}
+      {loadingPromises.length > 0 && (
+        <View style={styles.loadingOverlay}>
+          <LoadingScreen
+            promises={loadingPromises}
+            onFinished={finishLoading}
+            timeoutMs={3_000}
+          />
+        </View>
+      )}
     </>
   );
 }
 
-export default function RootLayout() {
-  const isInitializing = true; // Replace with actual initialization logic
+const styles = StyleSheet.create({
+  loadingOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 1000,
+    elevation: 1000,
+  },
+});
 
-  if (isInitializing) {
-    return <LoadingScreen />;
-  }
+export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
