@@ -1,3 +1,9 @@
+/**
+ * Widok kupna i sprzedaży instrumentu (zakładka „Kup / Sprzedaj”).
+ *
+ * @module src/components/TradeInstrumentView
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -34,9 +40,16 @@ import { useContainerWidth } from '../useContainerWidth';
 import { useLayoutMode } from '../useLayoutMode';
 import { useDisplayCurrency } from "../displayCurrency";
 
+/**
+ * Właściwości {@link TradeInstrumentView}.
+ * @inline
+ */
 interface TradeInstrumentViewProps {
+  /** Portfel: gotówka do zakupu i posiadane jednostki do sprzedaży. */
   portfolio: MockPortfolio;
+  /** Pozycja wybrana w szczegółach; jej zmiana kasuje ręczny wybór instrumentu. */
   initialAsset?: PortfolioAssetItem | null;
+  /** Wywoływane zamiast realizacji, gdy rynek instrumentu jest zamknięty. */
   onMarketClosedAlert: (
     instrument: SearchableInstrument,
     orderType: "BUY" | "SELL",
@@ -45,6 +58,7 @@ interface TradeInstrumentViewProps {
   ) => void;
 }
 
+/** Filtry kategorii instrumentów. */
 const FILTER_CATEGORIES: {
   key: InstrumentFilterCategory;
   label: string;
@@ -57,8 +71,27 @@ const FILTER_CATEGORIES: {
   { key: "CRYPTO", label: "Krypto", icon: "logo-bitcoin" },
 ];
 
+/** Tryb wprowadzania: ilość jednostek albo kwota. */
 type InputMode = "quantity" | "amount";
 
+/**
+ * Widok kupna i sprzedaży instrumentu.
+ *
+ * - Lista instrumentów: przykładowe `SEARCHABLE_INSTRUMENTS` filtrowane po kategorii
+ *   i tekście, a od 2 znaków także do 4 wyników wyszukiwania Yahoo (350 ms po
+ *   ostatnim znaku). Wyniki Yahoo mają **przykładowe** ceny i oznaczony zamknięty rynek.
+ * - Zlecenie: za ilość (kryptowaluty z krokiem 0.05) lub za kwotę (ilość zaokrąglana
+ *   w dół do 0,01), przyciski „max” dla kupna (gotówka) i sprzedaży (posiadane jednostki).
+ * - Walidacja: zakup wymaga wystarczającej gotówki, sprzedaż — posiadanych jednostek;
+ *   przy braku pokazywane jest ostrzeżenie.
+ * - Przy zamkniętym rynku wywoływane jest `onMarketClosedAlert`, a przy otwartym
+ *   pokazywane jest powiadomienie o realizacji. **Transakcja nie jest zapisywana
+ *   w bazie** (to symulacja interfejsu).
+ *
+ * Na desktopie lista i formularz są obok siebie.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function TradeInstrumentView({
   portfolio,
   initialAsset,

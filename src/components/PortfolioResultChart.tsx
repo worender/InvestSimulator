@@ -1,23 +1,48 @@
+/**
+ * Wykres wartości portfela w czasie.
+ *
+ * @module src/components/PortfolioResultChart
+ */
+
 import { useId, useMemo, useState } from 'react';
 import { LayoutChangeEvent, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 import { useTheme } from '../theme';
 import type { TrendPoint } from './TrendChart';
 
+/** Właściwości {@link PortfolioResultChart}. */
 export type PortfolioResultChartProps = {
+  /** Punkty wykresu (wartość portfela w czasie); mniej niż 2 — wykres pusty. */
   data: TrendPoint[];
+  /** Symbol waluty dopisywany do etykiet osi. */
   currencySymbol?: string;
+  /** Wysokość wykresu (px). */
   height?: number;
+  /** Kolor linii; domyślnie zielony przy wzroście i czerwony przy spadku. */
   color?: string;
+  /** Etykieta okresu pod wykresem; domyślnie zakres dat. */
   periodLabel?: string;
+  /** Dodatkowy styl kontenera. */
   style?: StyleProp<ViewStyle>;
 };
 
+/** Szerokość (px) osi wartości. */
 const AXIS_WIDTH = 58;
+/** Wysokość (px) etykiety osi. */
 const AXIS_LABEL_HEIGHT = 12;
+/** Górny odstęp (px) obszaru wykresu. */
 const TOP_PADDING = 6;
+/** Liczba milisekund w dniu. */
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Wygładzony wykres liniowy wartości portfela z wypełnieniem, osią wartości
+ * (maksimum, środek, minimum; skrócone „tys.”/„mln”) i zakresem dat.
+ *
+ * Zakres osi ma 12% zapasu nad i pod danymi. Szerokość jest mierzona z kontenera.
+ *
+ * @param props Właściwości komponentu (patrz {@link PortfolioResultChartProps}).
+ */
 export function PortfolioResultChart({
   data,
   currencySymbol,
@@ -152,6 +177,21 @@ export function PortfolioResultChart({
   );
 }
 
+/**
+ * Buduje przykładową serię wartości portfela przechodzącą przez podane punkty.
+ *
+ * Punkty są rozłożone równo w ostatnich `days` dniach (do teraz). Wartości są
+ * interpolowane liniowo między kolejnymi punktami `anchors` z lekką falą
+ * (4% różnicy między pierwszym a ostatnim punktem), znikającą na końcach.
+ *
+ * @param anchors Wartości kontrolne od najstarszej do najnowszej.
+ * @param days Długość okresu w dniach (domyślnie 90).
+ * @param points Liczba punktów serii (domyślnie 13).
+ * @returns Seria punktów; pusta dla braku punktów kontrolnych, jeden punkt (teraz) dla jednego.
+ *
+ * @example
+ * buildPortfolioSeries([10_000, 10_450, 11_000]); // 13 punktów z 90 dni
+ */
 export function buildPortfolioSeries(anchors: number[], days = 90, points = 13): TrendPoint[] {
   if (anchors.length === 0) return [];
   if (anchors.length === 1) {
@@ -177,12 +217,29 @@ export function buildPortfolioSeries(anchors: number[], days = 90, points = 13):
   });
 }
 
+/** Geometria wykresu potrzebna do etykiet osi. */
 type ChartGeometry = {
+  /** Zamienia wartość na współrzędną Y. */
   toY: (value: number) => number;
+  /** Najmniejsza wartość serii. */
   minValue: number;
+  /** Największa wartość serii. */
   maxValue: number;
+  /** Wartość ze środka serii. */
   midValue: number;
 };
+
+/**
+ * Wyznacza etykiety osi wartości (maksimum, środek, minimum).
+ *
+ * Pomija etykiety o tej samej wartości lub tekście oraz takie, które
+ * nachodziłyby na poprzednią.
+ *
+ * @param chart Geometria wykresu.
+ * @param height Wysokość wykresu (px).
+ * @param currencySymbol Symbol waluty.
+ * @returns Etykiety z kluczem, tekstem i położeniem od góry.
+ */
 
 function buildAxisMarks(chart: ChartGeometry, height: number, currencySymbol?: string) {
   const candidates = [
@@ -215,6 +272,13 @@ function buildAxisMarks(chart: ChartGeometry, height: number, currencySymbol?: s
   return marks;
 }
 
+/**
+ * Formatuje wartość na osi w skróconej formie.
+ *
+ * @param value Wartość.
+ * @param currencySymbol Symbol waluty dopisywany na końcu.
+ * @returns Np. `"950 zł"`, `"1,5 tys. zł"`, `"12 tys. zł"`, `"1,2 mln zł"`.
+ */
 function formatAxisValue(value: number, currencySymbol?: string) {
   const abs = Math.abs(value);
   const format = (number: number, digits: number) =>
@@ -229,6 +293,13 @@ function formatAxisValue(value: number, currencySymbol?: string) {
   return currencySymbol ? `${text} ${currencySymbol}` : text;
 }
 
+/**
+ * Formatuje zakres dat wykresu; rok jest dodawany tylko wtedy, gdy różni się od bieżącego.
+ *
+ * @param startTimestamp Początek (ms).
+ * @param endTimestamp Koniec (ms).
+ * @returns Np. `"15 sie – 15 lis"`.
+ */
 function formatDateRange(startTimestamp: number, endTimestamp: number) {
   const start = new Date(startTimestamp);
   const end = new Date(endTimestamp);
@@ -241,6 +312,13 @@ function formatDateRange(startTimestamp: number, endTimestamp: number) {
   return `${start.toLocaleDateString('pl-PL', options)} – ${end.toLocaleDateString('pl-PL', options)}`;
 }
 
+/**
+ * Tworzy opis wykresu dla czytników ekranu (okres, kierunek i procent zmiany).
+ *
+ * @param chart Dane wykresu albo `null`.
+ * @param currencySymbol Symbol waluty.
+ * @returns Opis dostępności.
+ */
 function buildAccessibilityLabel(
   chart: {
     firstValue: number;
@@ -256,6 +334,12 @@ function buildAccessibilityLabel(
   return `Wartość portfela od ${new Date(chart.startTimestamp).toLocaleDateString('pl-PL')} do ${new Date(chart.endTimestamp).toLocaleDateString('pl-PL')}: ${direction} ${Math.abs(change).toFixed(2)}%${currencySymbol ? `, ${currencySymbol}` : ''}`;
 }
 
+/**
+ * Buduje gładką ścieżkę SVG (krzywe Béziera z punktami kontrolnymi w połowie odcinków).
+ *
+ * @param points Punkty wykresu.
+ * @returns Atrybut `d` ścieżki SVG.
+ */
 function buildSmoothPath(points: { x: number; y: number }[]) {
   if (points.length === 0) return '';
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;

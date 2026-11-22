@@ -1,3 +1,9 @@
+/**
+ * Poziomy przełącznik kategorii (zakładek) z animowanymi „pigułkami”.
+ *
+ * @module src/components/CategorySelector
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   type ComponentRef,
@@ -26,19 +32,37 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { useTheme } from "../theme";
 
+/**
+ * Opcja przełącznika kategorii.
+ *
+ * @typeParam T Typ klucza opcji.
+ */
 export type CategoryOption<T extends string> = {
+  /** Klucz opcji. */
   key: T;
+  /** Etykieta. */
   label: string;
+  /** Ikona Ionicons; `null` — bez ikony; brak — dobierana automatycznie ({@link resolveCategoryIcon}). */
   icon?: keyof typeof Ionicons.glyphMap | null;
 };
 
+/**
+ * Właściwości {@link CategorySelector}.
+ *
+ * @typeParam T Typ klucza opcji.
+ */
 export type CategorySelectorProps<T extends string> = {
+  /** Opcje do wyboru; pusta lista — komponent nic nie renderuje. */
   options: readonly CategoryOption<T>[];
+  /** Wybrana opcja (tryb kontrolowany); brak — komponent pamięta wybór sam, startując od pierwszej opcji. */
   value?: T;
+  /** Wywoływane po wybraniu innej opcji niż `value`. */
   onChange?: (value: T) => void;
+  /** Etykieta dostępności całego przełącznika. */
   accessibilityLabel?: string;
 };
 
+/** Domyślne ikony dopasowywane po kluczu lub etykiecie (polskiej albo angielskiej). */
 const DEFAULT_CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   watchlist: "star-outline",
   obserwowane: "star-outline",
@@ -76,6 +100,22 @@ const DEFAULT_CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   ustawienia: "settings-outline",
 };
 
+/**
+ * Dobiera ikonę dla opcji przełącznika.
+ *
+ * Kolejność: jawna `option.icon` (także `null`), brak ikony dla opcji
+ * zaczynających się od cyfry (np. `1M`, `5Y`), dokładne dopasowanie klucza,
+ * dokładne dopasowanie etykiety, dopasowanie fragmentu, a w ostateczności
+ * `"shapes-outline"`. Wielkość liter nie ma znaczenia.
+ *
+ * @typeParam T Typ klucza opcji.
+ * @param option Opcja.
+ * @returns Nazwa ikony Ionicons albo `null` (bez ikony).
+ *
+ * @example
+ * resolveCategoryIcon({ key: "crypto", label: "Krypto" }); // "logo-bitcoin"
+ * resolveCategoryIcon({ key: "1M", label: "1M" });         // null
+ */
 export function resolveCategoryIcon<T extends string>(
   option: CategoryOption<T>,
 ): keyof typeof Ionicons.glyphMap | null {
@@ -104,18 +144,38 @@ export function resolveCategoryIcon<T extends string>(
   return "shapes-outline";
 }
 
+/** Szerokość (px) niewybranej opcji z ikoną — widoczna jest sama ikona. */
 const COLLAPSED_WIDTH = 38;
+/** Poziomy margines wewnętrzny (px) rozwiniętej opcji. */
 const HORIZONTAL_PADDING = 14;
 
+/** `Pressable` obsługujący animowane style Reanimated. */
 const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 
+/** Właściwości pojedynczej opcji `CategoryItem`. */
 type CategoryItemProps<T extends string> = {
+  /** Opcja. */
   option: CategoryOption<T>;
+  /** Czy opcja jest wybrana. */
   isSelected: boolean;
+  /** Wywoływane po naciśnięciu opcji. */
   onSelect: (key: T) => void;
+  /** Zgłasza położenie opcji (do przewijania do wybranej). */
   onItemLayout?: (key: string, event: LayoutChangeEvent) => void;
+  /** Kolory motywu. */
   colors: ReturnType<typeof useTheme>["colors"];
 };
+
+/**
+ * Pojedyncza opcja przełącznika.
+ *
+ * Niewybrana opcja z ikoną jest zwinięta do samej ikony; wybrana rozwija się
+ * do szerokości etykiety (mierzonej po pierwszym renderze) i zmienia kolor.
+ * Opcje bez ikony zawsze pokazują etykietę.
+ *
+ * @typeParam T Typ klucza opcji.
+ * @param props Właściwości opcji.
+ */
 
 function CategoryItem<T extends string>({
   option,
@@ -296,6 +356,23 @@ function CategoryItem<T extends string>({
   );
 }
 
+/**
+ * Poziomy, przewijany przełącznik kategorii.
+ *
+ * Działa w trybie kontrolowanym (`value` + `onChange`) lub niekontrolowanym.
+ * Gdy `value` nie pasuje do żadnej opcji, wybrana jest pierwsza. Po zmianie
+ * wyboru lista przewija się tak, aby wybrana opcja była widoczna.
+ *
+ * @typeParam T Typ klucza opcji.
+ * @param props Właściwości komponentu (patrz {@link CategorySelectorProps}).
+ *
+ * @example
+ * <CategorySelector
+ *   options={MARKET_TABS}
+ *   value={selectedTab}
+ *   onChange={setSelectedTab}
+ * />
+ */
 export function CategorySelector<T extends string>({
   options,
   value,

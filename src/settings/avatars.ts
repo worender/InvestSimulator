@@ -1,8 +1,21 @@
+/**
+ * Wybór i trwałe zapisywanie zdjęć profilowych.
+ *
+ * @module src/settings/avatars
+ */
+
 import { Directory, File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 
 /**
- * Zdjęcie z galerii trafia najpierw do pamięci tymczasowej
+ * Kopiuje zdjęcie do trwałego katalogu aplikacji.
+ *
+ * Zdjęcie z galerii trafia najpierw do pamięci tymczasowej, którą system może
+ * wyczyścić — dlatego jest kopiowane do `<documents>/avatars/avatar-<czas>.<rozszerzenie>`.
+ * Rozszerzenie jest brane z adresu (bez query); niepoprawne zastępuje `jpg`.
+ *
+ * @param uri Adres tymczasowego pliku zdjęcia.
+ * @returns Adres trwałej kopii; gdy kopiowanie się nie uda (np. na webie) — oryginalny `uri`.
  */
 export async function persistAvatar(uri: string): Promise<string> {
   try {
@@ -24,6 +37,12 @@ export async function persistAvatar(uri: string): Promise<string> {
   }
 }
 
+/**
+ * Prosi o dostęp do galerii, pozwala wybrać i przyciąć zdjęcie (kwadrat, jakość 0.8)
+ * i zapisuje je trwale przez {@link persistAvatar}.
+ *
+ * @returns Adres zapisanego zdjęcia albo `null`, gdy odmówiono dostępu lub anulowano wybór.
+ */
 export async function pickAvatar(): Promise<string | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) return null;

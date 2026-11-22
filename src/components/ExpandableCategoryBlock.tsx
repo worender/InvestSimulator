@@ -1,3 +1,9 @@
+/**
+ * Rozwijany blok kategorii artykułów.
+ *
+ * @module src/components/ExpandableCategoryBlock
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { PropsWithChildren } from "react";
 import { useEffect, useState } from "react";
@@ -16,15 +22,28 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { useTheme } from "../theme";
 
+/**
+ * Właściwości {@link ExpandableCategoryBlock}.
+ * @inline
+ */
 type ExpandableCategoryBlockProps = PropsWithChildren<{
+  /** Nazwa kategorii w nagłówku. */
   title: string;
+  /** Liczba artykułów dopisywana w nawiasie; brak — niewyświetlana. */
   count?: number;
+  /** Czy blok jest rozwinięty (komponent kontrolowany). */
   expanded: boolean;
+  /** Wywoływane po naciśnięciu nagłówka. */
   onToggle: () => void;
 }>;
 
 /**
- * Kategoria artykułów z animowanym rozwijaniem w dół
+ * Kategoria artykułów z animowanym rozwijaniem w dół.
+ *
+ * Wysokość treści jest mierzona i animowana (280 ms), a strzałka obraca się
+ * o 180°. Zwinięta treść nie przyjmuje dotyku i jest ukryta przed czytnikami ekranu.
+ *
+ * @param props Właściwości komponentu.
  */
 export function ExpandableCategoryBlock({
   title,

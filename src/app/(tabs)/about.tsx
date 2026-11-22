@@ -1,3 +1,9 @@
+/**
+ * Ekran „Nauka” (O inwestowaniu): newsy i artykuły edukacyjne.
+ *
+ * @module src/app/(tabs)/about
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -25,13 +31,18 @@ import { useLayoutMode } from "../../useLayoutMode";
 import { useNewsFeed } from "../../useNewsFeed";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
-// Ikona nagłówka dla każdej kategorii newsów
+/** Ikona nagłówka dla każdej kategorii newsów. */
 const TOPIC_ICONS: Record<NewsTopic, keyof typeof Ionicons.glyphMap> = {
   poland: "flag-outline",
   world: "globe-outline",
 };
 
-// Metadane artykułu: wydawca i data publikacji
+/**
+ * Tworzy linię informacji o newsie: wydawca i data publikacji.
+ *
+ * @param item News.
+ * @returns Np. `"Reuters · 15 sie"`.
+ */
 const formatNewsMeta = (item: YahooNewsItem): string => {
   const date = new Date(item.publishedAt);
   const dateLabel = Number.isNaN(date.getTime())
@@ -40,15 +51,31 @@ const formatNewsMeta = (item: YahooNewsItem): string => {
   return [item.publisher, dateLabel].filter(Boolean).join(" · ");
 };
 
-// Metadane artykułu edukacyjnego: kategoria i czas czytania
+/**
+ * Tworzy linię informacji o artykule edukacyjnym: kategoria i czas czytania.
+ *
+ * @param item Artykuł edukacyjny.
+ * @returns Np. `"Podstawy · 5 min czytania"`.
+ */
 const formatEducationalMeta = (item: EducationalArticle): string =>
   `${item.category} · ${item.readMinutes} min czytania`;
 
+/**
+ * Sprawdza, czy artykuł jest artykułem edukacyjnym (ma `readMinutes`), a nie newsem.
+ *
+ * @param article Artykuł.
+ * @returns `true` dla artykułu edukacyjnego.
+ */
 const isEducationalArticle = (
   article: ReadableArticle,
 ): article is EducationalArticle => "readMinutes" in article;
 
-// Szkielet listy wyświetlany podczas ładowania artykułów
+/**
+ * Szkielet listy (3 wiersze) wyświetlany podczas ładowania artykułów.
+ *
+ * @param props Właściwości komponentu.
+ * @param props.borderColor Kolor linii oddzielających wiersze.
+ */
 function ArticleListSkeleton({ borderColor }: { borderColor: string }) {
   return (
     <View>
@@ -72,6 +99,15 @@ function ArticleListSkeleton({ borderColor }: { borderColor: string }) {
   );
 }
 
+/**
+ * Ekran „Nauka” z rozwijanymi kategoriami: artykuły edukacyjne, zapisane
+ * artykuły oraz newsy z Polski i ze świata.
+ *
+ * Naraz rozwinięta jest jedna kategoria (na start edukacja). Newsy (12 na
+ * temat) odświeżają się same co 30 minut (`useNewsFeed`). Artykuł otwiera się
+ * w `NewsArticleModal`. Parametr trasy `articleId` (np. z linku)
+ * otwiera wskazany artykuł edukacyjny po wczytaniu bazy, po czym jest usuwany.
+ */
 export default function AboutScreen() {
   const { colors } = useTheme();
   const { bottom, top } = useSafeAreaInsets();

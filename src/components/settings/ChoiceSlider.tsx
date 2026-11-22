@@ -1,3 +1,9 @@
+/**
+ * Segmentowy przełącznik z przesuwanym wskaźnikiem.
+ *
+ * @module src/components/settings/ChoiceSlider
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PanResponder,
@@ -14,19 +20,43 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { useTheme } from "../../theme";
 
+/**
+ * Opcja przełącznika.
+ *
+ * @typeParam T Typ klucza opcji.
+ */
 export type ChoiceOption<T extends string> = {
+  /** Klucz opcji. */
   key: T;
+  /** Etykieta. */
   label: string;
 };
 
+/**
+ * Właściwości {@link ChoiceSlider}.
+ * @inline
+ */
 type ChoiceSliderProps<T extends string> = {
+  /** Opcje (segmenty równej szerokości). */
   options: ChoiceOption<T>[];
+  /** Wybrana opcja; nieznana — pierwsza. */
   value: T;
+  /** Wywoływane po wybraniu innej opcji. */
   onChange: (value: T) => void;
 };
 
+/** Wewnętrzny margines (px) między obramowaniem a wskaźnikiem. */
 const PADDING = 3;
 
+/**
+ * Segmentowy przełącznik (np. rozmiar czcionki: mały / średni / duży).
+ *
+ * Wskaźnik można przesuwać palcem — podąża za palcem, a `onChange` jest
+ * wywoływane przy dotknięciu i po puszczeniu, tylko gdy opcja się zmieniła.
+ *
+ * @typeParam T Typ klucza opcji.
+ * @param props Właściwości komponentu.
+ */
 export function ChoiceSlider<T extends string>({
   options,
   value,

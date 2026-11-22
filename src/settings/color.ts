@@ -1,19 +1,59 @@
-export type HsvColor = { h: number; s: number; v: number };
+/**
+ * Operacje na kolorach dla wyboru własnego koloru akcentu.
+ *
+ * @module src/settings/color
+ */
 
-// Maksymalna liczba własnych kolorów motywu zapisywanych na konto
+/** Kolor w modelu HSV: odcień `h` w stopniach 0–360, nasycenie `s` i jasność `v` w zakresie 0–1. */
+export type HsvColor = {
+  /** Odcień w stopniach 0–360. */
+  h: number;
+  /** Nasycenie 0–1. */
+  s: number;
+  /** Jasność 0–1. */
+  v: number;
+};
+
+/** Maksymalna liczba własnych kolorów motywu zapisywanych na konto. */
 export const MAX_CUSTOM_ACCENTS = 3;
 
+/**
+ * Ogranicza liczbę do przedziału.
+ *
+ * @param value Liczba.
+ * @param min Dolna granica.
+ * @param max Górna granica.
+ * @returns Liczba z przedziału `[min, max]`.
+ */
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-// Zwraca kolor w formacie #RRGGBB
+/**
+ * Sprawdza i normalizuje kolor w formacie `#RRGGBB`.
+ *
+ * @param value Dowolna wartość.
+ * @returns Kolor wielkimi literami (np. `"#58A6FF"`) albo `null`, gdy wartość nie jest
+ * sześciocyfrowym kolorem hex z `#` (format skrócony `#abc` nie jest akceptowany).
+ */
 export function normalizeHexColor(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return /^#[0-9a-f]{6}$/i.test(trimmed) ? trimmed.toUpperCase() : null;
 }
 
+/**
+ * Zamienia kolor HSV na `#RRGGBB`.
+ *
+ * @param h Odcień w stopniach (dowolna liczba, sprowadzana do 0–360).
+ * @param s Nasycenie 0–1 (wartości spoza zakresu są przycinane).
+ * @param v Jasność 0–1 (wartości spoza zakresu są przycinane).
+ * @returns Kolor hex wielkimi literami.
+ *
+ * @example
+ * hsvToHex(0, 1, 1);   // "#FF0000"
+ * hsvToHex(120, 1, 1); // "#00FF00"
+ */
 export function hsvToHex(h: number, s: number, v: number): string {
   const hue = ((h % 360) + 360) % 360;
   const saturation = clamp(s, 0, 1);
@@ -42,6 +82,12 @@ export function hsvToHex(h: number, s: number, v: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
 }
 
+/**
+ * Zamienia kolor `#RRGGBB` (lub bez `#`) na HSV.
+ *
+ * @param hex Kolor hex.
+ * @returns Kolor HSV; dla niepoprawnego koloru `{ h: 210, s: 0.7, v: 0.9 }` (niebieski).
+ */
 export function hexToHsv(hex: string): HsvColor {
   const normalized = hex.replace("#", "");
   if (!/^[0-9a-f]{6}$/i.test(normalized)) {
@@ -71,6 +117,15 @@ export function hexToHsv(hex: string): HsvColor {
   };
 }
 
+/**
+ * Dobiera czytelny kolor tekstu na tle o danym kolorze.
+ *
+ * Liczy jasność tła (`0.299 R + 0.587 G + 0.114 B`) i dla jasnego tła
+ * (powyżej 0.6) zwraca prawie czarny, a dla ciemnego biały.
+ *
+ * @param hex Kolor tła `#RRGGBB`.
+ * @returns `"#111827"` albo `"#ffffff"` (także dla niepoprawnego koloru).
+ */
 export function readableTextColor(hex: string): string {
   const normalized = hex.replace("#", "");
   if (!/^[0-9a-f]{6}$/i.test(normalized)) return "#ffffff";

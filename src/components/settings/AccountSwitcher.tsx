@@ -1,3 +1,9 @@
+/**
+ * Rozwijana lista kont w ustawieniach.
+ *
+ * @module src/components/settings/AccountSwitcher
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useState } from "react";
 import {
@@ -17,15 +23,31 @@ import type { UserProfile } from "../../database/database";
 import { useTheme } from "../../theme";
 import { AccountAvatar } from "./AccountAvatar";
 
+/**
+ * Właściwości {@link AccountSwitcher}.
+ * @inline
+ */
 type AccountSwitcherProps = {
+  /** Wszystkie konta. */
   accounts: UserProfile[];
+  /** Id aktywnego konta; brak lub nieznane — pierwsze konto. */
   activeAccountId?: number;
+  /** Czy lista jest rozwinięta (komponent kontrolowany). */
   expanded: boolean;
+  /** Wywoływane po naciśnięciu nagłówka z aktywnym kontem. */
   onToggle: () => void;
+  /** Wywoływane po wybraniu konta z listy. */
   onSelect: (account: UserProfile) => void;
+  /** Wywoływane po naciśnięciu „Dodaj konto”. */
   onAdd: () => void;
 };
 
+/**
+ * Nagłówek z aktywnym kontem, który rozwija (z animacją wysokości i obrotem
+ * strzałki) listę wszystkich kont oraz przycisk dodania konta.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function AccountSwitcher({
   accounts,
   activeAccountId,

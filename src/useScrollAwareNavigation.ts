@@ -1,7 +1,14 @@
+/**
+ * Chowanie dolnej nawigacji podczas przewijania.
+ *
+ * @module src/useScrollAwareNavigation
+ */
+
 import { useCallback, useRef } from 'react';
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { useNavigationVisibility } from './navigationVisibility';
 
+/** Minimalna zmiana przesunięcia (px), po której zmienia się widoczność nawigacji. */
 const OFFSET_THRESHOLD = 8;
 
 /**
@@ -10,6 +17,15 @@ const OFFSET_THRESHOLD = 8;
  * - panel, którego treść mieści się na ekranie, zawsze przywraca navbar,
  * - navbar chowa się dopiero po przewinięciu w dół i wraca przy przewijaniu w górę,
  * - powrót na górę listy zawsze pokazuje navbar.
+ *
+ * Wymaga `NavigationVisibilityProvider` wyżej w drzewie.
+ *
+ * @returns Właściwości do rozłożenia na `ScrollView`/`FlatList`:
+ * `onLayout`, `onContentSizeChange`, `onScroll` i `scrollEventThrottle` (16 ms).
+ *
+ * @example
+ * const scrollProps = useScrollAwareNavigation();
+ * return <ScrollView {...scrollProps}>...</ScrollView>;
  */
 export function useScrollAwareNavigation() {
   const { setVisible } = useNavigationVisibility();

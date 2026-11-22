@@ -1,3 +1,9 @@
+/**
+ * Kafelek kategorii aktywów w portfelu.
+ *
+ * @module src/components/AssetCategoryCard
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import {
@@ -8,12 +14,20 @@ import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 import { GlassBackground } from "./GlassBackground";
 
+/**
+ * Właściwości {@link AssetCategoryCard}.
+ * @inline
+ */
 interface AssetCategoryCardProps {
+  /** Kategoria z wartością, wynikiem i kolorami kafelka. */
   category: PortfolioCategory;
+  /** Waluta kwot kategorii (do przeliczenia na walutę wyświetlania). */
   currency: string;
+  /** Wywoływane po naciśnięciu kafelka. */
   onPress: () => void;
 }
 
+/** Ikona Ionicons dla każdej kategorii aktywów. */
 const CATEGORY_ICONS: Record<AssetCategoryKey, keyof typeof Ionicons.glyphMap> =
   {
     stocks: "trending-up-outline",
@@ -22,6 +36,15 @@ const CATEGORY_ICONS: Record<AssetCategoryKey, keyof typeof Ionicons.glyphMap> =
     etf_funds: "pie-chart-outline",
   };
 
+/**
+ * Kafelek kategorii aktywów: ikona, nazwa, łączna wartość oraz wynik kwotowy
+ * i procentowy ze strzałką w górę lub w dół.
+ *
+ * Tło ma efekt „liquid glass” w pastelowym kolorze kategorii (osobnym dla trybu
+ * ciemnego i jasnego). Kwoty są przeliczane według ustawień walut.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function AssetCategoryCard({
   category,
   currency,

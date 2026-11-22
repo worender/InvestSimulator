@@ -1,20 +1,45 @@
+/**
+ * Okno potwierdzenia akcji.
+ *
+ * @module src/components/settings/ConfirmDialog
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurView } from "expo-blur";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { NotificationHost } from "../../notifications";
 import { useTheme } from "../../theme";
 
+/**
+ * Właściwości {@link ConfirmDialog}.
+ * @inline
+ */
 type ConfirmDialogProps = {
+  /** Tytuł. */
   title: string;
+  /** Treść pytania. */
   message: string;
+  /** Etykieta przycisku potwierdzenia. */
   confirmLabel: string;
+  /** Etykieta przycisku anulowania. */
   cancelLabel?: string;
+  /** Ikona Ionicons nad tytułem. */
   icon?: keyof typeof Ionicons.glyphMap;
+  /** Akcja nieodwracalna — przycisk potwierdzenia w kolorze czerwonym. */
   destructive?: boolean;
+  /** Wywoływane po potwierdzeniu. */
   onConfirm: () => void;
+  /** Wywoływane po anulowaniu, dotknięciu tła lub przycisku „wstecz”. */
   onClose: () => void;
 };
 
+/**
+ * Modalne okno potwierdzenia (np. usunięcia danych) z przyciskami
+ * potwierdzenia i anulowania. Komponent jest zawsze widoczny — rodzic
+ * montuje go tylko wtedy, gdy trzeba zapytać.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function ConfirmDialog({
   title,
   message,

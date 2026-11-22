@@ -1,3 +1,9 @@
+/**
+ * Ekran „Portfolio”: portfele, kategorie aktywów i handel.
+ *
+ * @module src/app/(tabs)/portfolio
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurTargetView } from "expo-blur";
 import { useRef, useState, type ComponentRef } from "react";
@@ -41,6 +47,18 @@ import { useLayoutMode } from "../../useLayoutMode";
 import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
+/**
+ * Ekran „Portfolio”.
+ *
+ * Pokazuje wybrany portfel (`SinglePortfolioCard`; przycisk w nagłówku przełącza kolejne portfele po kolei)
+ * i kafelki kategorii aktywów (`AssetCategoryCard`). Kafelek otwiera
+ * `InstrumentDetailModal` z pozycjami kategorii. Przycisk „+” w nagłówku pozwala
+ * dodać portfel (do 5) albo wyszukać instrument i otworzyć go w zakładce handlu.
+ *
+ * **Uwaga:** ekran działa na przykładowych danych w pamięci (`MOCK_PORTFOLIOS`),
+ * a nie na bazie SQLite — nowy portfel jest kopią bieżącego i znika po
+ * ponownym uruchomieniu aplikacji.
+ */
 export default function PortfolioScreen() {
   const { colors, mode } = useTheme();
   const { bottom, top } = useSafeAreaInsets();

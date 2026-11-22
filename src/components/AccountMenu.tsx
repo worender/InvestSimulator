@@ -1,3 +1,9 @@
+/**
+ * Rozwijane menu konta (pod awatarem w nagłówku panelu).
+ *
+ * @module src/components/AccountMenu
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -15,17 +21,34 @@ import { useTheme } from "../theme";
 import { PANEL_HEADER_HEIGHT } from "./PanelHeader";
 import { AccountAvatar } from "./settings/AccountAvatar";
 
+/**
+ * Właściwości {@link AccountMenu}.
+ * @inline
+ */
 type AccountMenuProps = {
+  /** Wywoływane po zakończeniu animacji zamykania — rodzic powinien wtedy odmontować menu. */
   onClose: () => void;
 };
 
+/** Właściwości wiersza menu `MenuRow`. */
 type MenuRowProps = {
+  /** Ikona Ionicons. */
   icon: keyof typeof Ionicons.glyphMap;
+  /** Etykieta. */
   label: string;
+  /** Akcja po naciśnięciu. */
   onPress: () => void;
+  /** Kolor ikony: akcent (`default`) lub czerwony (`negative`, np. „Wyloguj”). */
   tone?: "default" | "negative";
+  /** Ostatni wiersz — bez linii oddzielającej. */
   last?: boolean;
 };
+
+/**
+ * Wiersz menu z ikoną i etykietą.
+ *
+ * @param props Właściwości wiersza.
+ */
 
 function MenuRow({
   icon,
@@ -66,6 +89,16 @@ function MenuRow({
   );
 }
 
+/**
+ * Menu konta wysuwane pod nagłówkiem panelu.
+ *
+ * Zawiera: aktywne konto, przejście do „Dane konta i hasło”, listę kont do
+ * przełączenia (aktywne oznaczone), „Dodaj konto” (otwiera ustawienia z listą
+ * kont) i „Wyloguj”. Każda akcja zamyka menu z animacją, a dotknięcie tła
+ * zamyka je bez akcji.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function AccountMenu({ onClose }: AccountMenuProps) {
   const { colors, mode, accounts, activeAccount, switchAccount, logout } =
     useTheme();

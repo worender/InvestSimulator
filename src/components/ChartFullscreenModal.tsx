@@ -36,11 +36,23 @@ import {
   renderCandleRect,
 } from "./CandleHoverCrosshair";
 
+/**
+ * Pełnoekranowy wykres świecowy oraz wspólne definicje zakresów i interwałów wykresów.
+ *
+ * @module src/components/ChartFullscreenModal
+ */
+/** Interwał świecy (zgodny z Yahoo Finance). */
 export type ChartInterval = "1m" | "5m" | "15m" | "1h" | "1d" | "1wk";
 
-export type ChartRange = { label: string; days: number };
+/** Zakres czasu wykresu: etykieta przycisku i liczba dni wstecz. */
+export type ChartRange = {
+  /** Etykieta przycisku, np. `"7D"`. */
+  label: string;
+  /** Liczba dni wstecz. */
+  days: number;
+};
 
-// Wspólne definicje zakresów i interwałów dla każdego wykresu świecowego w aplikacji.
+/** Zakresy wykresu: 1 dzień, 7 dni, 1 miesiąc, 3 miesiące, 1 rok. Wspólne dla każdego wykresu świecowego w aplikacji. */
 export const CHART_RANGES: ChartRange[] = [
   { label: "1D", days: 1 },
   { label: "7D", days: 7 },
@@ -49,6 +61,7 @@ export const CHART_RANGES: ChartRange[] = [
   { label: "1R", days: 365 },
 ];
 
+/** Interwały świec do wyboru (bez 1 min). */
 export const CHART_INTERVALS: { label: string; value: ChartInterval }[] = [
   { label: "5 min", value: "5m" },
   { label: "15 min", value: "15m" },
@@ -57,13 +70,28 @@ export const CHART_INTERVALS: { label: string; value: ChartInterval }[] = [
   { label: "1 tydz.", value: "1wk" },
 ];
 
+/** Domyślny zakres — indeks w {@link CHART_RANGES} (7 dni). */
 export const DEFAULT_CHART_RANGE_INDEX = 1;
+/** Domyślny interwał świecy (1 godzina). */
 export const DEFAULT_CHART_INTERVAL: ChartInterval = "1h";
 
+/**
+ * Sprawdza, czy interwał jest śróddzienny (krótszy niż dzień).
+ *
+ * @param value Interwał.
+ * @returns `true` dla `1m`, `5m`, `15m` i `1h`.
+ */
 export const isIntradayInterval = (value: ChartInterval) =>
   ["1m", "5m", "15m", "1h"].includes(value);
 
-// Formatowanie osi czasu i etykiety świecy w zależności od interwału.
+/**
+ * Formatuje czas świecy na osi wykresu w zależności od interwału.
+ *
+ * @param timestamp Czas w ms od epoki.
+ * @param interval Interwał świec.
+ * @returns Dla interwałów śróddziennych dzień, miesiąc i godzina (np. `"15.08, 14:30"`),
+ * dla pozostałych pełna data (np. `"15.08.2023"`).
+ */
 export function formatCandleTime(timestamp: number, interval: ChartInterval) {
   const options: Intl.DateTimeFormatOptions = isIntradayInterval(interval)
     ? { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }
@@ -71,6 +99,13 @@ export function formatCandleTime(timestamp: number, interval: ChartInterval) {
   return new Date(timestamp).toLocaleString("pl-PL", options);
 }
 
+/**
+ * Formatuje datę świecy w panelu OHLC (z dniem tygodnia i skróconą nazwą miesiąca).
+ *
+ * @param timestamp Czas w ms od epoki.
+ * @param interval Interwał świec (śróddzienny dodaje godzinę).
+ * @returns Data z krótką nazwą dnia tygodnia i miesiąca (oraz godziną dla interwałów śróddziennych).
+ */
 function formatCandleDate(timestamp: number, interval: ChartInterval) {
   const options: Intl.DateTimeFormatOptions = isIntradayInterval(interval)
     ? {
@@ -84,20 +119,32 @@ function formatCandleDate(timestamp: number, interval: ChartInterval) {
   return new Date(timestamp).toLocaleString("pl-PL", options);
 }
 
+/** Szerokość (px) osi cen po prawej stronie wykresu. */
 const AXIS_WIDTH = 54;
+/** Poziome linie siatki jako ułamek wysokości (od góry). */
 const GRID_STEPS = [1, 0.75, 0.5, 0.25, 0];
+/** Pionowe linie siatki jako ułamek szerokości. */
 const VERTICAL_LINES = [0.25, 0.5, 0.75];
 
+/** Właściwości {@link ChartFullscreenModal}. */
 export type ChartFullscreenModalProps = {
+  /** Czy modal jest otwarty. */
   visible: boolean;
+  /** Wywoływane przy zamknięciu. */
   onClose: () => void;
+  /** Symbol instrumentu (domyślnie `"PKO"`). */
   stock?: string;
+  /** Tytuł w nagłówku (domyślnie `"PKO BANK POLSKI"`). */
   title?: string;
+  /** Giełda notowań (domyślnie `"GPW"`). */
   exchange?: string;
+  /** Waluta lub jej symbol (domyślnie `"zł"`). */
   currency?: string;
+  /** Zakres ustawiany przy każdym otwarciu — indeks w {@link CHART_RANGES}. */
   initialRangeIndex?: number;
+  /** Interwał ustawiany przy każdym otwarciu. */
   initialInterval?: ChartInterval;
-  // Pozwala ukryć selektory, gdy rodzic już je pokazuje (np. w modalach)
+  /** Pozwala ukryć selektory, gdy rodzic już je pokazuje (np. w modalach). */
   showRangeControls?: boolean;
 };
 
@@ -106,7 +153,16 @@ export type ChartFullscreenModalProps = {
  *
  * Zawiera gęstą siatkę z osią cen, crosshair z tooltipem, przełączanie zakresów
  * i interwałów, panel OHLC (otwarcie / maksimum / minimum / zamknięcie)
- * oraz legendę pod wykresem
+ * oraz legendę pod wykresem.
+ *
+ * Przy każdym otwarciu przywraca `initialRangeIndex` i `initialInterval`.
+ * Świece są pobierane (`getStockCandles`) przy otwarciu i każdej zmianie zakresu
+ * lub interwału; błąd daje pusty wykres. Dla zakresów dłuższych niż 60 dni
+ * interwały śróddzienne są wyłączone i pobierane są świece dzienne. Panel OHLC
+ * pokazuje świecę pod kursorem, a bez kursora — ostatnią. Gdy modal jest
+ * otwarty, gesty ekranu pod spodem są zablokowane.
+ *
+ * @param props Właściwości komponentu (patrz {@link ChartFullscreenModalProps}).
  */
 export function ChartFullscreenModal({
   visible,
@@ -753,7 +809,19 @@ export function ChartFullscreenModal({
   );
 }
 
+/** Kolory motywu. */
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
+
+/**
+ * Przycisk wyboru zakresu lub interwału.
+ *
+ * @param props Właściwości przycisku.
+ * @param props.label Etykieta.
+ * @param props.active Czy opcja jest wybrana.
+ * @param props.disabled Czy przycisk jest wyłączony (np. interwał śróddzienny dla długiego zakresu).
+ * @param props.onPress Akcja po naciśnięciu.
+ * @param props.colors Kolory motywu.
+ */
 
 function ChartButton({
   label,
@@ -796,6 +864,17 @@ function ChartButton({
   );
 }
 
+/**
+ * Komórka panelu OHLC (otwarcie, maksimum, minimum lub zamknięcie).
+ *
+ * @param props Właściwości komórki.
+ * @param props.label Skrót, np. `"O"`.
+ * @param props.caption Pełna nazwa, np. `"Otwarcie"`.
+ * @param props.value Cena.
+ * @param props.unit Symbol waluty.
+ * @param props.colors Kolory motywu.
+ * @param props.highlight Opcjonalny kolor wartości (np. zielony/czerwony dla zamknięcia).
+ */
 function OhlcCell({
   label,
   caption,

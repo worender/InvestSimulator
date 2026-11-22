@@ -45,3 +45,6 @@ example
 /ios
 /android
 .opencode/plans/tasks.md
+
+# TypeDoc (generowana dokumentacja: npm run docs)
+/docs

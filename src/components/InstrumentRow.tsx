@@ -1,21 +1,49 @@
+/**
+ * Wiersz instrumentu na liście rynku.
+ *
+ * @module src/components/InstrumentRow
+ */
+
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 import { Skeleton } from "./Skeleton";
 
+/**
+ * Właściwości {@link InstrumentRow}.
+ * @inline
+ */
 type InstrumentRowProps = {
+  /** Symbol instrumentu (sufiks `.PA` jest ukrywany). */
   symbol: string;
+  /** Nazwa instrumentu. */
   name: string;
+  /** Nazwa giełdy dopisywana po symbolu. */
   exchangeName?: string;
+  /** Bieżąca cena w walucie notowań; brak — kolumna ceny jest pusta. */
   price?: number;
+  /** Dzienna zmiana w procentach (zielona dla ≥ 0, czerwona dla < 0). */
   changePercent?: number;
+  /** Waluta notowań (do przeliczenia na walutę wyświetlania). */
   currency?: string;
+  /** Wywoływane po naciśnięciu wiersza. */
   onPress: () => void;
+  /** Czy rysować linię oddzielającą pod wierszem (domyślnie `true`). */
   divider?: boolean;
+  /** Pokazuje szkielet zamiast ceny (domyślnie `false`). */
   loading?: boolean;
+  /** Dodatkowa treść pod nazwą (np. wartość pozycji). */
   secondary?: ReactNode;
 };
+
+/**
+ * Wiersz instrumentu: symbol, giełda i nazwa po lewej, cena i zmiana procentowa po prawej.
+ *
+ * Cena jest przeliczana według ustawień walut ({@link useDisplayCurrency}).
+ *
+ * @param props Właściwości komponentu.
+ */
 
 export function InstrumentRow({
   symbol,

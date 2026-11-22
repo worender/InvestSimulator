@@ -1,3 +1,9 @@
+/**
+ * Boczny pasek nawigacji dla szerokich ekranów webowych.
+ *
+ * @module src/components/SidebarTabBar
+ */
+
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { useEffect, useState } from 'react';
@@ -7,16 +13,31 @@ import { getWallets, type Wallet } from '../database/database';
 import { useDisplayCurrency } from '../displayCurrency';
 import { useTheme } from '../theme';
 
+/**
+ * Właściwości {@link SidebarTabBar}: `state`, `descriptors` i `navigateToTab`
+ * z paska zakładek nawigatora oraz poniższe pola.
+ */
 type SidebarTabBarProps = Pick<BottomTabBarProps, 'state' | 'descriptors' | 'navigateToTab'> & {
-  // Wąska wersja (tablet): same ikony, bez etykiet i salda
+  /** Wąska wersja (tablet): same ikony, bez etykiet i salda. */
   compact?: boolean;
+  /** Zwraca ikonę Ionicons dla zakładki (aktywnej lub nie). */
   tabIcon: (routeName: string, focused: boolean) => keyof typeof Ionicons.glyphMap;
 };
 
+/** Szerokość (px) pełnego paska bocznego. */
 export const SIDEBAR_WIDTH = 232;
+/** Szerokość (px) wąskiego paska bocznego (tablet). */
 export const SIDEBAR_COMPACT_WIDTH = 72;
 
-// Boczny pasek nawigacji dla szerokich ekranów webowych (wzorowany na xStation)
+/**
+ * Boczny pasek nawigacji dla szerokich ekranów webowych (wzorowany na xStation).
+ *
+ * Pokazuje nazwę aplikacji, saldo pierwszego portfela aktywnego konta
+ * (w walucie wyświetlania) i listę zakładek z ikonami. Wersja `compact` pokazuje
+ * same ikony.
+ *
+ * @param props Właściwości komponentu (patrz `SidebarTabBarProps`).
+ */
 export function SidebarTabBar({ state, descriptors, navigateToTab, compact = false, tabIcon }: SidebarTabBarProps) {
   const { colors, activeAccount } = useTheme();
   const display = useDisplayCurrency();

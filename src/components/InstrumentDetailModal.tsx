@@ -41,37 +41,62 @@ import { MarketClosedNoticeModal } from "./MarketClosedNoticeModal";
 import { StockCandleChart } from "./StockCandleChart";
 import { TradeInstrumentView } from "./TradeInstrumentView";
 
+/**
+ * Modal szczegółów pozycji w portfelu (z zakładką handlu).
+ *
+ * @module src/components/InstrumentDetailModal
+ */
+
+/** Zakładka modala: `details` — szczegóły pozycji, `trade` — kupno i sprzedaż. */
 export type ModalTab = "details" | "trade";
 
-// Szerokość okna dialogowego na desktopie
+/** Maksymalna szerokość (px) okna dialogowego na desktopie. */
 const DIALOG_MAX_WIDTH = 720;
+/** Zakładki modala z etykietami. */
 const DETAIL_TABS = [
   { key: "details", label: "Szczegóły" },
   { key: "trade", label: "Kup / Sprzedaj" },
 ] as const;
 
-// Skala ryzyka inwestycyjnego: od najniższego do najwyższego.
+/** Skala ryzyka inwestycyjnego: od najniższego do najwyższego. */
 const RISK_LEVELS = [
   "Niski",
   "Umiarkowany",
   "Wysoki",
   "Bardzo wysoki",
 ] as const;
+/** Kolory kolejnych poziomów ryzyka (od zielonego do czerwonego). */
 const RISK_COLORS = ["#10b981", "#f59e0b", "#f97316", "#ef4444"] as const;
 
+/**
+ * Właściwości {@link InstrumentDetailModal}.
+ * @inline
+ */
 interface InstrumentDetailModalProps {
+  /** Czy modal jest otwarty (zamknięty nic nie renderuje). */
   visible: boolean;
+  /** Pozycja w portfelu do pokazania, gdy nie podano kategorii. */
   asset: PortfolioAssetItem | null;
+  /** Kategoria aktywów; gdy podana, w nagłówku można przełączać jej pozycje. */
   category?: PortfolioCategory | null;
+  /** Portfel, do którego należy pozycja (jego nazwa to podtytuł, gdy brak pozycji i kategorii). */
   portfolio: MockPortfolio;
+  /** Wywoływane przy zamknięciu. */
   onClose: () => void;
+  /** Zakładka startowa (domyślnie `"details"`). */
   initialTab?: ModalTab;
+  /** Wywoływane, gdy złożono zlecenie przy zamkniętym rynku (przed pokazaniem komunikatu). */
   onMarketClosedAlert?: (
     instrument: SearchableInstrument,
     orderType: "BUY" | "SELL",
     quantity: number,
     total: number,
   ) => void;
+  /**
+   * Instrument przekazany bezpośrednio, bez pozycji w portfelu (np. dodawany
+   * z wyszukiwarki). Ma pierwszeństwo przed `asset`; wartości i wyniki są zerowe,
+   * a poziom ryzyka `"Niski"`.
+   */
   modalInstrument?: {
     stock: string;
     title: string;
@@ -82,6 +107,22 @@ interface InstrumentDetailModalProps {
   } | null;
 }
 
+/**
+ * Modal szczegółów pozycji z dwiema zakładkami: „Szczegóły” i „Kup / Sprzedaj”.
+ *
+ * Zakładka „Szczegóły” zawiera wykres świecowy, wartość pozycji, wynik finansowy,
+ * ilość i kurs bieżący, zyski w okresach (1M–5L; okresy dłuższe niż czas
+ * trzymania są niedostępne), historię transakcji i poziom ryzyka. Zakładka
+ * handlu to `TradeInstrumentView`.
+ *
+ * Na mobile modal jest kartą wysuwaną od dołu (z przeciąganiem nagłówka
+ * i poziomym gestem zmiany zakładek), a na szerokim ekranie w przeglądarce —
+ * wyśrodkowanym oknem dialogowym. Gdy rynek jest zamknięty, pokazuje
+ * `MarketClosedNoticeModal`; potwierdzenie zlecenia oczekującego pokazuje
+ * tylko powiadomienie (zlecenie nie jest zapisywane).
+ *
+ * @param props Właściwości komponentu.
+ */
 export function InstrumentDetailModal({
   visible,
   asset,

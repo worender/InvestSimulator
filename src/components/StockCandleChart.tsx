@@ -1,3 +1,9 @@
+/**
+ * Wykres świecowy instrumentu z wyborem zakresu i interwału.
+ *
+ * @module src/components/StockCandleChart
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -30,17 +36,37 @@ import {
 } from "./ChartFullscreenModal";
 import { Skeleton } from "./Skeleton";
 
+/**
+ * Właściwości {@link StockCandleChart}.
+ * @inline
+ */
 type StockCandleChartProps = {
+  /** Symbol instrumentu (domyślnie `"PKO"`). */
   stock?: string;
+  /** Tytuł (domyślnie `"PKO BANK POLSKI"`). */
   title?: string;
+  /** Giełda notowań (domyślnie `"GPW"`). */
   exchange?: string;
+  /** Waluta lub jej symbol (domyślnie `"zł"`). */
   currency?: string;
+  /** `card` — samodzielna karta (domyślnie), `embedded` — bez tła, wewnątrz innego widoku. */
   variant?: "card" | "embedded";
+  /** Początkowy zakres — indeks w `CHART_RANGES`. */
   initialRangeIndex?: number;
+  /** Początkowy interwał świec. */
   initialInterval?: ChartInterval;
 };
 
-// Komponent wyświetlający wykres świecowy dla danego aktywa giełdowego
+/**
+ * Wykres świecowy instrumentu z ceną, zmianą, wyborem zakresu i interwału
+ * oraz przyciskiem widoku pełnoekranowego (`ChartFullscreenModal`).
+ *
+ * Świece są pobierane przy każdej zmianie zakresu lub interwału; dla zakresów
+ * dłuższych niż 60 dni pobierane są świece dzienne. Ceny są przeliczane według
+ * ustawień walut. Zmiana w nagłówku to różnica między dwiema ostatnimi świecami.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function StockCandleChart({
   stock = "PKO",
   title = "PKO BANK POLSKI",
@@ -340,7 +366,16 @@ export function StockCandleChart({
   );
 }
 
-// Komponent przycisku wyboru zakresu lub interwału wykresu
+/**
+ * Przycisk wyboru zakresu lub interwału wykresu.
+ *
+ * @param props Właściwości przycisku.
+ * @param props.label Etykieta.
+ * @param props.active Czy opcja jest wybrana.
+ * @param props.disabled Czy przycisk jest wyłączony.
+ * @param props.onPress Akcja po naciśnięciu.
+ * @param props.colors Kolory motywu.
+ */
 function ChartButton({
   label,
   active,

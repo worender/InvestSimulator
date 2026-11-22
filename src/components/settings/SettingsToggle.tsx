@@ -1,3 +1,9 @@
+/**
+ * Animowany przełącznik włącz/wyłącz.
+ *
+ * @module src/components/settings/SettingsToggle
+ */
+
 import { useEffect } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Reanimated, {
@@ -8,13 +14,26 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { useTheme } from "../../theme";
 
+/**
+ * Właściwości {@link SettingsToggle}.
+ * @inline
+ */
 type SettingsToggleProps = {
+  /** Czy włączony. */
   value: boolean;
+  /** Wywoływane z nową wartością po naciśnięciu. */
   onChange: (value: boolean) => void;
+  /** Wyłączony (bez reakcji). */
   disabled?: boolean;
+  /** Etykieta dla czytników ekranu. */
   accessibilityLabel: string;
 };
 
+/**
+ * Przełącznik w kolorach motywu z animacją przesunięcia (190 ms). Komponent kontrolowany.
+ *
+ * @param props Właściwości komponentu.
+ */
 export function SettingsToggle({
   value,
   onChange,

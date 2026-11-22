@@ -1,6 +1,16 @@
 /**
  * Kontekst motywu aplikacji. Poza wyglądem przechowuje również aktywne konto,
  * preferencje powiadomień oraz ustawienia walut.
+ *
+ * `ThemeProvider` przy starcie wczytuje z SQLite konta, aktywne konto, jego
+ * ustawienia, ustawienia powiadomień i własne kolory akcentu, a także pobiera
+ * kursy walut. Każda zmiana ustawienia jest od razu widoczna w interfejsie
+ * i zapisywana w bazie dla aktywnego konta.
+ *
+ * Dodatkowo synchronizuje dwa globalne moduły: skalę czcionek (`fontScale`)
+ * i ustawienia wyświetlania kwot (`displayCurrency`).
+ *
+ * @module src/theme
  */
 
 import type { PropsWithChildren } from "react";
@@ -51,18 +61,28 @@ import {
   type NotificationCategoryKey,
 } from "./settings/notificationSettings";
 
+/** Tryb kolorystyczny: ciemny lub jasny. */
 export type ThemeMode = "dark" | "light";
+/** Kolor akcentu: klucz predefiniowanego koloru (np. `"Niebieski"`) albo własny kolor `#rrggbb`. */
 export type ThemeAccent = string;
+/** Waluta rozliczeniowa dostępna w ustawieniach. */
 export type Currency = "PLN" | "EUR" | "USD";
+/** Preferowany rozmiar czcionki. */
 export type FontSizePreference = "small" | "medium" | "large";
 
+/** Predefiniowany kolor akcentu w wersji dla obu trybów. */
 export type AccentPreset = {
+  /** Klucz zapisywany w ustawieniach (polska nazwa koloru). */
   key: string;
+  /** Etykieta wyświetlana w interfejsie. */
   label: string;
+  /** Kolor w trybie ciemnym. */
   dark: string;
+  /** Kolor w trybie jasnym. */
   light: string;
 };
 
+/** Predefiniowane kolory akcentu (paleta w stylu GitHub). */
 export const ACCENT_PRESETS: AccentPreset[] = [
   { key: "Niebieski", label: "Niebieski", dark: "#58a6ff", light: "#0969da" },
   { key: "Fioletowy", label: "Fioletowy", dark: "#bc8cff", light: "#8250df" },
@@ -79,14 +99,16 @@ export const ACCENT_PRESETS: AccentPreset[] = [
   { key: "Żółty", label: "Żółty", dark: "#e3b341", light: "#9a6700" },
 ];
 
+/** Domyślny kolor akcentu. */
 const DEFAULT_ACCENT: ThemeAccent = "Niebieski";
+/** Mnożniki czcionek dla preferencji rozmiaru. */
 const FONT_SCALES: Record<FontSizePreference, number> = {
   small: 0.88,
   medium: 1,
   large: 1.14,
 };
 
-// Starsze wersje bazy zapisywały nazwy akcentów po angielsku (np. "blue").
+/** Starsze wersje bazy zapisywały nazwy akcentów po angielsku (np. `"blue"`) — mapowanie na obecne klucze. */
 const LEGACY_ACCENTS: Record<string, ThemeAccent> = {
   blue: "Niebieski",
   purple: "Fioletowy",
@@ -98,6 +120,21 @@ const LEGACY_ACCENTS: Record<string, ThemeAccent> = {
   yellow: "Żółty",
 };
 
+/**
+ * Zamienia wartość zapisaną w bazie na poprawny kolor akcentu.
+ *
+ * Kolejność: poprawny kolor hex (znormalizowany przez `normalizeHexColor`),
+ * klucz predefiniowanego koloru, dawna angielska nazwa (dowolna wielkość liter),
+ * a w pozostałych przypadkach kolor domyślny `"Niebieski"`.
+ *
+ * @param value Wartość z bazy (dowolnego typu).
+ * @returns Klucz koloru z {@link ACCENT_PRESETS} albo kolor hex.
+ *
+ * @example
+ * resolveThemeAccent("Zielony"); // "Zielony"
+ * resolveThemeAccent("BLUE");    // "Niebieski"
+ * resolveThemeAccent(42);        // "Niebieski"
+ */
 export function resolveThemeAccent(value: unknown): ThemeAccent {
   if (typeof value !== "string") return DEFAULT_ACCENT;
   const trimmed = value.trim();
@@ -108,6 +145,13 @@ export function resolveThemeAccent(value: unknown): ThemeAccent {
   return LEGACY_ACCENTS[trimmed.toLowerCase()] ?? DEFAULT_ACCENT;
 }
 
+/**
+ * Zwraca kolor CSS akcentu dla danego trybu.
+ *
+ * @param accent Klucz predefiniowanego koloru albo kolor hex.
+ * @param mode Tryb kolorystyczny.
+ * @returns Kolor predefiniowany w wersji dla trybu albo (dla koloru własnego) sam `accent`.
+ */
 export function resolveAccentColor(
   accent: ThemeAccent,
   mode: ThemeMode,
@@ -117,6 +161,13 @@ export function resolveAccentColor(
   return accent;
 }
 
+/**
+ * Zwraca kolor próbki predefiniowanego akcentu dla danego trybu (np. w wyborze koloru).
+ *
+ * @param preset Predefiniowany kolor.
+ * @param mode Tryb kolorystyczny.
+ * @returns Kolor `dark` lub `light` z presetu.
+ */
 export function accentSwatchColor(
   preset: AccentPreset,
   mode: ThemeMode,
@@ -124,12 +175,19 @@ export function accentSwatchColor(
   return mode === "dark" ? preset.dark : preset.light;
 }
 
+/**
+ * Zamienia wartość z bazy na preferencję rozmiaru czcionki.
+ *
+ * @param value Wartość z bazy.
+ * @returns `"small"`, `"medium"` lub `"large"`; dla niepoprawnej wartości `"medium"`.
+ */
 function resolveFontSize(value: unknown): FontSizePreference {
   if (value === "small" || value === "large" || value === "medium")
     return value;
   return "medium";
 }
 
+/** Paleta kolorów trybu ciemnego. */
 const darkColors = {
   background: "#0d1117",
   surface: "#161b22",
@@ -150,6 +208,7 @@ const darkColors = {
   warning: "#d29922",
 };
 
+/** Paleta kolorów trybu jasnego (te same klucze co `darkColors`). */
 const lightColors = {
   background: "#ffffff",
   surface: "#f6f8fa",
@@ -170,57 +229,125 @@ const lightColors = {
   warning: "#9a6700",
 };
 
+/**
+ * Wartość kontekstu motywu zwracana przez {@link useTheme}.
+ *
+ * Funkcje `set*` zmieniające ustawienia najpierw aktualizują interfejs, a potem
+ * zapisują wartość w bazie. Bez aktywnego konta zapis kończy się odrzuconą
+ * obietnicą z błędem „Brak aktywnego konta” (interfejs jest już zmieniony).
+ */
 type ThemeContextValue = {
+  /** Bieżący tryb kolorystyczny (domyślnie ciemny). */
   mode: ThemeMode;
+  /** Paleta kolorów bieżącego trybu z podmienionym kolorem akcentu. */
   colors: typeof darkColors;
+  /** Ustawia tryb kolorystyczny i zapisuje go w ustawieniach konta. */
   setMode: (mode: ThemeMode) => Promise<void>;
+  /** Przełącza tryb ciemny ↔ jasny. */
   toggleMode: () => Promise<void>;
+  /** Wybrany kolor akcentu (klucz presetu lub kolor hex). */
   accent: ThemeAccent;
+  /** Ustawia kolor akcentu (po normalizacji przez {@link resolveThemeAccent}) i zapisuje go. */
   setAccent: (accent: ThemeAccent) => Promise<void>;
+  /** Własne kolory akcentu aktywnego konta. */
   customAccents: CustomAccentColor[];
+  /** Dodaje własny kolor; `false` przy błędzie (z powiadomieniem) lub braku konta. */
   addCustomAccent: (color: string) => Promise<boolean>;
+  /** Zmienia własny kolor o danym id; `false` przy błędzie (z powiadomieniem) lub braku konta. */
   updateCustomAccent: (id: number, color: string) => Promise<boolean>;
+  /** Waluta rozliczeniowa. */
   defaultCurrency: Currency;
+  /** Ustawia walutę rozliczeniową (aktualizacja interfejsu z niskim priorytetem) i zapisuje ją. */
   setDefaultCurrency: (currency: Currency) => Promise<void>;
+  /** Tryb „Wiele walut” — kwoty w walutach źródłowych. */
   multiCurrency: boolean;
+  /** Włącza lub wyłącza tryb „Wiele walut”; wyłączenie ustawia też walutę rozliczeniową na PLN. */
   setMultiCurrency: (enabled: boolean) => Promise<void>;
+  /** Preferowany rozmiar czcionki. */
   fontSizePreference: FontSizePreference;
+  /** Mnożnik czcionek wynikający z preferencji (0.88 / 1 / 1.14). */
   fontSizeScale: number;
+  /** Ustawia rozmiar czcionki (aktualizacja interfejsu z niskim priorytetem) i zapisuje go. */
   setFontSizePreference: (size: FontSizePreference) => Promise<void>;
+  /** Wszystkie konta zapisane na urządzeniu. */
   accounts: UserProfile[];
+  /** Aktywne konto (`null` przed wczytaniem danych). */
   activeAccount: UserProfile | null;
+  /**
+   * Przełącza aktywne konto: zapamiętuje jego id, ustawia profil i wczytuje jego
+   * własne kolory. Ustawienia wyglądu, walut i powiadomień nie są przy tym
+   * wczytywane ponownie. Nieistniejące konto — nic się nie dzieje.
+   */
   switchAccount: (userId: number) => Promise<void>;
+  /** Tworzy konto i od razu je aktywuje; przy błędzie pokazuje powiadomienie i zwraca `null`. */
   addAccount: (input: {
     username: string;
     avatarUri?: string | null;
   }) => Promise<UserProfile | null>;
+  /**
+   * Aktualizuje profil aktywnego konta. Zwraca `true` po sukcesie, `false` przy
+   * błędzie (z powiadomieniem) i `undefined`, gdy nie ma aktywnego konta.
+   */
   updateAccount: (
     changes: Parameters<typeof updateUserProfile>[0],
   ) => Promise<boolean | undefined>;
+  /** Wczytuje ponownie listę kont z bazy. */
   reloadAccounts: () => Promise<void>;
+  /** Główny przełącznik powiadomień. */
   notificationsEnabled: boolean;
+  /** Włącza lub wyłącza powiadomienia i zapisuje ustawienie. */
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
+  /** Włączone kategorie powiadomień. */
   notificationCategories: NotificationCategories;
+  /** Włącza lub wyłącza jedną kategorię powiadomień i zapisuje ustawienie. */
   setNotificationCategory: (
     key: NotificationCategoryKey,
     enabled: boolean,
   ) => Promise<void>;
+  /** Czy włączono logowanie biometryczne. */
   biometricEnabled: boolean;
+  /** Włącza lub wyłącza logowanie biometryczne i zapisuje ustawienie. */
   setBiometricEnabled: (enabled: boolean) => Promise<void>;
+  /** Czy użytkownik jest zalogowany (do czasu wczytania stanu — `true`). */
   loggedIn: boolean;
+  /** Oznacza użytkownika jako zalogowanego (zapamiętywane między uruchomieniami). */
   login: () => Promise<void>;
+  /** Wylogowuje użytkownika (zapamiętywane między uruchomieniami). */
   logout: () => Promise<void>;
+  /** Kursy walut względem PLN (zapasowe do czasu pobrania). */
   rates: ExchangeRates;
+  /** Czas ostatniego udanego pobrania kursów (ms od epoki) lub `null`. */
   ratesUpdatedAt: number | null;
+  /** Czy trwa pobieranie kursów. */
   ratesLoading: boolean;
+  /**
+   * Pobiera aktualne kursy EUR i USD z api.frankfurter.dev. Przy błędzie
+   * ustawia kursy zapasowe. Gdy wywołania się nakładają, liczy się tylko ostatnie.
+   */
   refreshRates: () => Promise<void>;
+  /** Odstępy (px). */
   spacing: typeof themeBase.spacing;
+  /** Bazowe rozmiary czcionek (px, przed skalowaniem). */
   fontSize: typeof themeBase.fontSize;
+  /** Promienie zaokrągleń (px). */
   radius: typeof themeBase.radius;
 };
 
+/** Kontekst motywu; `null` poza {@link ThemeProvider}. */
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/**
+ * Dostawca motywu, ustawień i kont użytkownika.
+ *
+ * Przy montowaniu wczytuje z bazy konta, aktywne konto (zapamiętane albo
+ * pierwsze z listy), stan zalogowania, ustawienia, ustawienia powiadomień
+ * i własne kolory akcentu, a równolegle pobiera kursy walut. Aktywny kolor
+ * własny wybrany przed wprowadzeniem listy własnych kolorów jest do niej
+ * dopisywany, aby nie zniknął. Błąd wczytywania jest tylko logowany —
+ * aplikacja działa wtedy na wartościach domyślnych.
+ *
+ * @param props Właściwości komponentu; `children` — drzewo aplikacji, które ma dostęp do motywu.
+ */
 export function ThemeProvider({ children }: PropsWithChildren) {
   const [mode, setModeState] = useState<ThemeMode>("dark");
   const [accent, setAccentState] = useState<ThemeAccent>(DEFAULT_ACCENT);
@@ -719,6 +846,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   );
 }
 
+/** Stałe wymiary motywu: odstępy, rozmiary czcionek i promienie zaokrągleń. */
 const themeBase = {
   spacing: {
     xs: 4,
@@ -743,6 +871,13 @@ const themeBase = {
   },
 };
 
+/**
+ * Statyczny zestaw stałych motywu, dostępny bez kontekstu.
+ *
+ * **Uwaga:** `colors` łączy obie palety, a jasna nadpisuje ciemną, więc
+ * w praktyce zawiera kolory trybu jasnego i nie reaguje na ustawienia
+ * użytkownika. W komponentach używaj {@link useTheme}.
+ */
 export const theme = {
   ...themeBase,
   colors: {
@@ -751,6 +886,16 @@ export const theme = {
   },
 };
 
+/**
+ * Zwraca motyw, ustawienia i dane kont z kontekstu.
+ *
+ * @returns Wartość kontekstu motywu (patrz `ThemeContextValue`).
+ * @throws {Error} Gdy hook użyto poza {@link ThemeProvider}.
+ *
+ * @example
+ * const { colors, spacing } = useTheme();
+ * return <View style={{ backgroundColor: colors.surface, padding: spacing.md }} />;
+ */
 export function useTheme() {
   const theme = useContext(ThemeContext);
   if (!theme) {
@@ -759,6 +904,12 @@ export function useTheme() {
   return theme;
 }
 
+/**
+ * Sprawdza, czy tekst jest obsługiwaną walutą rozliczeniową (strażnik typu).
+ *
+ * @param value Sprawdzany tekst.
+ * @returns `true` dla `PLN`, `EUR` i `USD`.
+ */
 function isCurrency(value: string): value is Currency {
   return value === "PLN" || value === "EUR" || value === "USD";
 }

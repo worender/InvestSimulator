@@ -1,11 +1,30 @@
+/**
+ * Zakładki ekranu rynku i stałe listy instrumentów.
+ *
+ * Zakładki dzielą się na:
+ * - **stałe** (`pl`, `world`, `cfd`, `crypto`) — listy instrumentów zdefiniowane
+ *   w tym module ({@link FIXED_MARKET_INSTRUMENTS}),
+ * - **dynamiczne** (`gainers`, `active`) — listy pobierane z Yahoo Finance,
+ * - `watchlist` — instrumenty obserwowane przez użytkownika.
+ *
+ * @module src/marketTabs
+ */
+
+/** Instrument na liście rynku. */
 export type MarketInstrument = {
+  /** Symbol (ticker); dla GPW bez sufiksu `.WA`, np. `"PKO"`. */
   symbol: string;
+  /** Nazwa wyświetlana. */
   name: string;
+  /** Kod giełdy lub rynku, np. `"GPW"`, `"NASDAQ"`, `"FOREX"`. */
   exchange: string;
+  /** Pełna nazwa giełdy do wyświetlania. */
   exchangeName?: string;
+  /** Waluta notowań; gdy brak — wyznaczana przez `resolveCurrency`. */
   currency?: string;
 };
 
+/** Klucz zakładki ekranu rynku. */
 export type MarketTabKey =
   | "watchlist"
   | "pl"
@@ -15,9 +34,12 @@ export type MarketTabKey =
   | "gainers"
   | "active";
 
+/** Zakładki ze stałą listą instrumentów. */
 export type FixedMarketTabKey = "pl" | "world" | "cfd" | "crypto";
+/** Zakładki z listą pobieraną z Yahoo Finance (zyskujące, najaktywniejsze). */
 export type DynamicMarketTabKey = "gainers" | "active";
 
+/** Zakładki ekranu rynku w kolejności wyświetlania, z etykietami. */
 export const MARKET_TABS = [
   { key: "watchlist", label: "Obserwowane" },
   { key: "pl", label: "Polska" },
@@ -28,6 +50,7 @@ export const MARKET_TABS = [
   { key: "active", label: "Najaktywniejsze" },
 ] as const satisfies readonly { key: MarketTabKey; label: string }[];
 
+/** Nagłówek sekcji listy instrumentów dla każdej zakładki. */
 export const MARKET_SECTION_LABELS: Record<MarketTabKey, string> = {
   watchlist: "Obserwowane instrumenty",
   pl: "Polska · WIG20",
@@ -38,14 +61,26 @@ export const MARKET_SECTION_LABELS: Record<MarketTabKey, string> = {
   active: "Najaktywniejsze · Yahoo Finance",
 };
 
+/**
+ * Sprawdza, czy zakładka ma stałą listę instrumentów (strażnik typu).
+ *
+ * @param tab Klucz zakładki.
+ * @returns `true` dla `pl`, `world`, `cfd` i `crypto`.
+ */
 export const isFixedMarketTab = (tab: MarketTabKey): tab is FixedMarketTabKey =>
   tab === "pl" || tab === "world" || tab === "cfd" || tab === "crypto";
 
+/**
+ * Sprawdza, czy zakładka ma listę pobieraną z Yahoo Finance (strażnik typu).
+ *
+ * @param tab Klucz zakładki.
+ * @returns `true` dla `gainers` i `active`.
+ */
 export const isDynamicMarketTab = (
   tab: MarketTabKey,
 ): tab is DynamicMarketTabKey => tab === "gainers" || tab === "active";
 
-// Polska: aktualny skład WIG20
+/** Polska: aktualny skład WIG20. */
 export const POLISH_INSTRUMENTS: MarketInstrument[] = [
   {
     symbol: "PKO",
@@ -189,7 +224,7 @@ export const POLISH_INSTRUMENTS: MarketInstrument[] = [
   },
 ];
 
-// Świat: najbardziej znaczące spółki z głównych rynków
+/** Świat: najbardziej znaczące spółki z głównych rynków. */
 export const WORLD_INSTRUMENTS: MarketInstrument[] = [
   {
     symbol: "AAPL",
@@ -333,7 +368,7 @@ export const WORLD_INSTRUMENTS: MarketInstrument[] = [
   },
 ];
 
-// CFD: 12 najważniejszych indeksów, surowców i par walutowych
+/** CFD: 12 najważniejszych indeksów, surowców i par walutowych. */
 export const CFD_INSTRUMENTS: MarketInstrument[] = [
   {
     symbol: "^GSPC",
@@ -421,7 +456,7 @@ export const CFD_INSTRUMENTS: MarketInstrument[] = [
   },
 ];
 
-// Krypto: 12 najważniejszych kryptowalut
+/** Krypto: 12 najważniejszych kryptowalut. */
 export const CRYPTO_INSTRUMENTS: MarketInstrument[] = [
   {
     symbol: "BTC-USD",
@@ -509,6 +544,7 @@ export const CRYPTO_INSTRUMENTS: MarketInstrument[] = [
   },
 ];
 
+/** Lista instrumentów dla każdej zakładki stałej. */
 export const FIXED_MARKET_INSTRUMENTS: Record<
   FixedMarketTabKey,
   MarketInstrument[]
