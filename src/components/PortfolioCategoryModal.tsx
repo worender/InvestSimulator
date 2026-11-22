@@ -14,17 +14,17 @@ import Reanimated, {
   withTiming,
 } from "react-native-reanimated";
 import {
-  MockPortfolio,
-  PortfolioAssetItem,
-  PortfolioCategory,
-  TransactionHistoryItem,
-} from "../database/mockPortfolioData";
+  type Portfolio,
+  type PortfolioAssetItem,
+  type PortfolioCategory,
+  type TransactionHistoryItem,
+} from "../portfolio/types";
 import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 import { SettingsSheet } from "./settings/SettingsSheet";
 
 interface PortfolioCategoryModalProps {
-  portfolio: MockPortfolio;
+  portfolio: Portfolio;
   category: PortfolioCategory;
   onClose: () => void;
   onOpenAsset: (asset: PortfolioAssetItem) => void;
@@ -330,9 +330,9 @@ export function PortfolioCategoryModal({
     })} ${symbol}`;
   };
 
-  const investedValue = category.items.reduce(
-    (sum, asset) => sum + asset.ownedQuantity * asset.averageBuyPrice,
+  const investedValue = Math.max(
     0,
+    category.totalValue - category.profitCurrency,
   );
 
   return (

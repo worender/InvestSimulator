@@ -78,7 +78,7 @@ export function SidebarTabBar({ state, descriptors, navigateToTab, compact = fal
 
       {!compact && (
         <View style={[styles.account, { borderColor: colors.border }]}>
-          <Text style={[styles.accountLabel, { color: colors.textMuted }]}>Konto demo</Text>
+          <Text style={[styles.accountLabel, { color: colors.textMuted }]}>Konto</Text>
           <Text style={[styles.accountBalance, { color: colors.text }]}>
             {wallet
               ? `${display

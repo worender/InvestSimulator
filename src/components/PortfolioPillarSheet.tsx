@@ -1,74 +1,20 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import type { AssetCategoryKey } from "../database/mockPortfolioData";
+import {
+  PORTFOLIO_PILLARS,
+  type PortfolioPillarKey,
+} from "../portfolio/pillars";
 import { useTheme } from "../theme";
 import { SettingsSheet } from "./settings/SettingsSheet";
 
-export type PortfolioPillarKey = "stocks" | "bonds" | "cfd" | "crypto" | "etf";
+export type { PortfolioPillarKey };
+export { PORTFOLIO_PILLARS };
 
 interface PortfolioPillarSheetProps {
   selectedKeys: PortfolioPillarKey[];
   onClose: () => void;
   onSelect: (key: PortfolioPillarKey) => void;
 }
-
-interface PillarOption {
-  key: PortfolioPillarKey;
-  title: string;
-  description: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-  pastelLight: string;
-  pastelDark: string;
-}
-
-export const PORTFOLIO_PILLARS: PillarOption[] = [
-  {
-    key: "stocks",
-    title: "Akcje",
-    description: "Udziały w spółkach notowanych na giełdach.",
-    icon: "trending-up-outline",
-    color: "#3b82f6",
-    pastelLight: "rgba(219, 234, 254, 0.75)",
-    pastelDark: "rgba(30, 58, 138, 0.40)",
-  },
-  {
-    key: "bonds",
-    title: "Obligacje",
-    description: "Papiery dłużne emitowane przez państwa i firmy.",
-    icon: "shield-checkmark-outline",
-    color: "#f59e0b",
-    pastelLight: "rgba(254, 243, 199, 0.75)",
-    pastelDark: "rgba(146, 64, 14, 0.35)",
-  },
-  {
-    key: "cfd",
-    title: "CFD",
-    description: "Kontrakty na różnicę kursu instrumentów bazowych.",
-    icon: "swap-horizontal-outline",
-    color: "#8b5cf6",
-    pastelLight: "rgba(237, 233, 254, 0.80)",
-    pastelDark: "rgba(91, 33, 182, 0.38)",
-  },
-  {
-    key: "crypto",
-    title: "Krypto",
-    description: "Cyfrowe aktywa oparte na technologii blockchain.",
-    icon: "logo-bitcoin",
-    color: "#f97316",
-    pastelLight: "rgba(255, 237, 213, 0.80)",
-    pastelDark: "rgba(194, 65, 12, 0.38)",
-  },
-  {
-    key: "etf",
-    title: "ETF",
-    description: "Fundusze ETF odwzorowujące indeksy i koszyki aktywów.",
-    icon: "pie-chart-outline",
-    color: "#10b981",
-    pastelLight: "rgba(209, 250, 229, 0.75)",
-    pastelDark: "rgba(6, 78, 59, 0.40)",
-  },
-];
 
 export function PortfolioPillarSheet({
   selectedKeys,
@@ -147,12 +93,6 @@ export function PortfolioPillarSheet({
       </View>
     </SettingsSheet>
   );
-}
-
-export function pillarKeyToAssetCategoryKey(
-  key: PortfolioPillarKey,
-): AssetCategoryKey {
-  return key;
 }
 
 const styles = StyleSheet.create({

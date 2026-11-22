@@ -1,5 +1,6 @@
 import { Platform } from "expo";
 import * as SQLite from "expo-sqlite";
+import { FX_FEE_PERCENT } from "../currency";
 import { MAX_CUSTOM_ACCENTS, normalizeHexColor } from "../settings/color";
 import {
   normalizeAndValidateSymbol,
@@ -43,6 +44,8 @@ export async function getDatabase() {
 
 export type TransactionType = "BUY" | "SELL";
 
+export type AssetCategoryKind = "stocks" | "bonds" | "cfd" | "crypto" | "etf";
+
 export interface UserProfile {
   id: number;
   username: string;
@@ -60,6 +63,13 @@ export interface Transaction {
   price: number;
   created_at: number;
   id_wallet: number;
+  name: string | null;
+  exchange: string | null;
+  currency: string | null;
+  fx_rate: number | null;
+  fee: number | null;
+  total_wallet: number | null;
+  category_id: number | null;
 }
 
 export interface PortfolioItem {
@@ -81,6 +91,7 @@ export interface AssetCategory {
   id: number;
   name: string;
   wallet_id: number;
+  kind: AssetCategoryKind | null;
 }
 
 export interface FavoriteAsset {
@@ -99,6 +110,10 @@ export interface Position {
   remaining_quantity: number;
   buy_price: number;
   opened_at: number;
+  name: string | null;
+  exchange: string | null;
+  currency: string | null;
+  buy_price_wallet: number | null;
 }
 
 export interface PortfolioSnapshot {
@@ -117,6 +132,7 @@ export interface CreateWalletInput {
 
 export interface CreateCategoryInput {
   name: string;
+  kind?: AssetCategoryKind;
 }
 
 export interface CreatePositionInput {
@@ -125,6 +141,10 @@ export interface CreatePositionInput {
   quantity: number;
   buy_price: number;
   opened_at?: number;
+  name?: string;
+  exchange?: string;
+  currency?: string;
+  buy_price_wallet?: number;
 }
 
 export interface UpdatePositionInput {
@@ -145,6 +165,10 @@ export interface CreateTransactionInput {
   createdAt?: number;
   id_wallet: number;
   category_id?: number;
+  name?: string;
+  exchange?: string;
+  currency?: string;
+  fxRate?: number;
 }
 
 export interface Settings {
@@ -217,6 +241,7 @@ export async function initializeDatabase(): Promise<void> {
           id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
           name TEXT,
           wallet_id INTEGER,
+          kind TEXT,
           FOREIGN KEY (wallet_id) REFERENCES wallet (id)
         );
 
@@ -228,6 +253,10 @@ export async function initializeDatabase(): Promise<void> {
           remaining_quantity REAL NOT NULL, -- Ile z tej paczki zostało
           buy_price REAL NOT NULL,          -- Dokładna cena zakupu
           opened_at INTEGER NOT NULL,
+          name TEXT,
+          exchange TEXT,
+          currency TEXT,
+          buy_price_wallet REAL,
           FOREIGN KEY (category_id) REFERENCES category_assets (id)
         );
 
@@ -249,6 +278,13 @@ export async function initializeDatabase(): Promise<void> {
           price REAL NOT NULL,
           created_at INTEGER NOT NULL,
           id_wallet INTEGER,
+          name TEXT,
+          exchange TEXT,
+          currency TEXT,
+          fx_rate REAL,
+          fee REAL,
+          total_wallet REAL,
+          category_id INTEGER,
           FOREIGN KEY (id_wallet) REFERENCES wallet (id)
         );
 
@@ -343,11 +379,59 @@ export async function initializeDatabase(): Promise<void> {
           FOREIGN KEY (saved_article_id) REFERENCES article (id)
         );
   `);
+    await migrateDatabase(database);
     await seedDefaultData(database);
     await syncEducationalArticles(database);
   })();
 
   return initializationPromise;
+}
+
+async function ensureColumn(
+  database: SQLite.SQLiteDatabase,
+  table: string,
+  column: string,
+  definition: string,
+): Promise<void> {
+  const columns = await database.getAllAsync<{ name: string }>(
+    `PRAGMA table_info(${table})`,
+  );
+  if (columns.some((item) => item.name === column)) return;
+  await database.execAsync(
+    `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
+  );
+}
+
+async function migrateDatabase(database: SQLite.SQLiteDatabase): Promise<void> {
+  await ensureColumn(database, "category_assets", "kind", "TEXT");
+  await ensureColumn(database, "positions", "name", "TEXT");
+  await ensureColumn(database, "positions", "exchange", "TEXT");
+  await ensureColumn(database, "positions", "currency", "TEXT");
+  await ensureColumn(database, "positions", "buy_price_wallet", "REAL");
+  await ensureColumn(database, "transactions", "name", "TEXT");
+  await ensureColumn(database, "transactions", "exchange", "TEXT");
+  await ensureColumn(database, "transactions", "currency", "TEXT");
+  await ensureColumn(database, "transactions", "fx_rate", "REAL");
+  await ensureColumn(database, "transactions", "fee", "REAL");
+  await ensureColumn(database, "transactions", "total_wallet", "REAL");
+  await ensureColumn(database, "transactions", "category_id", "INTEGER");
+}
+
+async function ensureDefaultWallet(
+  database: SQLite.SQLiteDatabase,
+  userId: number,
+): Promise<void> {
+  const existing = await database.getFirstAsync<{ id: number }>(
+    `SELECT id FROM wallet WHERE id_user = ? LIMIT 1`,
+    userId,
+  );
+  if (existing) return;
+
+  await database.runAsync(
+    `INSERT INTO wallet (id_user, balance, currency, name)
+     VALUES (?, 10000, 'PLN', 'Główny portfel')`,
+    userId,
+  );
 }
 
 async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
@@ -358,11 +442,14 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
     Date.now(),
   );
 
-  await database.runAsync(
-    `INSERT OR IGNORE INTO wallet
-      (id_user, balance, currency, name)
-     VALUES (1, 10000, 'PLN', 'Główny portfel')`,
+  await ensureDefaultWallet(database, 1);
+
+  const users = await database.getAllAsync<{ id: number }>(
+    `SELECT id FROM users`,
   );
+  for (const user of users) {
+    await ensureDefaultWallet(database, user.id);
+  }
 
   await database.runAsync(
     `INSERT OR IGNORE INTO settings
@@ -565,15 +652,7 @@ export async function createUserProfile(input: {
 
     userId = result.lastInsertRowId;
 
-    await database.runAsync(
-      `INSERT INTO wallet (id_user, balance, name, currency, icon)
-       VALUES (?, ?, ?, ?, ?)`,
-      userId,
-      10000,
-      "Główny portfel",
-      "PLN",
-      "wallet-outline",
-    );
+    await ensureDefaultWallet(database, userId);
 
     await database.runAsync(
       `INSERT INTO settings
@@ -964,6 +1043,122 @@ export async function updateWallet(
   });
 }
 
+export async function depositToWallet(
+  walletId: number,
+  userId: number,
+  amount: number,
+): Promise<void> {
+  const value = validateNumberReal(amount);
+  if (value <= 0) throw new Error("Kwota musi być większa od zera");
+  await changeWalletBalance(walletId, userId, value);
+}
+
+export async function withdrawFromWallet(
+  walletId: number,
+  userId: number,
+  amount: number,
+): Promise<void> {
+  const value = validateNumberReal(amount);
+  if (value <= 0) throw new Error("Kwota musi być większa od zera");
+  await changeWalletBalance(walletId, userId, -value);
+}
+
+export async function transferBetweenWallets(
+  userId: number,
+  fromWalletId: number,
+  toWalletId: number,
+  amount: number,
+  targetAmount: number,
+): Promise<void> {
+  validateUserId(userId);
+  validateWalletId(fromWalletId);
+  validateWalletId(toWalletId);
+
+  if (fromWalletId === toWalletId) {
+    throw new Error("Nie można przelać środków do tego samego portfela");
+  }
+
+  const sourceAmount = validateNumberReal(amount);
+  const destinationAmount = validateNumberReal(targetAmount);
+
+  if (sourceAmount <= 0 || destinationAmount <= 0) {
+    throw new Error("Kwota musi być większa od zera");
+  }
+
+  const database = await getReadyDatabase();
+
+  await database.withTransactionAsync(async () => {
+    const source = await database.getFirstAsync<Wallet>(
+      `SELECT * FROM wallet WHERE id = ? AND id_user = ?`,
+      fromWalletId,
+      userId,
+    );
+    const target = await database.getFirstAsync<Wallet>(
+      `SELECT * FROM wallet WHERE id = ? AND id_user = ?`,
+      toWalletId,
+      userId,
+    );
+
+    if (!source || !target) {
+      throw new Error("Nie znaleziono portfela");
+    }
+
+    if (source.balance < sourceAmount) {
+      throw new Error("Niewystarczające środki w portfelu");
+    }
+
+    await database.runAsync(
+      `UPDATE wallet SET balance = balance - ? WHERE id = ? AND id_user = ?`,
+      sourceAmount,
+      fromWalletId,
+      userId,
+    );
+
+    await database.runAsync(
+      `UPDATE wallet SET balance = balance + ? WHERE id = ? AND id_user = ?`,
+      destinationAmount,
+      toWalletId,
+      userId,
+    );
+  });
+}
+
+async function changeWalletBalance(
+  walletId: number,
+  userId: number,
+  delta: number,
+): Promise<void> {
+  validateWalletId(walletId);
+  validateUserId(userId);
+
+  const database = await getReadyDatabase();
+
+  await database.withTransactionAsync(async () => {
+    const wallet = await database.getFirstAsync<Wallet>(
+      `SELECT * FROM wallet WHERE id = ? AND id_user = ?`,
+      walletId,
+      userId,
+    );
+
+    if (!wallet) {
+      throw new Error("Nie znaleziono portfela");
+    }
+
+    const balance = wallet.balance + delta;
+
+    if (balance < 0) {
+      throw new Error("Niewystarczające środki w portfelu");
+    }
+
+    await database.runAsync(
+      `UPDATE wallet SET balance = ? WHERE id = ? AND id_user = ?`,
+      balance,
+      walletId,
+      userId,
+    );
+  });
+}
+
 export async function createWallet(
   userId: number,
   data: CreateWalletInput,
@@ -978,6 +1173,15 @@ export async function createWallet(
   validateNumberReal(balance);
 
   const database = await getReadyDatabase();
+
+  const walletCount = await database.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM wallet WHERE id_user = ?`,
+    userId,
+  );
+
+  if ((walletCount?.count ?? 0) >= 5) {
+    throw new Error("Możesz mieć maksymalnie 5 portfeli");
+  }
 
   const result = await database.runAsync(
     `INSERT INTO wallet
@@ -1017,6 +1221,15 @@ export async function deleteWallet(
 
     if (!wallet) {
       throw new Error("Nie znaleziono portfela");
+    }
+
+    const walletCount = await database.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM wallet WHERE id_user = ?`,
+      userId,
+    );
+
+    if ((walletCount?.count ?? 0) <= 1) {
+      throw new Error("Konto musi mieć co najmniej jedno portfolio");
     }
 
     await database.runAsync(
@@ -1081,6 +1294,18 @@ export async function createCategory(
     throw new Error("Nieprawidłowa nazwa kategorii");
   }
 
+  const kind = data.kind ?? null;
+  if (
+    kind !== null &&
+    kind !== "stocks" &&
+    kind !== "bonds" &&
+    kind !== "cfd" &&
+    kind !== "crypto" &&
+    kind !== "etf"
+  ) {
+    throw new Error("Nieprawidłowy rodzaj filaru");
+  }
+
   const wallet = await databaseWalletExists(walletId);
 
   if (!wallet) {
@@ -1090,10 +1315,11 @@ export async function createCategory(
   const database = await getReadyDatabase();
 
   const result = await database.runAsync(
-    `INSERT INTO category_assets (name, wallet_id)
-     VALUES (?, ?)`,
+    `INSERT INTO category_assets (name, wallet_id, kind)
+     VALUES (?, ?, ?)`,
     name,
     walletId,
+    kind,
   );
 
   const category = await database.getFirstAsync<AssetCategory>(
@@ -1134,7 +1360,11 @@ export async function getPositions(walletId: number): Promise<Position[]> {
        p.initial_quantity,
        p.remaining_quantity,
        p.buy_price,
-       p.opened_at
+       p.opened_at,
+       p.name,
+       p.exchange,
+       p.currency,
+       p.buy_price_wallet
      FROM positions p
      INNER JOIN category_assets c
        ON c.id = p.category_id
@@ -1175,14 +1405,18 @@ export async function createPosition(
   const result = await database.runAsync(
     `INSERT INTO positions
      (category_id, symbol, initial_quantity, remaining_quantity,
-      buy_price, opened_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+      buy_price, opened_at, name, exchange, currency, buy_price_wallet)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     categoryId,
     symbol,
     quantity,
     quantity,
     buyPrice,
     openedAt,
+    data.name ?? null,
+    data.exchange ?? null,
+    data.currency ?? null,
+    data.buy_price_wallet ?? null,
   );
 
   const position = await database.getFirstAsync<Position>(
@@ -1287,7 +1521,17 @@ export async function createTransaction(
       throw new Error("Nie znaleziono portfela");
     }
 
-    const totalValue = quantity * price;
+    const instrumentCurrency =
+      input.currency?.trim().toUpperCase() || wallet.currency;
+    const fxRate = input.fxRate && input.fxRate > 0 ? input.fxRate : 1;
+    const mismatch = instrumentCurrency !== wallet.currency;
+    const grossValue = quantity * price;
+    const convertedGross = grossValue * fxRate;
+    const totalValue = mismatch
+      ? convertedGross * (1 - FX_FEE_PERCENT / 100)
+      : convertedGross;
+    const fee = convertedGross - totalValue;
+    const buyPriceWallet = totalValue / quantity;
 
     if (input.type === "BUY") {
       if (wallet.balance < totalValue) {
@@ -1320,14 +1564,18 @@ export async function createTransaction(
       await database.runAsync(
         `INSERT INTO positions
          (category_id, symbol, initial_quantity, remaining_quantity,
-          buy_price, opened_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+          buy_price, opened_at, name, exchange, currency, buy_price_wallet)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         input.category_id,
         symbol,
         quantity,
         quantity,
         price,
         createdAt,
+        input.name ?? null,
+        input.exchange ?? null,
+        instrumentCurrency,
+        buyPriceWallet,
       );
 
       await database.runAsync(
@@ -1394,14 +1642,22 @@ export async function createTransaction(
 
     const result = await database.runAsync(
       `INSERT INTO transactions
-       (symbol, type, quantity, price, created_at, id_wallet)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       (symbol, type, quantity, price, created_at, id_wallet, name, exchange,
+        currency, fx_rate, fee, total_wallet, category_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       symbol,
       input.type,
       quantity,
       price,
       createdAt,
       input.id_wallet,
+      input.name ?? null,
+      input.exchange ?? null,
+      instrumentCurrency,
+      fxRate,
+      fee,
+      totalValue,
+      input.category_id ?? null,
     );
 
     transactionId = result.lastInsertRowId;

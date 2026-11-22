@@ -1,6 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   StyleSheet,
@@ -8,7 +9,12 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { currencySymbol } from "../currency";
+import {
+  currencySymbol,
+  formatAmountInput,
+  FX_FEE_PERCENT,
+  parseAmountInput,
+} from "../currency";
 import type { Currency } from "../theme";
 import { useTheme } from "../theme";
 import { SettingsSheet } from "./settings/SettingsSheet";
@@ -35,11 +41,10 @@ interface PortfolioCashSheetProps {
     sourceCurrency: Currency;
     targetPortfolioId?: string;
     targetAmount?: number;
-  }) => void;
+  }) => Promise<boolean>;
 }
 
 const CURRENCIES: Currency[] = ["PLN", "EUR", "USD"];
-const FX_FEE_PERCENT = 1.44;
 
 export function PortfolioCashSheet({
   portfolioId,
@@ -56,8 +61,9 @@ export function PortfolioCashSheet({
   const [sourceCurrency, setSourceCurrency] = useState<Currency>("PLN");
   const [targetPortfolioId, setTargetPortfolioId] = useState("");
   const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const numericAmount = Number(amount.replace(",", ".")) || 0;
+  const numericAmount = parseAmountInput(amount);
   const activeCurrency = portfolioCurrency.toUpperCase() as Currency;
   const effectiveSourceCurrency =
     operation === "transfer" ? activeCurrency : sourceCurrency;
@@ -102,8 +108,10 @@ export function PortfolioCashSheet({
       maximumFractionDigits: 2,
     })} ${currencySymbol(currency)}`;
 
-  const confirmOperation = () => {
-    onConfirm({
+  const confirmOperation = async () => {
+    if (busy) return;
+    setBusy(true);
+    const succeeded = await onConfirm({
       operation,
       amount:
         operation === "deposit"
@@ -117,6 +125,12 @@ export function PortfolioCashSheet({
       targetAmount:
         operation === "transfer" ? calculated.net : undefined,
     });
+    setBusy(false);
+    return succeeded;
+  };
+
+  const openConfirmation = () => {
+    setConfirmationOpen(true);
   };
 
   const mismatch = effectiveSourceCurrency !== targetCurrency;
@@ -225,7 +239,7 @@ export function PortfolioCashSheet({
           <View style={styles.amountValue}>
             <TextInput
               value={amount}
-              onChangeText={setAmount}
+              onChangeText={(value) => setAmount(formatAmountInput(value))}
               placeholder="0"
               keyboardType="decimal-pad"
               placeholderTextColor={colors.textMuted}
@@ -310,7 +324,7 @@ export function PortfolioCashSheet({
         ) : null}
 
         <Pressable
-          onPress={() => setConfirmationOpen(true)}
+          onPress={() => void openConfirmation()}
           disabled={!canContinue}
           style={({ pressed }) => [
             styles.submit,
@@ -328,29 +342,43 @@ export function PortfolioCashSheet({
         visible={confirmationOpen}
         transparent
         animationType="fade"
+        statusBarTranslucent
+        presentationStyle="overFullScreen"
+        navigationBarTranslucent
         onRequestClose={() => setConfirmationOpen(false)}
       >
-        <View style={[styles.confirmBackdrop, { backgroundColor: colors.backdrop }]}>
+        <View
+          style={[
+            styles.confirmBackdrop,
+            {
+              backgroundColor:
+                mode === "dark"
+                  ? "rgba(13, 17, 23, 0.82)"
+                  : "rgba(31, 35, 40, 0.58)",
+            },
+          ]}
+        >
           <View
             style={[
               styles.confirmCard,
               {
-                backgroundColor: mode === "dark" ? colors.surface : colors.background,
-                borderColor: colors.border,
+                backgroundColor: colors.surface,
+                shadowColor: "#000",
               },
             ]}
           >
-            <View
-              style={[
-                styles.confirmIcon,
-                {
-                  backgroundColor:
-                    operation === "deposit"
-                      ? colors.positiveGlass
-                      : colors.accentGlass,
-                },
-              ]}
-            >
+            <View style={styles.confirmHeader}>
+              <View
+                style={[
+                  styles.confirmIcon,
+                  {
+                    backgroundColor:
+                      operation === "deposit"
+                        ? colors.positiveGlass
+                        : colors.accentGlass,
+                  },
+                ]}
+              >
               <Ionicons
                 name={
                   operation === "deposit"
@@ -362,30 +390,99 @@ export function PortfolioCashSheet({
                 size={28}
                 color={colors.accent}
               />
+              </View>
+              <Text style={[styles.confirmTitle, { color: colors.text }]}>
+                {operation === "deposit"
+                  ? "Potwierdź wpłatę"
+                  : operation === "withdraw"
+                    ? "Potwierdź wypłatę"
+                    : "Potwierdź transfer"}
+              </Text>
             </View>
 
-            <Text style={[styles.confirmTitle, { color: colors.text }]}>
-              Potwierdź{" "}
-              {operation === "deposit"
-                ? "wpłatę"
-                : operation === "withdraw"
-                  ? "wypłatę"
-                  : "transfer"}
-            </Text>
-            <Text style={[styles.confirmText, { color: colors.textMuted }]}>
-              Portfel: {portfolioName}{"\n"}
-              Kwota: {format(numericAmount, effectiveSourceCurrency)}
-              {operation === "transfer" && targetPortfolio
-                ? `\nCel: ${targetPortfolio.name}`
-                : ""}
-            </Text>
+            <View style={styles.confirmMetaRow}>
+              <View style={styles.confirmMetaColumn}>
+                <Text style={[styles.confirmMetaLabel, { color: colors.textMuted }]}>
+                  PORTFEL
+                </Text>
+                <Text style={[styles.confirmMetaValue, { color: colors.text }]}>
+                  {portfolioName}
+                </Text>
+              </View>
+              <View style={styles.confirmMetaColumn}>
+                <Text style={[styles.confirmMetaLabel, { color: colors.textMuted }]}>
+                  {operation === "transfer" ? "CEL" : "WALUTA"}
+                </Text>
+                <Text style={[styles.confirmMetaValue, { color: colors.text }]}>
+                  {operation === "transfer"
+                    ? targetPortfolio?.name ?? "-"
+                    : effectiveSourceCurrency}
+                </Text>
+              </View>
+            </View>
+
             {mismatch ? (
-              <Text style={[styles.confirmText, { color: colors.textMuted }]}>
-                Przewalutowanie {effectiveSourceCurrency} → {targetCurrency}{"\n"}
-                Po opłacie 1,44%:{" "}
-                {format(calculated.net, targetCurrency)}
-              </Text>
+              <View style={styles.confirmMetaRow}>
+                <View style={styles.confirmMetaColumn}>
+                  <Text style={[styles.confirmMetaLabel, { color: colors.textMuted }]}>
+                    PRZEWALUTOWANIE
+                  </Text>
+                  <Text style={[styles.confirmMetaValue, { color: colors.text }]}>
+                    {effectiveSourceCurrency} → {targetCurrency}
+                  </Text>
+                </View>
+                <View style={styles.confirmMetaColumn}>
+                  <Text style={[styles.confirmMetaLabel, { color: colors.textMuted }]}>
+                    OPŁATA
+                  </Text>
+                  <Text style={[styles.confirmMetaValue, { color: colors.text }]}>
+                    {FX_FEE_PERCENT.toLocaleString("pl-PL")}%
+                  </Text>
+                </View>
+              </View>
             ) : null}
+
+            <View style={styles.confirmResultRow}>
+              <View style={styles.confirmResultColumn}>
+                <Text style={[styles.confirmMetaLabel, { color: colors.textMuted }]}>
+                  {operation === "deposit"
+                    ? "WPŁATA"
+                    : operation === "withdraw"
+                      ? "WYPŁATA"
+                      : "KWOTA"}
+                </Text>
+                <Text style={[styles.confirmAmount, { color: colors.text }]}>
+                  {format(numericAmount, effectiveSourceCurrency)}
+                </Text>
+              </View>
+              <View style={styles.confirmResultColumn}>
+                <Text style={[styles.confirmMetaLabel, { color: colors.textMuted }]}>
+                  {operation === "deposit"
+                    ? "WPŁYW"
+                    : operation === "withdraw"
+                      ? "WYPŁYW"
+                      : "NA KONCIE CELU"}
+                </Text>
+                <Text
+                  style={[
+                    styles.confirmAmount,
+                    {
+                      color:
+                        operation === "withdraw"
+                          ? colors.negative
+                          : colors.positive,
+                      textAlign: "right",
+                    },
+                  ]}
+                >
+                  {operation === "transfer"
+                    ? format(calculated.net, targetCurrency)
+                    : operation === "deposit"
+                      ? format(calculated.net, targetCurrency)
+                      : format(numericAmount, effectiveSourceCurrency)}
+                </Text>
+              </View>
+            </View>
 
             <View style={styles.confirmActions}>
               <Pressable
@@ -393,23 +490,32 @@ export function PortfolioCashSheet({
                 style={[
                   styles.confirmAction,
                   {
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
+                    backgroundColor: "transparent",
+                    borderColor: colors.textMuted + "55",
+                    borderWidth: StyleSheet.hairlineWidth,
                   },
                 ]}
               >
-                <Text style={[styles.confirmActionText, { color: colors.text }]}>
+                <Text style={[styles.confirmActionText, { color: colors.textMuted }]}>
                   Odrzuć
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => {
-                  setConfirmationOpen(false);
-                  confirmOperation();
-                }}
-                style={[styles.confirmAction, { backgroundColor: colors.accent }]}
+                onPress={() => void confirmOperation()}
+                disabled={busy}
+                style={[
+                  styles.confirmAction,
+                  {
+                    backgroundColor: colors.accent,
+                    opacity: busy ? 0.7 : 1,
+                  },
+                ]}
               >
-                <Text style={styles.confirmActionTextWhite}>Potwierdź</Text>
+                {busy ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.confirmActionTextWhite}>Potwierdź</Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -512,37 +618,77 @@ const styles = StyleSheet.create({
   confirmCard: {
     width: "100%",
     maxWidth: 380,
-    borderRadius: 24,
-    borderWidth: 1.2,
-    padding: 22,
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 20,
+    paddingBottom: 12,
     alignItems: "center",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  confirmHeader: {
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 18,
   },
   confirmIcon: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  confirmTitle: { fontSize: 19, fontWeight: "800", marginBottom: 10 },
-  confirmText: {
+  confirmTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+  },
+  confirmMetaRow: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
+  },
+  confirmMetaColumn: {
+    flex: 1,
+  },
+  confirmMetaLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+    marginBottom: 4,
+  },
+  confirmMetaValue: {
     fontSize: 13,
-    lineHeight: 20,
-    textAlign: "center",
-    marginBottom: 8,
+    fontWeight: "600",
+  },
+  confirmResultRow: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 2,
+    marginBottom: 18,
+  },
+  confirmResultColumn: {
+    flex: 1,
+  },
+  confirmAmount: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "800",
   },
   confirmActions: {
     width: "100%",
     flexDirection: "row",
     gap: 8,
-    marginTop: 12,
+    alignItems: "center",
   },
   confirmAction: {
     flex: 1,
     height: 46,
     borderRadius: 14,
-    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },

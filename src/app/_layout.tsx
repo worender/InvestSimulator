@@ -11,6 +11,7 @@ import { SavedArticlesProvider } from "../savedArticles";
 import { ThemeProvider, useTheme } from "../theme";
 import { WatchlistProvider } from "../watchlist";
 import { WebGlobalStyles } from "../WebGlobalStyles";
+import { PortfolioProvider } from "../portfolio/PortfolioProvider";
 import "../webIsolation";
 
 // Główny komponent aplikacji, który ustawia kontekst motywu, widoczności nawigacji i powiadomień. Zawiera również stos ekranów (Stack) dla nawigacji w aplikacji.
@@ -48,17 +49,19 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <WatchlistProvider>
-          <SavedArticlesProvider>
-            <InteractionLockProvider>
-              <NavigationVisibilityProvider>
-                <NotificationProvider>
-                  <AppStack />
-                </NotificationProvider>
-              </NavigationVisibilityProvider>
-            </InteractionLockProvider>
-          </SavedArticlesProvider>
-        </WatchlistProvider>
+        <PortfolioProvider>
+          <WatchlistProvider>
+            <SavedArticlesProvider>
+              <InteractionLockProvider>
+                <NavigationVisibilityProvider>
+                  <NotificationProvider>
+                    <AppStack />
+                  </NotificationProvider>
+                </NavigationVisibilityProvider>
+              </InteractionLockProvider>
+            </SavedArticlesProvider>
+          </WatchlistProvider>
+        </PortfolioProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

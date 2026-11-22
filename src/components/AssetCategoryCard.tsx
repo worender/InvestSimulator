@@ -1,9 +1,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
-  AssetCategoryKey,
-  PortfolioCategory,
-} from "../database/mockPortfolioData";
+  type AssetCategoryKey,
+  type PortfolioCategory,
+} from "../portfolio/types";
 import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 

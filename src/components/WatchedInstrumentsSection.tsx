@@ -5,9 +5,8 @@ import {
   getStockQuoteDetails,
   type StockQuoteDetails,
 } from "../api/marketService";
-import { getPortfolio, type PortfolioItem } from "../database/database";
-import { MOCK_PORTFOLIOS } from "../database/mockPortfolioData";
 import { useDisplayCurrency } from "../displayCurrency";
+import { usePortfolios } from "../portfolio/PortfolioProvider";
 import { useTheme } from "../theme";
 import { useWatchlist, type WatchlistInstrument } from "../watchlist";
 import { InstrumentCard } from "./InstrumentCard";
@@ -24,21 +23,6 @@ const HOLDING_ALIASES: Record<string, string> = {
   "ETH-USD": "ETH",
 };
 
-const MOCK_HOLDINGS = new Map<string, Holding>();
-for (const portfolio of MOCK_PORTFOLIOS) {
-  for (const category of portfolio.categories) {
-    for (const item of category.items) {
-      if (item.ownedQuantity > 0) {
-        MOCK_HOLDINGS.set(item.symbol, {
-          quantity: item.ownedQuantity,
-          averagePrice: item.averageBuyPrice,
-          currency: item.currency,
-        });
-      }
-    }
-  }
-}
-
 const formatPercent = (value: number) =>
   `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 
@@ -46,6 +30,21 @@ export function WatchedInstrumentsSection() {
   const { colors, rates } = useTheme();
   const display = useDisplayCurrency();
   const { instruments } = useWatchlist();
+  const { activePortfolio } = usePortfolios();
+
+  const holdings = useMemo(() => {
+    const map: Record<string, Holding> = {};
+    for (const category of activePortfolio?.categories ?? []) {
+      for (const item of category.items) {
+        map[item.symbol] = {
+          quantity: item.ownedQuantity,
+          averagePrice: item.averageBuyPrice,
+          currency: item.currency,
+        };
+      }
+    }
+    return map;
+  }, [activePortfolio]);
 
   const cachedInitial = useMemo(() => {
     const map: Record<string, StockQuoteDetails | null> = {};
@@ -64,7 +63,6 @@ export function WatchedInstrumentsSection() {
   const [quotes, setQuotes] = useState<
     Record<string, StockQuoteDetails | null>
   >(cachedInitial.map);
-  const [dbHoldings, setDbHoldings] = useState<Record<string, Holding>>({});
   const [loading, setLoading] = useState(!cachedInitial.allFound);
   const [selected, setSelected] = useState<WatchlistInstrument | null>(null);
 
@@ -96,38 +94,9 @@ export function WatchedInstrumentsSection() {
     };
   }, [instruments, cachedInitial.allFound]);
 
-  useEffect(() => {
-    let active = true;
-
-    getPortfolio()
-      .then((items: PortfolioItem[]) => {
-        if (!active) return;
-        const next: Record<string, Holding> = {};
-        for (const item of items) {
-          next[item.symbol] = {
-            quantity: item.quantity,
-            averagePrice: item.average_price,
-          };
-        }
-        setDbHoldings(next);
-      })
-      .catch(() => {
-        if (active) setDbHoldings({});
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const findHolding = (symbol: string): Holding | undefined => {
     const alias = HOLDING_ALIASES[symbol];
-    return (
-      dbHoldings[symbol] ??
-      (alias ? dbHoldings[alias] : undefined) ??
-      MOCK_HOLDINGS.get(symbol) ??
-      (alias ? MOCK_HOLDINGS.get(alias) : undefined)
-    );
+    return holdings[symbol] ?? (alias ? holdings[alias] : undefined);
   };
 
   if (instruments.length === 0) {
@@ -202,7 +171,7 @@ export function WatchedInstrumentsSection() {
             stock: selected.symbol,
             title: selected.name.toUpperCase(),
             currency: selected.currency,
-            symbol: display.displaySymbol(selected.currency),
+            symbol: selected.symbol,
             exchange: selected.exchange,
           }}
           onClose={() => setSelected(null)}

@@ -1,57 +1,73 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import Reanimated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { MockPortfolio } from "../database/mockPortfolioData";
-import { SearchableInstrument } from "../database/mockSearchableInstruments";
+import {
+  convertCurrency,
+  currencySymbol,
+  formatAmountInput,
+  FX_FEE_PERCENT,
+  parseAmountInput,
+} from "../currency";
+import { createCategory, createTransaction } from "../database/database";
+import { getStockQuoteDetails } from "../api/marketService";
 import { useDisplayCurrency } from "../displayCurrency";
 import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
+import { NotificationHost } from "../notifications";
+import { getPillarOption, type PortfolioPillarKey } from "../portfolio/pillars";
+import { usePortfolios } from "../portfolio/PortfolioProvider";
+import type { TradeInstrument } from "../portfolio/types";
 import { useTheme } from "../theme";
 import { useLayoutMode } from "../useLayoutMode";
 
 interface TradePanelProps {
-  instrument: SearchableInstrument;
-  portfolio: MockPortfolio;
+  instrument: TradeInstrument;
   ownedQuantity: number;
-  onMarketClosedAlert: (
-    instrument: SearchableInstrument,
-    orderType: "BUY" | "SELL",
-    quantity: number,
-    total: number,
-  ) => void;
 }
 
 type InputMode = "quantity" | "amount";
+type OrderType = "BUY" | "SELL";
 
-/**
- * Panel do kupna i sprzedaży instrumentu
- * @param instrument Instrument, który jest kupowany lub sprzedawany
- * @param portfolio Portfel użytkownika, zawierający dostępne środki
- * @param ownedQuantity Ilość jednostek instrumentu posiadanych przez użytkownika
- * @param onMarketClosedAlert Funkcja wywoływana, gdy rynek jest zamknięty i użytkownik próbuje złożyć zlecenie
- * @returns
- */
+interface OrderDraft {
+  type: OrderType;
+  quantity: number;
+  price: number;
+  total: number;
+  pillarKey: PortfolioPillarKey;
+  categoryId?: number;
+}
+
 export function TradePanel({
   instrument,
-  portfolio,
   ownedQuantity,
-  onMarketClosedAlert,
 }: TradePanelProps) {
-  const { colors } = useTheme();
+  const { colors, mode, rates } = useTheme();
   const display = useDisplayCurrency();
   const sideBySide = useLayoutMode().isDesktop;
+  const { activePortfolio, reload } = usePortfolios();
 
-  const isCrypto = instrument.category === "CRYPTO";
+  const isCrypto = instrument.pillarKey === "crypto";
   const [inputMode, setInputMode] = useState<InputMode>("quantity");
   const [quantityStr, setQuantityStr] = useState("1");
   const [amountStr, setAmountStr] = useState("");
+  const [orderDraft, setOrderDraft] = useState<OrderDraft | null>(null);
+  const [tradeModal, setTradeModal] = useState<"missing-pillar" | "confirmation" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [liveInstrumentPrice, setLiveInstrumentPrice] = useState<number | null>(null);
 
-  // Animacja strzałki zmieniającej tryb wprowadzania
   const modeRotation = useSharedValue(0);
   const modeRotationStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${modeRotation.value}deg` }],
@@ -60,24 +76,47 @@ export function TradePanel({
   const parseNumber = (value: string) =>
     parseFloat(value.replace(",", ".")) || 0;
 
-  const parsedAmount = parseNumber(amountStr);
+  const portfolioCurrency = activePortfolio?.currency ?? "PLN";
+  const effectiveInstrumentPrice = liveInstrumentPrice ?? instrument.price;
+  const parsedAmount = parseAmountInput(amountStr);
+  const unitCostWallet =
+    effectiveInstrumentPrice *
+    convertCurrency(1, instrument.currency, portfolioCurrency, rates) *
+    (instrument.currency.trim().toUpperCase() ===
+    portfolioCurrency.trim().toUpperCase()
+      ? 1
+      : 1 - FX_FEE_PERCENT / 100);
   const amountDerivedQuantity =
-    instrument.price > 0
-      ? Math.floor((parsedAmount / instrument.price) * 100) / 100
+    unitCostWallet > 0
+      ? Math.floor((parsedAmount / unitCostWallet) * 100) / 100
       : 0;
   const parsedQuantity =
     inputMode === "amount" ? amountDerivedQuantity : parseNumber(quantityStr);
-  const totalCost = parsedQuantity * instrument.price;
+  const totalCost = parsedQuantity * effectiveInstrumentPrice;
 
+  const mismatch =
+    instrument.currency.trim().toUpperCase() !==
+    portfolioCurrency.trim().toUpperCase();
+  const fxRate = convertCurrency(1, instrument.currency, portfolioCurrency, rates);
+  const grossWallet = totalCost * fxRate;
+  const feeWallet = mismatch ? grossWallet * (FX_FEE_PERCENT / 100) : 0;
+  const netWallet = grossWallet - feeWallet;
+  const cashBalance = activePortfolio?.cashBalance ?? 0;
   const hasEnoughCash =
-    instrument.price > 0 &&
-    totalCost <= portfolio.cashBalance &&
-    parsedQuantity > 0;
+    effectiveInstrumentPrice > 0 &&
+    parsedQuantity > 0 &&
+    netWallet <= cashBalance + 0.000001;
   const hasEnoughUnits =
-    instrument.price > 0 &&
+    effectiveInstrumentPrice > 0 &&
     ownedQuantity >= parsedQuantity &&
     parsedQuantity > 0 &&
     ownedQuantity > 0;
+  const orderDraftNetWallet = orderDraft
+    ? orderDraft.quantity *
+      orderDraft.price *
+      fxRate *
+      (mismatch ? 1 - FX_FEE_PERCENT / 100 : 1)
+    : netWallet;
 
   const formatNumber = (num: number, maxDecimals = 2) =>
     num.toLocaleString("pl-PL", {
@@ -88,10 +127,13 @@ export function TradePanel({
   const formatDisplayMoney = (num: number, sourceCurrency: string) =>
     `${formatNumber(display.convertForDisplay(num, sourceCurrency))} ${display.displaySymbol(sourceCurrency)}`;
 
+  const formatNativeMoney = (num: number, currency: string) =>
+    `${formatNumber(num)} ${currencySymbol(currency)}`;
+
   const handleStepQuantity = (delta: number) => {
     if (inputMode === "amount") {
       const next = Math.max(0, parsedAmount + delta * 100);
-      setAmountStr(next.toFixed(2));
+      setAmountStr(formatAmountInput(next.toFixed(2)));
       return;
     }
     const step = isCrypto ? (delta > 0 ? 0.05 : -0.05) : delta;
@@ -101,7 +143,6 @@ export function TradePanel({
     );
   };
 
-  // Zmiana trybu: za ilość <-> za kwotę
   const handleToggleInputMode = () => {
     modeRotation.value = withTiming(modeRotation.value + 180, {
       duration: 320,
@@ -109,7 +150,9 @@ export function TradePanel({
     });
 
     if (inputMode === "quantity") {
-      setAmountStr((parsedQuantity * instrument.price).toFixed(2));
+      setAmountStr(
+        formatAmountInput((parsedQuantity * unitCostWallet).toFixed(2)),
+      );
       setInputMode("amount");
     } else {
       setQuantityStr(parsedQuantity.toFixed(2));
@@ -118,14 +161,14 @@ export function TradePanel({
   };
 
   const handleSetMaxForBuy = () => {
-    if (instrument.price <= 0) return;
+    if (unitCostWallet <= 0) return;
 
     if (inputMode === "amount") {
-      setAmountStr(portfolio.cashBalance.toFixed(2));
+      setAmountStr(formatAmountInput(cashBalance.toFixed(2)));
       return;
     }
 
-    const maxQty = portfolio.cashBalance / instrument.price;
+    const maxQty = cashBalance / unitCostWallet;
     setQuantityStr(
       isCrypto
         ? (Math.floor(maxQty * 100) / 100).toFixed(2)
@@ -135,7 +178,9 @@ export function TradePanel({
 
   const handleSetMaxForSell = () => {
     if (inputMode === "amount") {
-      setAmountStr((ownedQuantity * instrument.price).toFixed(2));
+      setAmountStr(
+        formatAmountInput((ownedQuantity * unitCostWallet).toFixed(2)),
+      );
       return;
     }
     setQuantityStr(
@@ -143,8 +188,69 @@ export function TradePanel({
     );
   };
 
-  const handleExecuteBuy = () => {
-    if (!hasEnoughCash) {
+  const openConfirmation = (draft: OrderDraft) => {
+    setOrderDraft(draft);
+    setTradeModal("confirmation");
+  };
+
+  const fetchLatestPrice = async (): Promise<number | null> => {
+    setBusy(true);
+    try {
+      const quote = await getStockQuoteDetails(
+        instrument.symbol,
+        instrument.exchange,
+        { forceRefresh: true },
+      );
+      if (!quote || quote.price <= 0) {
+        throw new Error("Nie udało się pobrać aktualnego kursu instrumentu");
+      }
+      setLiveInstrumentPrice(quote.price);
+      return quote.price;
+    } catch (error) {
+      notify({
+        variant: "error",
+        title: "Brak aktualnego kursu",
+        category: NOTIFICATION_GROUPS.transactions,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Nie można potwierdzić transakcji bez świeżego kursu.",
+      });
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleExecuteBuy = async () => {
+    if (!activePortfolio) {
+      notify({
+        variant: "warning",
+        title: "Brak portfela",
+        category: NOTIFICATION_GROUPS.transactions,
+        message: "Najpierw utwórz portfel, aby kupować instrumenty.",
+      });
+      return;
+    }
+
+    const latestPrice = await fetchLatestPrice();
+    if (latestPrice === null) return;
+
+    const latestUnitCost =
+      latestPrice *
+      convertCurrency(1, instrument.currency, portfolioCurrency, rates) *
+      (mismatch ? 1 - FX_FEE_PERCENT / 100 : 1);
+    const latestQuantity =
+      inputMode === "amount"
+        ? Math.floor((parsedAmount / latestUnitCost) * 100) / 100
+        : parsedQuantity;
+    const latestTotal = latestQuantity * latestPrice;
+    const latestGross = latestTotal * fxRate;
+    const latestNet =
+      latestGross *
+      (mismatch ? 1 - FX_FEE_PERCENT / 100 : 1);
+
+    if (latestPrice <= 0 || latestQuantity <= 0 || latestNet > cashBalance + 0.000001) {
       notify({
         variant: "warning",
         title: "Brak środków",
@@ -154,20 +260,38 @@ export function TradePanel({
       return;
     }
 
-    if (!instrument.isMarketOpen) {
-      onMarketClosedAlert(instrument, "BUY", parsedQuantity, totalCost);
+    const draft: OrderDraft = {
+      type: "BUY",
+      quantity: latestQuantity,
+      price: latestPrice,
+      total: latestTotal,
+      pillarKey: instrument.pillarKey,
+    };
+
+    const existing = activePortfolio.categories.find(
+      (category) => category.kind === instrument.pillarKey,
+    );
+
+    if (existing) {
+      openConfirmation({ ...draft, categoryId: existing.categoryId });
       return;
     }
 
-    notify({
-      variant: "success",
-      title: "Zlecenie zrealizowane",
-      category: NOTIFICATION_GROUPS.transactions,
-      message: `Pomyślnie kupiono ${parsedQuantity} szt. ${instrument.symbol} za ${formatDisplayMoney(totalCost, instrument.currency)}.`,
-    });
+    setOrderDraft(draft);
+    setTradeModal("missing-pillar");
   };
 
-  const handleExecuteSell = () => {
+  const handleExecuteSell = async () => {
+    if (!activePortfolio) {
+      notify({
+        variant: "warning",
+        title: "Brak portfela",
+        category: NOTIFICATION_GROUPS.transactions,
+        message: "Najpierw utwórz portfel, aby sprzedawać instrumenty.",
+      });
+      return;
+    }
+
     if (!hasEnoughUnits) {
       notify({
         variant: "warning",
@@ -178,22 +302,117 @@ export function TradePanel({
       return;
     }
 
-    if (!instrument.isMarketOpen) {
-      onMarketClosedAlert(instrument, "SELL", parsedQuantity, totalCost);
+    const latestPrice = await fetchLatestPrice();
+    if (latestPrice === null) return;
+    const latestTotal = parsedQuantity * latestPrice;
+
+    openConfirmation({
+      type: "SELL",
+      quantity: parsedQuantity,
+      price: latestPrice,
+      total: latestTotal,
+      pillarKey: instrument.pillarKey,
+    });
+  };
+
+  const handleConfirmMissingPillar = async () => {
+    if (!activePortfolio || !orderDraft) return;
+
+    const pillar = getPillarOption(orderDraft.pillarKey);
+    setBusy(true);
+
+    try {
+      const category = await createCategory(activePortfolio.walletId, {
+        name: pillar.title,
+        kind: orderDraft.pillarKey,
+      });
+      await reload();
+      setTradeModal("confirmation");
+      setOrderDraft({ ...orderDraft, categoryId: category.id });
+      notify({
+        variant: "success",
+        title: "Dodano filar",
+        category: NOTIFICATION_GROUPS.portfolio,
+        message: `${pillar.title} został dodany do portfela ${activePortfolio.name}.`,
+      });
+    } catch (error) {
+      notify({
+        variant: "error",
+        title: "Nie udało się dodać filaru",
+        category: NOTIFICATION_GROUPS.portfolio,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Spróbuj ponownie za chwilę.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleConfirmOrder = async () => {
+    if (!activePortfolio || !orderDraft) return;
+
+    if (orderDraft.type === "BUY" && orderDraft.categoryId === undefined) {
+      notify({
+        variant: "error",
+        title: "Brak filaru",
+        category: NOTIFICATION_GROUPS.transactions,
+        message: "Nie można przypisać zakupu do filaru portfela.",
+      });
       return;
     }
 
-    notify({
-      variant: "success",
-      title: "Zlecenie sprzedaży zrealizowane",
-      category: NOTIFICATION_GROUPS.transactions,
-      message: `Pomyślnie sprzedano ${parsedQuantity} szt. ${instrument.symbol} za ${formatDisplayMoney(totalCost, instrument.currency)}.`,
-    });
+    setBusy(true);
+
+    try {
+      await createTransaction({
+        symbol: instrument.symbol,
+        type: orderDraft.type,
+        quantity: orderDraft.quantity,
+        price: orderDraft.price,
+        id_wallet: activePortfolio.walletId,
+        category_id:
+          orderDraft.type === "BUY" ? orderDraft.categoryId : undefined,
+        name: instrument.name,
+        exchange: instrument.exchange,
+        currency: instrument.currency,
+        fxRate,
+      });
+      await reload();
+      setTradeModal(null);
+      setOrderDraft(null);
+      notify({
+        variant: "success",
+        title:
+          orderDraft.type === "BUY"
+            ? "Zlecenie kupna zrealizowane"
+            : "Zlecenie sprzedaży zrealizowane",
+        category: NOTIFICATION_GROUPS.transactions,
+        message:
+          orderDraft.type === "BUY"
+            ? `Kupiono ${orderDraft.quantity} szt. ${instrument.symbol} za ${formatNativeMoney(orderDraftNetWallet, portfolioCurrency)}.`
+            : `Sprzedano ${orderDraft.quantity} szt. ${instrument.symbol} za ${formatNativeMoney(orderDraftNetWallet, portfolioCurrency)}.`,
+      });
+    } catch (error) {
+      notify({
+        variant: "error",
+        title: "Transakcja nie została zrealizowana",
+        category: NOTIFICATION_GROUPS.transactions,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Spróbuj ponownie za chwilę.",
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const marketStatusColor = instrument.isMarketOpen
     ? colors.positive
     : colors.negative;
+  const pillar = getPillarOption(instrument.pillarKey);
 
   return (
     <View style={styles.container}>
@@ -217,7 +436,7 @@ export function TradePanel({
 
         <View style={styles.activePriceCol}>
           <Text style={[styles.activePrice, { color: colors.text }]}>
-            {formatDisplayMoney(instrument.price, instrument.currency)}
+            {formatDisplayMoney(effectiveInstrumentPrice, instrument.currency)}
           </Text>
           <View style={styles.marketStatusRow}>
             <View
@@ -232,7 +451,6 @@ export function TradePanel({
         </View>
       </View>
 
-      {/* Informacja o posiadanych jednostkach i wolnych środkach */}
       <View style={styles.summaryRow}>
         <View style={styles.summaryCell}>
           <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>
@@ -247,7 +465,7 @@ export function TradePanel({
             Wolne środki
           </Text>
           <Text style={[styles.summaryValue, { color: colors.text }]}>
-            {formatDisplayMoney(portfolio.cashBalance, portfolio.currency)}
+            {formatDisplayMoney(cashBalance, portfolioCurrency)}
           </Text>
         </View>
       </View>
@@ -301,7 +519,9 @@ export function TradePanel({
           <TextInput
             value={inputMode === "quantity" ? quantityStr : amountStr}
             onChangeText={
-              inputMode === "quantity" ? setQuantityStr : setAmountStr
+              inputMode === "quantity"
+                ? setQuantityStr
+                : (value) => setAmountStr(formatAmountInput(value))
             }
             keyboardType="numeric"
             style={[styles.quantityInput, { color: colors.text }]}
@@ -310,7 +530,7 @@ export function TradePanel({
           <Text style={[styles.quantityUnit, { color: colors.textMuted }]}>
             {inputMode === "quantity"
               ? "szt."
-              : display.displaySymbol(instrument.currency)}
+              : currencySymbol(portfolioCurrency)}
           </Text>
         </View>
 
@@ -330,7 +550,6 @@ export function TradePanel({
         </Pressable>
       </View>
 
-      {/* Tryb kwoty */}
       {inputMode === "amount" && (
         <Text style={[styles.derivedQuantity, { color: colors.textMuted }]}>
           Otrzymasz:{" "}
@@ -360,18 +579,27 @@ export function TradePanel({
           {inputMode === "quantity" ? "Łącznie" : "Kwota"}
         </Text>
         <Text style={[styles.totalCalcVal, { color: colors.text }]}>
-          {formatDisplayMoney(totalCost, instrument.currency)}
+          {inputMode === "amount"
+            ? formatNativeMoney(netWallet, portfolioCurrency)
+            : formatDisplayMoney(totalCost, instrument.currency)}
         </Text>
       </View>
 
-      {/* Na desktopie przyciski stoją obok siebie, a komunikat jest pod swoim przyciskiem */}
+      {mismatch && parsedQuantity > 0 && (
+        <Text style={[styles.fxPreview, { color: colors.textMuted }]}>
+          Przewalutowanie {instrument.currency} → {portfolioCurrency}:{" "}
+          {formatNativeMoney(netWallet, portfolioCurrency)} po opłacie{" "}
+          {FX_FEE_PERCENT.toLocaleString("pl-PL")}%
+        </Text>
+      )}
+
       <View
         style={[styles.actionButtonsCol, sideBySide && styles.actionButtonsRow]}
       >
         <View style={[styles.actionCell, sideBySide && styles.actionCellRow]}>
           <Pressable
             onPress={handleExecuteBuy}
-            disabled={!hasEnoughCash}
+            disabled={!hasEnoughCash || busy}
             accessibilityRole="button"
             accessibilityLabel={`Kup ${parsedQuantity} szt. ${instrument.symbol}`}
             style={({ pressed }) => [
@@ -395,7 +623,7 @@ export function TradePanel({
                 { color: hasEnoughCash ? "#ffffff" : colors.textMuted },
               ]}
             >
-              Kup za {formatDisplayMoney(totalCost, instrument.currency)}
+              Kup za {formatNativeMoney(netWallet, portfolioCurrency)}
             </Text>
           </Pressable>
 
@@ -404,9 +632,9 @@ export function TradePanel({
               style={[styles.validationWarning, { color: colors.negative }]}
             >
               Brak wystarczających środków (
-              {formatDisplayMoney(
-                Math.max(0, totalCost - portfolio.cashBalance),
-                portfolio.currency,
+              {formatNativeMoney(
+                Math.max(0, netWallet - cashBalance),
+                portfolioCurrency,
               )}
               ).
             </Text>
@@ -416,7 +644,7 @@ export function TradePanel({
         <View style={[styles.actionCell, sideBySide && styles.actionCellRow]}>
           <Pressable
             onPress={handleExecuteSell}
-            disabled={!hasEnoughUnits}
+            disabled={!hasEnoughUnits || busy}
             accessibilityRole="button"
             accessibilityLabel={`Sprzedaj ${parsedQuantity} szt. ${instrument.symbol}`}
             style={({ pressed }) => [
@@ -440,7 +668,7 @@ export function TradePanel({
                 { color: hasEnoughUnits ? "#ffffff" : colors.textMuted },
               ]}
             >
-              Sprzedaj za {formatDisplayMoney(totalCost, instrument.currency)}
+              Sprzedaj za {formatNativeMoney(netWallet, portfolioCurrency)}
             </Text>
           </Pressable>
 
@@ -455,11 +683,260 @@ export function TradePanel({
           )}
         </View>
       </View>
+
+      <Modal
+        visible={tradeModal !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        presentationStyle="overFullScreen"
+        navigationBarTranslucent
+        onRequestClose={() => {
+          if (!busy) setTradeModal(null);
+        }}
+      >
+        <NotificationHost />
+        <View
+          style={[
+            styles.modalBackdrop,
+            {
+              backgroundColor:
+                mode === "dark"
+                  ? "rgba(13, 17, 23, 0.82)"
+                  : "rgba(31, 35, 40, 0.58)",
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.modalCard,
+              {
+                backgroundColor: colors.surface,
+              },
+            ]}
+          >
+            {tradeModal === "missing-pillar" ? (
+              <>
+                <View
+                  style={[
+                    styles.modalIcon,
+                    { backgroundColor: pillar.color + "22" },
+                  ]}
+                >
+                  <Ionicons name={pillar.icon} size={28} color={pillar.color} />
+                </View>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  Brak filaru {pillar.title}
+                </Text>
+                <Text style={[styles.modalText, { color: colors.textMuted }]}>
+                  Instrument {instrument.symbol} trafia automatycznie do filaru{" "}
+                  {pillar.title}, którego nie ma jeszcze w portfelu{" "}
+                  {activePortfolio?.name ?? ""}.
+                </Text>
+                <Text style={[styles.modalText, { color: colors.textMuted }]}>
+                  Czy chcesz dodać ten filar i kontynuować zakup?
+                </Text>
+                <View style={styles.modalActions}>
+                  <Pressable
+                    onPress={() => setTradeModal(null)}
+                    disabled={busy}
+                    style={[
+                      styles.modalAction,
+                      {
+                        backgroundColor: "transparent",
+                        borderColor: colors.textMuted + "55",
+                        borderWidth: StyleSheet.hairlineWidth,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.modalActionText, { color: colors.textMuted }]}>
+                      Anuluj
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleConfirmMissingPillar}
+                    disabled={busy}
+                    style={[styles.modalAction, { backgroundColor: colors.accent }]}
+                  >
+                    {busy ? (
+                      <ActivityIndicator color="#ffffff" />
+                    ) : (
+                      <Text style={styles.modalActionTextWhite}>Dodaj i kontynuuj</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <>
+                <View
+                  style={[
+                    styles.modalIcon,
+                    {
+                      backgroundColor:
+                        orderDraft?.type === "BUY"
+                          ? colors.positiveGlass
+                          : colors.negativeGlass,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      orderDraft?.type === "BUY"
+                        ? "arrow-up-outline"
+                        : "arrow-down-outline"
+                    }
+                    size={28}
+                    color={
+                      orderDraft?.type === "BUY"
+                        ? colors.positive
+                        : colors.negative
+                    }
+                  />
+                </View>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  Potwierdź {orderDraft?.type === "BUY" ? "kupno" : "sprzedaż"}
+                </Text>
+
+            <View style={styles.summaryMetaRow}>
+              <View style={styles.summaryMetaColumn}>
+                <Text style={[styles.summaryKey, { color: colors.textMuted }]}>
+                  INSTRUMENT
+                </Text>
+                <Text style={[styles.summaryVal, { color: colors.text }]}>
+                  {instrument.symbol}
+                </Text>
+              </View>
+              <View style={styles.summaryMetaColumn}>
+                <Text style={[styles.summaryKey, { color: colors.textMuted }]}>
+                  PORTFEL
+                </Text>
+                <Text style={[styles.summaryVal, { color: colors.text }]}>
+                  {activePortfolio?.name ?? "-"}
+                </Text>
+              </View>
+            </View>
+
+            {orderDraft?.type === "BUY" ||
+            mismatch ? (
+              <View style={styles.summaryMetaRow}>
+                {orderDraft?.type === "BUY" ? (
+                  <View style={styles.summaryMetaColumn}>
+                    <Text style={[styles.summaryKey, { color: colors.textMuted }]}>
+                      FILAR
+                    </Text>
+                    <Text style={[styles.summaryVal, { color: colors.text }]}>
+                      {pillar.title}
+                    </Text>
+                  </View>
+                ) : null}
+                {mismatch ? (
+                  <View style={styles.summaryMetaColumn}>
+                    <Text style={[styles.summaryKey, { color: colors.textMuted }]}>
+                      PRZEWALUTOWANIE
+                    </Text>
+                    <Text style={[styles.summaryVal, { color: colors.text }]}>
+                      {instrument.currency} → {portfolioCurrency} · {FX_FEE_PERCENT.toLocaleString("pl-PL")}%
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+            <View style={styles.summaryMetaRow}>
+              <View style={styles.summaryMetaColumn}>
+                <Text style={[styles.summaryKey, { color: colors.textMuted }]}>
+                  CENA
+                </Text>
+                <Text style={[styles.summaryVal, { color: colors.text }]}>
+                  {formatNativeMoney(orderDraft?.price ?? effectiveInstrumentPrice, instrument.currency)}
+                </Text>
+              </View>
+              <View style={styles.summaryMetaColumn}>
+                <Text style={[styles.summaryKey, { color: colors.textMuted }]}>
+                  WARTOŚĆ
+                </Text>
+                <Text style={[styles.summaryVal, { color: colors.text }]}>
+                  {formatNativeMoney(orderDraft?.total ?? totalCost, instrument.currency)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.summaryHighlightRow}>
+              <View style={styles.summaryHighlightColumn}>
+                <Text style={[styles.summaryKey, { color: colors.textMuted }]}>
+                  ILOŚĆ
+                </Text>
+                <Text style={[styles.summaryHighlight, { color: colors.text }]}>
+                  {orderDraft?.quantity ?? 0} szt.
+                </Text>
+              </View>
+              <View style={styles.summaryHighlightColumn}>
+                <Text style={[styles.summaryKey, { color: colors.textMuted }]}>
+                  {orderDraft?.type === "BUY"
+                    ? "OBCIĄŻENIE"
+                    : "WPŁYW"}
+                </Text>
+                <Text
+                  style={[
+                    styles.summaryHighlight,
+                    {
+                      color:
+                        orderDraft?.type === "BUY"
+                          ? colors.negative
+                          : colors.positive,
+                    },
+                  ]}
+                >
+                  {formatNativeMoney(orderDraftNetWallet, portfolioCurrency)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setTradeModal(null)}
+                disabled={busy}
+                style={[
+                  styles.modalAction,
+                  {
+                    backgroundColor: "transparent",
+                    borderColor: colors.textMuted + "55",
+                    borderWidth: StyleSheet.hairlineWidth,
+                  },
+                ]}
+              >
+                <Text style={[styles.modalActionText, { color: colors.textMuted }]}>
+                  Odrzuć
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleConfirmOrder}
+                disabled={busy}
+                style={[
+                  styles.modalAction,
+                  {
+                    backgroundColor:
+                      orderDraft?.type === "BUY"
+                        ? colors.positive
+                        : colors.negative,
+                  },
+                ]}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.modalActionTextWhite}>Potwierdź</Text>
+                )}
+              </Pressable>
+            </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-// StyleSheet dla komponentu TradePanel
 const styles = StyleSheet.create({
   container: {
     marginTop: 24,
@@ -608,6 +1085,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+  fxPreview: {
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: "center",
+  },
   actionButtonsCol: {
     flexDirection: "column",
     gap: 14,
@@ -637,5 +1119,100 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 7,
     lineHeight: 15,
+  },
+  modalBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 380,
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 20,
+    paddingBottom: 12,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  modalIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  modalText: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  modalActions: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 16,
+  },
+  modalAction: {
+    flex: 1,
+    height: 46,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalActionText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  modalActionTextWhite: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  summaryMetaRow: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
+  },
+  summaryMetaColumn: {
+    flex: 1,
+  },
+  summaryHighlightRow: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 18,
+  },
+  summaryHighlightColumn: {
+    flex: 1,
+  },
+  summaryKey: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+    marginBottom: 4,
+  },
+  summaryVal: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  summaryHighlight: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "800",
   },
 });

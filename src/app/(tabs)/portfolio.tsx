@@ -19,95 +19,105 @@ import { PANEL_HEADER_HEIGHT, PanelHeader } from "../../components/PanelHeader";
 import { PortfolioCashSheet } from "../../components/PortfolioCashSheet";
 import { PortfolioCategoryModal } from "../../components/PortfolioCategoryModal";
 import {
-  pillarKeyToAssetCategoryKey,
   PORTFOLIO_PILLARS,
-  PortfolioPillarKey,
   PortfolioPillarSheet,
+  type PortfolioPillarKey,
 } from "../../components/PortfolioPillarSheet";
 import { Section } from "../../components/Section";
 import { SinglePortfolioCard } from "../../components/SinglePortfolioCard";
 import {
-  MOCK_PORTFOLIOS,
-  MockPortfolio,
-  PortfolioAssetItem,
-  PortfolioCategory,
-} from "../../database/mockPortfolioData";
+  createCategory,
+  createWallet,
+  depositToWallet,
+  transferBetweenWallets,
+  withdrawFromWallet,
+} from "../../database/database";
 import { resolveMarketCategory } from "../../instrumentCategories";
 import { NOTIFICATION_GROUPS, notify } from "../../notificationBus";
+import { usePortfolios } from "../../portfolio/PortfolioProvider";
 import { useTheme } from "../../theme";
 import { useLayoutMode } from "../../useLayoutMode";
 import { useResetOnPanelBlur } from "../../useResetOnPanelBlur";
 import { useScrollAwareNavigation } from "../../useScrollAwareNavigation";
 
 export default function PortfolioScreen() {
-  const { colors } = useTheme();
+  const { colors, activeAccount } = useTheme();
   const { bottom, top } = useSafeAreaInsets();
-  // Widok treści rozmywanej pod nagłówkiem
   const blurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const scrollNav = useScrollAwareNavigation();
   const { isDesktop, isWeb } = useLayoutMode();
+  const {
+    portfolios,
+    activePortfolio,
+    setActiveWalletId,
+    reload,
+  } = usePortfolios();
 
-  // Stan portfeli użytkownika
-  const [portfolios, setPortfolios] =
-    useState<MockPortfolio[]>(MOCK_PORTFOLIOS);
-  const [activePortfolioIndex, setActivePortfolioIndex] = useState(0);
-  const [pillarCategoriesByPortfolio, setPillarCategoriesByPortfolio] =
-    useState<Record<string, PortfolioCategory[]>>({});
   const [pillarSheetOpen, setPillarSheetOpen] = useState(false);
   const [addPortfolioSheetOpen, setAddPortfolioSheetOpen] = useState(false);
   const [cashSheetOpen, setCashSheetOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] =
-    useState<PortfolioCategory | null>(null);
-  const [selectedAssetDetails, setSelectedAssetDetails] = useState<{
-    asset: PortfolioAssetItem;
-    category: PortfolioCategory;
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(
+    null,
+  );
+  const [selectedAsset, setSelectedAsset] = useState<{
+    symbol: string;
+    categoryId: number;
   } | null>(null);
 
-  // Animacja obracających się strzałek w headerze
   const rotation = useSharedValue(0);
   const rotationStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
   }));
 
-  const currentPortfolio = portfolios[activePortfolioIndex] || portfolios[0];
-  const activePillars =
-    pillarCategoriesByPortfolio[currentPortfolio?.id] ??
-    currentPortfolio?.categories ??
-    [];
+  const activePillars = activePortfolio?.categories ?? [];
   const hasMultiplePortfolios = portfolios.length > 1;
   const isAddDisabled = portfolios.length >= 5;
+  const userId = activeAccount?.id ?? 1;
 
-  const handleSwitchPortfolio = () => {
-    rotation.value = withTiming(rotation.value + 180, {
-      duration: 350,
-      easing: Easing.out(Easing.cubic),
-    });
-    setActivePortfolioIndex((prev) => {
-      const next = (prev + 1) % portfolios.length;
-      notify({
-        variant: "info",
-        title: "Zmieniono portfel",
-        category: NOTIFICATION_GROUPS.portfolio,
-        message: `Wyświetlany jest teraz ${portfolios[next].name}.`,
-      });
-      return next;
-    });
-  };
+  const selectedCategory =
+    activePortfolio?.categories.find(
+      (category) => category.categoryId === selectedCategoryId,
+    ) ?? null;
 
-  // Po opuszczeniu zakładki menu i wyszukiwanie wracają do stanu początkowego.
+  const selectedAssetCategory =
+    activePortfolio?.categories.find(
+      (category) => category.categoryId === selectedAsset?.categoryId,
+    ) ?? null;
+
+  const selectedAssetItem =
+    selectedAssetCategory?.items.find(
+      (item) => item.symbol === selectedAsset?.symbol,
+    ) ?? null;
+
   useResetOnPanelBlur(() => {
     setPillarSheetOpen(false);
     setAddPortfolioSheetOpen(false);
     setCashSheetOpen(false);
-    setSelectedCategory(null);
-    setSelectedAssetDetails(null);
+    setSelectedCategoryId(null);
+    setSelectedAsset(null);
   });
 
-  /**
-   * Obsługuje kliknięcie przycisku dodawania nowego portfela.
-   * Jeśli limit portfeli został osiągnięty, wyświetla powiadomienie.
-   * W przeciwnym razie otwiera arkusz tworzenia nowego portfela.
-   */
+  const handleSwitchPortfolio = () => {
+    if (!activePortfolio || portfolios.length < 2) return;
+
+    const index = portfolios.findIndex(
+      (portfolio) => portfolio.walletId === activePortfolio.walletId,
+    );
+    const next = portfolios[(index + 1) % portfolios.length];
+
+    rotation.value = withTiming(rotation.value + 180, {
+      duration: 350,
+      easing: Easing.out(Easing.cubic),
+    });
+    setActiveWalletId(next.walletId);
+    notify({
+      variant: "info",
+      title: "Zmieniono portfel",
+      category: NOTIFICATION_GROUPS.portfolio,
+      message: `Wyświetlany jest teraz ${next.name}.`,
+    });
+  };
+
   const handleAddPortfolio = () => {
     if (isAddDisabled) {
       notify({
@@ -121,156 +131,134 @@ export default function PortfolioScreen() {
     setAddPortfolioSheetOpen(true);
   };
 
-  /**
-   * Tworzy nowy portfel na podstawie danych z formularza.
-   * @param input Dane z formularza tworzenia portfela
-   */
-  const handleCreatePortfolio = (input: AddPortfolioInput) => {
-    const newPortfolio: MockPortfolio = {
-      ...currentPortfolio,
-      id: `port-${Date.now()}`,
-      name: input.name,
-      currency: input.currency,
-      currencySymbol:
-        input.currency === "PLN" ? "zł" : input.currency === "EUR" ? "€" : "$",
-      cashBalance: 0,
-      totalValue: 0,
-      profitCurrency: 0,
-      profitPercent: 0,
-      categories: [],
-    };
+  const handleCreatePortfolio = async (input: AddPortfolioInput) => {
+    try {
+      const wallet = await createWallet(userId, {
+        name: input.name,
+        currency: input.currency,
+        balance: 0,
+      });
 
-    const pillarCategories = input.pillars.map((key) => {
-      const option = PORTFOLIO_PILLARS.find((pillar) => pillar.key === key)!;
-      return {
-        id: pillarKeyToAssetCategoryKey(key),
-        title: option.title,
-        subtitle: option.description,
-        pastelBgLight: option.pastelLight,
-        pastelBgDark: option.pastelDark,
-        accentColor: option.color,
-        totalValue: 0,
-        profitCurrency: 0,
-        profitPercent: 0,
-        items: [],
-      } satisfies PortfolioCategory;
-    });
+      for (const key of input.pillars) {
+        const option = PORTFOLIO_PILLARS.find((pillar) => pillar.key === key);
+        if (option) {
+          await createCategory(wallet.id, {
+            name: option.title,
+            kind: key,
+          });
+        }
+      }
 
-    setPortfolios((prev) => [...prev, newPortfolio]);
-    setPillarCategoriesByPortfolio((prev) => ({
-      ...prev,
-      [newPortfolio.id]: pillarCategories,
-    }));
-    setAddPortfolioSheetOpen(false);
-    setActivePortfolioIndex(portfolios.length);
-    notify({
-      variant: "success",
-      title: "Utworzono nowy portfel",
-      category: NOTIFICATION_GROUPS.portfolio,
-      message: `${newPortfolio.name} jest gotowy do inwestowania.`,
-    });
+      await reload();
+      setActiveWalletId(wallet.id);
+      setAddPortfolioSheetOpen(false);
+      notify({
+        variant: "success",
+        title: "Utworzono nowy portfel",
+        category: NOTIFICATION_GROUPS.portfolio,
+        message: `${wallet.name} jest gotowy do inwestowania.`,
+      });
+    } catch (error) {
+      notify({
+        variant: "error",
+        title: "Nie udało się utworzyć portfela",
+        category: NOTIFICATION_GROUPS.portfolio,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Spróbuj ponownie za chwilę.",
+      });
+    }
   };
 
-  /**
-   * Dodaje nowy filar do aktualnego portfela.
-   * @param key
-   * @returns
-   */
-  const handleAddPillar = (key: PortfolioPillarKey) => {
+  const handleAddPillar = async (key: PortfolioPillarKey) => {
+    if (!activePortfolio) return;
+
     const option = PORTFOLIO_PILLARS.find((pillar) => pillar.key === key);
-    if (!option || !currentPortfolio) return;
+    if (!option) return;
 
-    setPillarCategoriesByPortfolio((prev) => {
-      const existing =
-        prev[currentPortfolio.id] ?? currentPortfolio.categories ?? [];
-      if (existing.some((category) => category.id === key)) return prev;
-
-      const category: PortfolioCategory = {
-        id: pillarKeyToAssetCategoryKey(key),
-        title: option.title,
-        subtitle: option.description,
-        pastelBgLight: option.pastelLight,
-        pastelBgDark: option.pastelDark,
-        accentColor: option.color,
-        totalValue: 0,
-        profitCurrency: 0,
-        profitPercent: 0,
-        items: [],
-      };
-
-      return {
-        ...prev,
-        [currentPortfolio.id]: [...existing, category],
-      };
-    });
-    notify({
-      variant: "success",
-      title: "Dodano filar",
-      category: NOTIFICATION_GROUPS.portfolio,
-      message: `${option.title} został dodany do portfela ${currentPortfolio.name}.`,
-    });
+    try {
+      await createCategory(activePortfolio.walletId, {
+        name: option.title,
+        kind: key,
+      });
+      await reload();
+      setPillarSheetOpen(false);
+      notify({
+        variant: "success",
+        title: "Dodano filar",
+        category: NOTIFICATION_GROUPS.portfolio,
+        message: `${option.title} został dodany do portfela ${activePortfolio.name}.`,
+      });
+    } catch (error) {
+      notify({
+        variant: "error",
+        title: "Nie udało się dodać filaru",
+        category: NOTIFICATION_GROUPS.portfolio,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Spróbuj ponownie za chwilę.",
+      });
+    }
   };
 
-  const handleCashOperation = (input: {
+  const handleCashOperation = async (input: {
     operation: "deposit" | "withdraw" | "transfer";
     amount: number;
     sourceCurrency: string;
     targetPortfolioId?: string;
     targetAmount?: number;
-  }) => {
-    setPortfolios((prev) =>
-      prev.map((portfolio) => {
-        if (input.operation === "transfer") {
-          if (portfolio.id === currentPortfolio.id) {
-            const cashBalance = portfolio.cashBalance - input.amount;
-            return {
-              ...portfolio,
-              cashBalance,
-              totalValue: Math.max(0, portfolio.totalValue - input.amount),
-            };
-          }
-          if (portfolio.id === input.targetPortfolioId) {
-            const transferredAmount = input.targetAmount ?? input.amount;
-            return {
-              ...portfolio,
-              cashBalance: portfolio.cashBalance + transferredAmount,
-              totalValue: portfolio.totalValue + transferredAmount,
-            };
-          }
-          return portfolio;
-        }
+  }): Promise<boolean> => {
+    if (!activePortfolio) return false;
 
-        if (portfolio.id !== currentPortfolio.id) return portfolio;
-        const cashBalance =
-          input.operation === "deposit"
-            ? portfolio.cashBalance + input.amount
-            : portfolio.cashBalance - input.amount;
-        return {
-          ...portfolio,
-          cashBalance,
-          totalValue: Math.max(
-            0,
-            input.operation === "deposit"
-              ? portfolio.totalValue + input.amount
-              : portfolio.totalValue - input.amount,
-          ),
-        };
-      }),
-    );
-    setCashSheetOpen(false);
+    try {
+      if (input.operation === "deposit") {
+        await depositToWallet(activePortfolio.walletId, userId, input.amount);
+      } else if (input.operation === "withdraw") {
+        await withdrawFromWallet(activePortfolio.walletId, userId, input.amount);
+      } else {
+        const target = portfolios.find(
+          (portfolio) => portfolio.id === input.targetPortfolioId,
+        );
+        if (!target) throw new Error("Nie znaleziono portfela docelowego");
+        await transferBetweenWallets(
+          userId,
+          activePortfolio.walletId,
+          target.walletId,
+          input.amount,
+          input.targetAmount ?? 0,
+        );
+      }
 
-    const operationLabel =
-      input.operation === "deposit"
-        ? "Wpłata"
-        : input.operation === "withdraw"
-          ? "Wypłata"
-          : "Transfer";
-    notify({
-      variant: "success",
-      title: `${operationLabel} wykonana`,
-      category: NOTIFICATION_GROUPS.portfolio,
-      message: `${currentPortfolio.name}: operacja została zrealizowana w walucie ${currentPortfolio.currency}.`,
-    });
+      await reload();
+      setCashSheetOpen(false);
+
+      const operationLabel =
+        input.operation === "deposit"
+          ? "Wpłata"
+          : input.operation === "withdraw"
+            ? "Wypłata"
+            : "Transfer";
+      notify({
+        variant: "success",
+        title: `${operationLabel} wykonana`,
+        category: NOTIFICATION_GROUPS.portfolio,
+        message: `${activePortfolio.name}: operacja została zrealizowana.`,
+      });
+      return true;
+    } catch (error) {
+      notify({
+        variant: "error",
+        title: "Operacja nie została wykonana",
+        category: NOTIFICATION_GROUPS.portfolio,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Spróbuj ponownie za chwilę.",
+      });
+      return false;
+    }
   };
 
   return (
@@ -339,70 +327,84 @@ export default function PortfolioScreen() {
           showsVerticalScrollIndicator={isWeb}
           {...scrollNav}
         >
-          <SinglePortfolioCard portfolio={currentPortfolio} />
+          {activePortfolio ? (
+            <>
+              <SinglePortfolioCard portfolio={activePortfolio} />
 
-          <Section label="Filary portfela">
-            <View style={styles.categoriesGrid}>
-              {activePillars.map((category) => (
-                <AssetCategoryCard
-                  key={category.id}
-                  category={category}
-                  currency={currentPortfolio.currency}
-                  onPress={() => setSelectedCategory(category)}
-                />
-              ))}
+              <Section label="Filary portfela">
+                <View style={styles.categoriesGrid}>
+                  {activePillars.map((category) => (
+                    <AssetCategoryCard
+                      key={category.categoryId}
+                      category={category}
+                      currency={activePortfolio.currency}
+                      onPress={() => setSelectedCategoryId(category.categoryId)}
+                    />
+                  ))}
 
-              {activePillars.length < 5 && (
-                <Pressable
-                  onPress={() => setPillarSheetOpen(true)}
-                  accessibilityLabel="Dodaj filar portfela"
-                  style={({ pressed }) => [
-                    styles.addCard,
-                    {
-                      borderColor: colors.accent + "99",
-                      backgroundColor: colors.background,
-                      transform: [{ scale: pressed ? 0.98 : 1 }],
-                      opacity: pressed ? 0.92 : 1,
-                    },
-                  ]}
-                >
-                  <View style={styles.addCardClip}>
-                    <View style={styles.addCardContent}>
-                      <View
-                        style={[
-                          styles.addCardButton,
-                          {
-                            backgroundColor: colors.background,
-                            borderColor: colors.accent + "99",
-                          },
-                        ]}
-                      >
-                        <Ionicons name="add" size={24} color={colors.accent} />
+                  {activePillars.length < 5 && (
+                    <Pressable
+                      onPress={() => setPillarSheetOpen(true)}
+                      accessibilityLabel="Dodaj filar portfela"
+                      style={({ pressed }) => [
+                        styles.addCard,
+                        {
+                          borderColor: colors.accent + "99",
+                          backgroundColor: colors.background,
+                          transform: [{ scale: pressed ? 0.98 : 1 }],
+                          opacity: pressed ? 0.92 : 1,
+                        },
+                      ]}
+                    >
+                      <View style={styles.addCardClip}>
+                        <View style={styles.addCardContent}>
+                          <View
+                            style={[
+                              styles.addCardButton,
+                              {
+                                backgroundColor: colors.background,
+                                borderColor: colors.accent + "99",
+                              },
+                            ]}
+                          >
+                            <Ionicons
+                              name="add"
+                              size={24}
+                              color={colors.accent}
+                            />
+                          </View>
+                          <Text
+                            style={[styles.addCardLabel, { color: colors.text }]}
+                          >
+                            Dodaj
+                          </Text>
+                        </View>
                       </View>
-                      <Text
-                        style={[styles.addCardLabel, { color: colors.text }]}
-                      >
-                        Dodaj
-                      </Text>
-                    </View>
-                  </View>
-                </Pressable>
-              )}
+                    </Pressable>
+                  )}
+                </View>
+              </Section>
+            </>
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons
+                name="wallet-outline"
+                size={32}
+                color={colors.textMuted}
+              />
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                Brak portfela. Utwórz nowy portfel, aby rozpocząć inwestowanie.
+              </Text>
             </View>
-          </Section>
+          )}
         </ScrollView>
       </BlurTargetView>
 
-      {pillarSheetOpen && (
+      {pillarSheetOpen && activePortfolio && (
         <PortfolioPillarSheet
-          selectedKeys={activePillars.map(
-            (category) => category.id as PortfolioPillarKey,
-          )}
+          selectedKeys={activePillars.map((category) => category.kind)}
           onClose={() => setPillarSheetOpen(false)}
-          onSelect={(key) => {
-            handleAddPillar(key);
-            setPillarSheetOpen(false);
-          }}
+          onSelect={handleAddPillar}
         />
       )}
 
@@ -413,12 +415,12 @@ export default function PortfolioScreen() {
         />
       )}
 
-      {cashSheetOpen && (
+      {cashSheetOpen && activePortfolio && (
         <PortfolioCashSheet
-          portfolioId={currentPortfolio.id}
-          portfolioName={currentPortfolio.name}
-          portfolioCurrency={currentPortfolio.currency}
-          cashBalance={currentPortfolio.cashBalance}
+          portfolioId={activePortfolio.id}
+          portfolioName={activePortfolio.name}
+          portfolioCurrency={activePortfolio.currency}
+          cashBalance={activePortfolio.cashBalance}
           portfolios={portfolios.map((portfolio) => ({
             id: portfolio.id,
             name: portfolio.name,
@@ -430,38 +432,39 @@ export default function PortfolioScreen() {
         />
       )}
 
-      {selectedCategory && (
+      {selectedCategory && activePortfolio && (
         <PortfolioCategoryModal
-          portfolio={currentPortfolio}
+          portfolio={activePortfolio}
           category={selectedCategory}
-          onClose={() => setSelectedCategory(null)}
+          onClose={() => setSelectedCategoryId(null)}
           onOpenAsset={(asset) => {
-            setSelectedCategory(null);
-            setSelectedAssetDetails({
-              asset,
-              category: selectedCategory,
+            setSelectedCategoryId(null);
+            setSelectedAsset({
+              symbol: asset.symbol,
+              categoryId: selectedCategory.categoryId,
             });
           }}
         />
       )}
 
-      {selectedAssetDetails && (
+      {selectedAssetItem && (
         <InstrumentCard
           instrument={{
-            stock: selectedAssetDetails.asset.symbol,
-            title: selectedAssetDetails.asset.name.toUpperCase(),
-            currency: selectedAssetDetails.asset.currency,
-            symbol: selectedAssetDetails.asset.symbol,
-            exchange: selectedAssetDetails.asset.exchange,
+            stock: selectedAssetItem.symbol,
+            title: selectedAssetItem.name.toUpperCase(),
+            currency: selectedAssetItem.currency,
+            symbol: selectedAssetItem.symbol,
+            exchange: selectedAssetItem.exchange,
             marketCategory: resolveMarketCategory({
-              category: selectedAssetDetails.asset.category,
-              symbol: selectedAssetDetails.asset.symbol,
-              exchange: selectedAssetDetails.asset.exchange,
+              category: selectedAssetItem.category,
+              symbol: selectedAssetItem.symbol,
+              exchange: selectedAssetItem.exchange,
             }),
           }}
           onClose={() => {
-            setSelectedAssetDetails(null);
-            setSelectedCategory(selectedAssetDetails.category);
+            const categoryId = selectedAsset?.categoryId;
+            setSelectedAsset(null);
+            if (categoryId !== undefined) setSelectedCategoryId(categoryId);
           }}
         />
       )}
@@ -469,19 +472,16 @@ export default function PortfolioScreen() {
   );
 }
 
-// Stylesheet dla komponentu PortfolioScreen (ekran "Portfolio")
 const styles = StyleSheet.create({
   blurTarget: { flex: 1 },
   root: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
-  // Na desktopie treść w wyśrodkowanej kolumnie o ograniczonej szerokości
   contentDesktop: {
     width: "100%",
     maxWidth: 1280,
     alignSelf: "center",
     paddingHorizontal: 32,
   },
-  intro: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
   headerButtons: {
     flexDirection: "row",
     alignItems: "center",
@@ -534,5 +534,16 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-between",
     marginTop: 6,
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
   },
 });

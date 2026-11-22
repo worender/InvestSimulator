@@ -189,3 +189,40 @@ export function currencySymbol(value?: string): string {
   const key = value.trim().toUpperCase();
   return CURRENCY_SYMBOLS[key] ?? value;
 }
+
+export const FX_FEE_PERCENT = 1.44;
+
+export function convertCurrency(
+  value: number,
+  fromCurrency: string,
+  toCurrency: string,
+  rates: Record<string, number>,
+): number {
+  const from = fromCurrency.trim().toUpperCase();
+  const to = toCurrency.trim().toUpperCase();
+  if (from === to) return value;
+  const fromRate = rates[from] ?? 1;
+  const toRate = rates[to] ?? 1;
+  if (!fromRate || !toRate) return value;
+  return (value * fromRate) / toRate;
+}
+
+export function formatAmountInput(value: string): string {
+  const normalized = value.replace(/\s/g, "").replace(",", ".");
+  const [rawInteger, rawDecimal] = normalized.split(".");
+  const integer = rawInteger.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  const formattedInteger = integer
+    ? integer.replace(/\B(?=(\d{3})+(?!\d))/g, " ")
+    : "";
+
+  if (normalized.includes(".")) {
+    const decimal = rawDecimal?.replace(/\D/g, "").slice(0, 2) ?? "";
+    return decimal ? `${formattedInteger || "0"},${decimal}` : `${formattedInteger || "0"},`;
+  }
+  return formattedInteger;
+}
+
+export function parseAmountInput(value: string): number {
+  const normalized = value.replace(/\s/g, "").replace(",", ".");
+  return Number(normalized) || 0;
+}

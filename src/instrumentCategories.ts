@@ -1,6 +1,5 @@
 import type { StockFinancialData } from "./api/marketService";
-import type { AssetCategoryKey } from "./database/mockPortfolioData";
-import type { InstrumentFilterCategory } from "./database/mockSearchableInstruments";
+import type { AssetCategoryKey } from "./portfolio/types";
 
 /**
  * Kategoria rynkowa instrumentu, używana w panelu szczegółów i w module kupna/sprzedaży.
@@ -13,6 +12,13 @@ export type InstrumentMarketCategory =
   | "bonds"
   | "cfd"
   | "crypto";
+
+export type InstrumentFilterCategory =
+  | "STOCKS"
+  | "BONDS"
+  | "CFD"
+  | "CRYPTO"
+  | "ETF";
 
 // Sposób formatowania pojedynczego pola danych rynkowych
 export type MarketDetailFormat =

@@ -63,6 +63,7 @@ export default function Index() {
     currency: string;
     symbol: string;
     exchange: string;
+    quoteType?: string;
     financialData?: StockFinancialData;
   } | null>(null);
 
@@ -108,12 +109,14 @@ export default function Index() {
       currency: string;
       symbol: string;
       exchange: string;
+      quoteType?: string;
     } = {
       stock: instrument.symbol,
       title: instrument.name.toUpperCase(),
       currency: resolvedCurrency,
       symbol: instrument.symbol,
       exchange: instrument.exchange || instrument.exchangeName,
+      quoteType: instrument.quoteType,
     };
 
     // Pobierz dane finansowe z Yahoo Finance

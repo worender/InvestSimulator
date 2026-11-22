@@ -27,21 +27,20 @@ import Reanimated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StockFinancialData } from "../api/marketService";
-import { MOCK_PORTFOLIOS } from "../database/mockPortfolioData";
 import {
-  SEARCHABLE_INSTRUMENTS,
-  SearchableInstrument,
-} from "../database/mockSearchableInstruments";
+  getInstrumentQuote,
+  StockFinancialData,
+} from "../api/marketService";
 import {
   InstrumentMarketCategory,
   MARKET_CATEGORY_LABELS,
   MARKET_INSTRUMENT_INFO,
-  resolveMarketCategory,
 } from "../instrumentCategories";
 import { useLockScreenWhileActive } from "../interactionLock";
-import { NOTIFICATION_GROUPS, notify } from "../notificationBus";
 import { NotificationHost } from "../notifications";
+import { resolvePillarFromQuoteType } from "../portfolio/pillars";
+import { usePortfolios } from "../portfolio/PortfolioProvider";
+import type { TradeInstrument } from "../portfolio/types";
 import { useTheme } from "../theme";
 import { useWatchlist } from "../watchlist";
 import { CategorySelector } from "./CategorySelector";
@@ -50,7 +49,6 @@ import {
   InstrumentDetails,
   useInstrumentFinancialData,
 } from "./InstrumentDetails";
-import { MarketClosedNoticeModal } from "./MarketClosedNoticeModal";
 import { StockCandleChart } from "./StockCandleChart";
 import { TradePanel } from "./TradePanel";
 
@@ -90,6 +88,7 @@ interface InstrumentCardInstrument {
   exchange: string;
   financialData?: StockFinancialData;
   marketCategory?: InstrumentMarketCategory;
+  quoteType?: string;
 }
 
 interface InstrumentCardProps {
@@ -98,26 +97,6 @@ interface InstrumentCardProps {
   onClose: () => void;
   initialRangeIndex?: number;
   initialInterval?: ChartInterval;
-}
-
-/**
- * Konwertuje kategorię rynkową na kategorię używaną przez moduł handlu.
- * @param category Kategoria rynkowa
- * @returns Kategoria używana przez moduł handlu
- */
-function toSearchableCategory(
-  category: InstrumentMarketCategory,
-): SearchableInstrument["category"] {
-  switch (category) {
-    case "bonds":
-      return "BONDS";
-    case "cfd":
-      return "CFD";
-    case "crypto":
-      return "CRYPTO";
-    default:
-      return "STOCKS";
-  }
 }
 
 /**
@@ -139,21 +118,13 @@ export function InstrumentCard({
   const { bottom } = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { isWatched, toggle: toggleWatchlist } = useWatchlist();
+  const { activePortfolio } = usePortfolios();
 
   // Blokuje gesty ekranu pod spodem
   useLockScreenWhileActive(true);
 
   const [activeTab, setActiveTab] = useState<InstrumentCardTab>("instrument");
-  const [noticeVisible, setNoticeVisible] = useState(false);
-  const [noticeData, setNoticeData] = useState<{
-    instrument: SearchableInstrument;
-    orderType: "BUY" | "SELL";
-    quantity: number;
-    totalCost: number;
-  } | null>(null);
-
-  // Portfel techniczny dla panelu handlu (podgląd rynku bez pozycji)
-  const fallbackPortfolio = MOCK_PORTFOLIOS[0];
+  const [isMarketOpen, setIsMarketOpen] = useState(false);
 
   const activeSymbol = instrument.symbol || instrument.stock;
   const activeName = instrument.title;
@@ -161,12 +132,13 @@ export function InstrumentCard({
   const activeCurrency = instrument.currency;
   const hasInstrument = Boolean(activeSymbol);
 
-  const marketCategory =
-    instrument.marketCategory ??
-    resolveMarketCategory({
-      symbol: activeSymbol,
-      exchange: activeExchange,
-    });
+  const quotePillar = resolvePillarFromQuoteType(
+    instrument.quoteType,
+    activeSymbol,
+    activeExchange,
+  );
+  const marketCategory = instrument.marketCategory ?? quotePillar;
+  const pillarKey = marketCategory;
 
   const attachedFinancialData = propFinancialData ?? instrument.financialData;
 
@@ -185,44 +157,59 @@ export function InstrumentCard({
     attachedFinancialData,
   );
 
-  /**
-   * Tworzy obiekt instrumentu do modułu handlu, łącząc dane finansowe i wyszukiwalne.
-   * Wyszukiwalne instrumenty są używane do uzyskania domyślnej ceny, zmiany procentowej i statusu rynku.
-   */
-  const tradeInstrument = useMemo<SearchableInstrument>(() => {
-    const symbolWithoutSuffix = activeSymbol.replace(/\.[A-Z]+$/i, "");
-    const searchable = SEARCHABLE_INSTRUMENTS.find(
-      (item) =>
-        item.symbol === activeSymbol ||
-        item.symbol === symbolWithoutSuffix ||
-        item.symbol === instrument.stock,
-    );
+  useEffect(() => {
+    let active = true;
 
-    return {
-      id: activeSymbol,
+    getInstrumentQuote(activeSymbol, activeExchange).then((quote) => {
+      if (active) setIsMarketOpen(quote?.isOpen ?? false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [activeExchange, activeSymbol]);
+
+  const tradeInstrument = useMemo<TradeInstrument>(
+    () => ({
       symbol: activeSymbol,
       name: activeName,
-      category: toSearchableCategory(marketCategory),
-      categoryLabel: `${MARKET_CATEGORY_LABELS[marketCategory]} · ${activeExchange}`,
       exchange: activeExchange,
       currency: activeCurrency,
-      price: financialData?.price ?? searchable?.price ?? 0,
-      changePercent:
-        financialData?.changePercent ?? searchable?.changePercent ?? 0,
-      isMarketOpen: searchable?.isMarketOpen ?? false,
-      marketOpenTimeInfo:
-        searchable?.marketOpenTimeInfo ?? "Rynek jest obecnie zamknięty.",
-      chartPoints: searchable?.chartPoints ?? [],
-    };
-  }, [
-    activeCurrency,
-    activeExchange,
-    activeName,
-    activeSymbol,
-    financialData,
-    instrument.stock,
-    marketCategory,
-  ]);
+      price: financialData?.price ?? 0,
+      changePercent: financialData?.changePercent ?? 0,
+      isMarketOpen,
+      categoryLabel: `${MARKET_CATEGORY_LABELS[marketCategory]} · ${activeExchange}`,
+      pillarKey,
+      quoteType: instrument.quoteType,
+      marketOpenTimeInfo: "Rynek jest obecnie zamknięty.",
+    }),
+    [
+      activeCurrency,
+      activeExchange,
+      activeName,
+      activeSymbol,
+      financialData,
+      instrument.quoteType,
+      isMarketOpen,
+      marketCategory,
+      pillarKey,
+    ],
+  );
+
+  const ownedQuantity = useMemo(() => {
+    const symbol = activeSymbol.toUpperCase();
+    const alias = symbol.endsWith("-USD") ? symbol.slice(0, -4) : null;
+    return (
+      activePortfolio?.categories
+        .flatMap((category) => category.items)
+        .filter(
+          (item) =>
+            item.symbol.toUpperCase() === symbol ||
+            (alias !== null && item.symbol.toUpperCase() === alias),
+        )
+        .reduce((sum, item) => sum + item.ownedQuantity, 0) ?? 0
+    );
+  }, [activePortfolio, activeSymbol]);
 
   const isFavorite = isWatched(activeSymbol);
 
@@ -266,37 +253,6 @@ export function InstrumentCard({
    * @param quantity Ilość (liczba niekoniecznie całkowita)
    * @param total Łączna wartość zlecenia w walucie instrumentu
    */
-  const handleMarketClosedAlert = (
-    inst: SearchableInstrument,
-    orderType: "BUY" | "SELL",
-    quantity: number,
-    total: number,
-  ) => {
-    setNoticeData({
-      instrument: inst,
-      orderType,
-      quantity,
-      totalCost: total,
-    });
-    setNoticeVisible(true);
-  };
-
-  /**
-   * Potwierdza złożenie zlecenia oczekującego i wyświetla powiadomienie.
-   */
-  const handleConfirmPendingOrder = () => {
-    if (noticeData) {
-      const typeLabel = noticeData.orderType === "BUY" ? "kupna" : "sprzedaży";
-      notify({
-        variant: "success",
-        title: "Zlecenie oczekujące złożone",
-        category: NOTIFICATION_GROUPS.transactions,
-        message: `Złożono zlecenie ${typeLabel} na ${noticeData.quantity} szt. ${noticeData.instrument.symbol}. Zostanie zrealizowane po wznowieniu handlu.`,
-      });
-    }
-    setNoticeVisible(false);
-  };
-
   // Animacja wysuwanej karty od dołu
   const translateY = useSharedValue(windowHeight);
   const dragStart = useSharedValue(0);
@@ -410,6 +366,9 @@ export function InstrumentCard({
         visible
         transparent
         animationType="none"
+        statusBarTranslucent
+        presentationStyle="overFullScreen"
+        navigationBarTranslucent
         onRequestClose={animateClose}
       >
         <NotificationHost />
@@ -554,9 +513,7 @@ export function InstrumentCard({
                       <TradePanel
                         key={activeSymbol}
                         instrument={tradeInstrument}
-                        portfolio={fallbackPortfolio}
-                        ownedQuantity={0}
-                        onMarketClosedAlert={handleMarketClosedAlert}
+                        ownedQuantity={ownedQuantity}
                       />
 
                       {/* Informacje o instrumencie */}
@@ -733,16 +690,6 @@ export function InstrumentCard({
         </GestureHandlerRootView>
       </Modal>
 
-      {/* Powiadomienie modalne o zamkniętym rynku */}
-      <MarketClosedNoticeModal
-        visible={noticeVisible}
-        instrument={noticeData?.instrument ?? null}
-        orderType={noticeData?.orderType ?? "BUY"}
-        quantity={noticeData?.quantity ?? 0}
-        totalCost={noticeData?.totalCost ?? 0}
-        onConfirmPendingOrder={handleConfirmPendingOrder}
-        onClose={() => setNoticeVisible(false)}
-      />
     </>
   );
 }

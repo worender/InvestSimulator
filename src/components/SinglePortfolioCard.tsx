@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMemo } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
-import { MockPortfolio } from "../database/mockPortfolioData";
+import type { Portfolio } from "../portfolio/types";
 import { useDisplayCurrency } from "../displayCurrency";
 import { useTheme } from "../theme";
 import { GlassBackground } from "./GlassBackground";
@@ -11,7 +11,7 @@ import {
 } from "./PortfolioResultChart";
 
 interface SinglePortfolioCardProps {
-  portfolio: MockPortfolio;
+  portfolio: Portfolio;
 }
 
 export function SinglePortfolioCard({ portfolio }: SinglePortfolioCardProps) {

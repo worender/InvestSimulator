@@ -6,7 +6,7 @@ import { useTheme } from "../theme";
 import {
   PORTFOLIO_PILLARS,
   type PortfolioPillarKey,
-} from "./PortfolioPillarSheet";
+} from "../portfolio/pillars";
 import { SettingsSheet } from "./settings/SettingsSheet";
 
 export interface AddPortfolioInput {

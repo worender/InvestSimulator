@@ -1,14 +1,14 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { BlurView } from "expo-blur";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { SearchableInstrument } from "../database/mockSearchableInstruments";
+import type { TradeInstrument } from "../portfolio/types";
 import { useDisplayCurrency } from "../displayCurrency";
 import { NotificationHost } from "../notifications";
 import { useTheme } from "../theme";
 
 interface MarketClosedNoticeModalProps {
   visible: boolean;
-  instrument: SearchableInstrument | null;
+  instrument: TradeInstrument | null;
   orderType: "BUY" | "SELL";
   quantity: number;
   totalCost: number;
