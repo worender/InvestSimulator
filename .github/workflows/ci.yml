@@ -74,3 +74,29 @@ jobs:
       - name: npm audit
         run: npm audit --omit=dev --audit-level=high
         continue-on-error: true
+
+  trivy-fs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy install
+        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
+
+      - name: Trivy scan (filesystem)
+        run: |
+          trivy fs . \
+            --scanners vuln,secret,misconfig \
+            --severity CRITICAL,HIGH,MEDIUM,LOW \
+            --ignore-unfixed \
+            --exit-code 0 \
+
+      - name: Generate SBOM
+        run: trivy fs . --format cyclonedx --output sbom.cdx.json
+
+      - name: Scan SBOM
+        run: trivy sbom sbom.cdx.json --severity HIGH,CRITICAL --exit-code 0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
