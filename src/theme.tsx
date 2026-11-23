@@ -378,15 +378,30 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     return;
   }, []);
 
-  const switchAccount = useCallback(
+   const switchAccount = useCallback(
     async (userId: number) => {
       const profile = await getUserProfile(userId);
       if (!profile) return;
-      setActiveAccountId(userId);
+  
+      const settings = await getSettings(userId);
+      const notificationSettings = await getNotificationSettings(userId);
+      const customAccents = await getCustomAccentColors(userId);
+  
+      await setActiveAccountId(userId);
+  
       applyProfile(profile);
-      setCustomAccents(await getCustomAccentColors(userId));
+  
+      if (settings) {
+        applySettings(settings);
+      }
+  
+      if (notificationSettings) {
+        applyNotificationSettings(notificationSettings);
+      }
+  
+      setCustomAccents(customAccents);
     },
-    [applyProfile],
+    [applyProfile, applySettings, applyNotificationSettings],
   );
 
   const addAccount = useCallback(

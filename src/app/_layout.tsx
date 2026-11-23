@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { preloadMarketData } from "../api/marketService";
+import { LoadingScreen } from "../components/LoadingScreen";
 import { LoginScreen } from "../components/settings/LoginScreen";
 import { InteractionLockProvider } from "../interactionLock";
 import { NavigationVisibilityProvider } from "../navigationVisibility";
@@ -13,11 +14,15 @@ import { ThemeProvider, useTheme } from "../theme";
 import { WatchlistProvider } from "../watchlist";
 import { WebGlobalStyles } from "../WebGlobalStyles";
 import "../webIsolation";
-import { LoadingScreen } from "../components/LoadingScreen";
 
 // Główny komponent aplikacji, który ustawia kontekst motywu, widoczności nawigacji i powiadomień. Zawiera również stos ekranów (Stack) dla nawigacji w aplikacji.
 function AppStack() {
-  const { mode, loggedIn } = useTheme();
+  const {
+    mode,
+    loggedIn,
+    fontSizePreference,
+    activeAccount,
+  } = useTheme();
   const [loadingPromises, setLoadingPromises] = useState<
     readonly Promise<unknown>[]
   >(() => (loggedIn ? [preloadMarketData()] : []));
@@ -33,6 +38,7 @@ function AppStack() {
       <WebGlobalStyles />
       {loggedIn ? (
         <Stack
+          key={`app-${fontSizePreference}-${activeAccount?.id ?? "none"}`}
           screenOptions={{
             gestureEnabled: true,
             fullScreenGestureEnabled: true,
