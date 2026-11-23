@@ -33,7 +33,7 @@ export function LoadingScreen({
       finishAnimation?.stop();
       finishAnimation = Animated.timing(progress, {
         toValue: 1,
-        duration: 300,
+        duration: 500,
         useNativeDriver: false,
       });
 

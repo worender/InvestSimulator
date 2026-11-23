@@ -22,6 +22,8 @@ function AppStack() {
     loggedIn,
     fontSizePreference,
     activeAccount,
+    accountLoadingPromises,
+    clearAccountLoadingPromises,
   } = useTheme();
   const [loadingPromises, setLoadingPromises] = useState<
     readonly Promise<unknown>[]
@@ -30,7 +32,6 @@ function AppStack() {
   const finishLoading = useCallback(() => {
     setLoadingPromises([]);
   }, []);
-
 
   return (
     <>
@@ -58,6 +59,15 @@ function AppStack() {
           />
         </View>
       )}
+      {accountLoadingPromises.length > 0 && (
+        <View style={styles.loadingOverlay}>
+          <LoadingScreen
+            promises={accountLoadingPromises}
+            onFinished={clearAccountLoadingPromises}
+            timeoutMs={15_000}
+          />
+        </View>
+      )}
     </>
   );
 }
@@ -71,7 +81,6 @@ const styles = StyleSheet.create({
 });
 
 export default function RootLayout() {
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>

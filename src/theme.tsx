@@ -37,7 +37,6 @@ import {
   type Settings,
   type UserProfile,
 } from "./database/database";
-import { MAX_CUSTOM_ACCENTS, normalizeHexColor } from "./settings/color";
 import {
   FALLBACK_RATES,
   setDisplayCurrencyState,
@@ -45,6 +44,7 @@ import {
 } from "./displayCurrency";
 import { setGlobalFontScale } from "./fontScale";
 import { NOTIFICATION_GROUPS, notify } from "./notificationBus";
+import { MAX_CUSTOM_ACCENTS, normalizeHexColor } from "./settings/color";
 import {
   DEFAULT_NOTIFICATION_CATEGORIES,
   type NotificationCategories,
@@ -190,6 +190,8 @@ type ThemeContextValue = {
   accounts: UserProfile[];
   activeAccount: UserProfile | null;
   switchAccount: (userId: number) => Promise<void>;
+  accountLoadingPromises: readonly Promise<unknown>[];
+  clearAccountLoadingPromises: () => void;
   addAccount: (input: {
     username: string;
     avatarUri?: string | null;
@@ -239,6 +241,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const [rates, setRates] = useState<ExchangeRates>({ ...FALLBACK_RATES });
   const [ratesUpdatedAt, setRatesUpdatedAt] = useState<number | null>(null);
   const [ratesLoading, setRatesLoading] = useState(false);
+  const [accountLoadingPromises, setAccountLoadingPromises] = useState<readonly Promise<unknown>[]>([]);
   const rateRequest = useRef(0);
 
   const applyProfile = useCallback((profile: UserProfile) => {
@@ -380,15 +383,33 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
    const switchAccount = useCallback(
     async (userId: number) => {
-      const profile = await getUserProfile(userId);
-      if (!profile) return;
+      const profilePromise = getUserProfile(userId);
+      const settingsPromise = getSettings(userId);
+      const notificationPromise = getNotificationSettings(userId);
+      const accentsPromise = getCustomAccentColors(userId);
+      const activeAccountPromise = setActiveAccountId(userId);
   
-      const settings = await getSettings(userId);
-      const notificationSettings = await getNotificationSettings(userId);
-      const customAccents = await getCustomAccentColors(userId);
+      setAccountLoadingPromises([
+        profilePromise,
+        settingsPromise,
+        notificationPromise,
+        accentsPromise,
+        activeAccountPromise,
+      ]);
   
-      await setActiveAccountId(userId);
+      const [profile, settings, notificationSettings, customAccents] =
+        await Promise.all([
+          profilePromise,
+          settingsPromise,
+          notificationPromise,
+          accentsPromise,
+        ]);
   
+      await activeAccountPromise;
+  
+      if (!profile) {
+        throw new Error("Nie znaleziono konta");
+      }
       applyProfile(profile);
   
       if (settings) {
@@ -403,6 +424,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     },
     [applyProfile, applySettings, applyNotificationSettings],
   );
+
+const clearAccountLoadingPromises = useCallback(() => {
+  setAccountLoadingPromises([]);
+}, []);
 
   const addAccount = useCallback(
     async (input: { username: string; avatarUri?: string | null }) => {
@@ -672,6 +697,8 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       accounts,
       activeAccount,
       switchAccount,
+      accountLoadingPromises,
+      clearAccountLoadingPromises,
       addAccount,
       updateAccount,
       reloadAccounts,
@@ -725,6 +752,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       refreshRates,
       reloadAccounts,
       switchAccount,
+      accountLoadingPromises,
       updateAccount,
       updateCustomAccent,
     ],
