@@ -6,6 +6,7 @@ type LoadingScreenProps = {
   promises?: readonly Promise<unknown>[];
   onFinished?: () => void;
   timeoutMs?: number;
+  finishDurationMs?: number;
 };
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -15,6 +16,7 @@ export function LoadingScreen({
   promises = [],
   onFinished,
   timeoutMs = 60_000,
+  finishDurationMs = 400,
 }: LoadingScreenProps) {
   const [progress] = useState(() => new Animated.Value(0));
 
@@ -33,7 +35,7 @@ export function LoadingScreen({
       finishAnimation?.stop();
       finishAnimation = Animated.timing(progress, {
         toValue: 1,
-        duration: 500,
+        duration: finishDurationMs,
         useNativeDriver: false,
       });
 
@@ -62,7 +64,7 @@ export function LoadingScreen({
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [promises, onFinished, progress, timeoutMs]);
+  }, [promises, onFinished, progress, timeoutMs, finishDurationMs]);
 
   const opacity = progress.interpolate({
     inputRange: [0, 1],

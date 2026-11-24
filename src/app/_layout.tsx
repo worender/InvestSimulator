@@ -64,7 +64,8 @@ function AppStack() {
           <LoadingScreen
             promises={accountLoadingPromises}
             onFinished={clearAccountLoadingPromises}
-            timeoutMs={15_000}
+            timeoutMs={5_000}
+            finishDurationMs={1_000}
           />
         </View>
       )}

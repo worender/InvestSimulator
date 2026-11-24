@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from 'react';
+import { Children, type PropsWithChildren } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme';
 
@@ -11,12 +11,16 @@ type SectionProps = PropsWithChildren<{
 export function Section({ label, first = false, children }: SectionProps) {
   const { colors } = useTheme();
 
+  const safeChildren = Children.toArray(children).filter(
+    (child) => typeof child !== 'string' || child.trim().length > 0,
+  );
+
   return (
     <View style={[styles.section, first && styles.first]}>
       {label ? (
         <Text style={[styles.label, { color: colors.textMuted }]}>{label}</Text>
       ) : null}
-      {children}
+      {safeChildren}
     </View>
   );
 }
