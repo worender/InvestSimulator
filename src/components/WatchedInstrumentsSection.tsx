@@ -3,17 +3,23 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   getCachedQuoteDetails,
   getStockQuoteDetails,
+  searchInstruments,
   type StockQuoteDetails,
 } from "../api/marketService";
-import { getPortfolio, type PortfolioItem } from "../database/database";
+import {
+  getPortfolio,
+  getTopFavoriteAssets,
+  type PortfolioItem,
+} from "../database/database";
 import { MOCK_PORTFOLIOS } from "../database/mockPortfolioData";
 import {
   useDisplayCurrency,
 } from "../displayCurrency";
 import { useTheme } from "../theme";
-import { useWatchlist, type WatchlistInstrument } from "../watchlist";
+import { DEFAULT_WATCHLIST, type WatchlistInstrument } from "../watchlist";
 import { InstrumentRow } from "./InstrumentRow";
 import { ModalChartView } from "./ModalChartView";
+
 
 type Holding = {
   quantity: number;
@@ -45,10 +51,10 @@ const formatPercent = (value: number) =>
   `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 
 export function WatchedInstrumentsSection() {
-  const { colors, rates } = useTheme();
+  const { colors, rates, activeAccount } = useTheme();
+  const [usingDefaults, setUsingDefaults] = useState(false);
   const display = useDisplayCurrency();
-  const { instruments } = useWatchlist();
-
+  const [instruments, setInstruments] = useState<WatchlistInstrument[]>([]);
   const cachedInitial = useMemo(() => {
     const map: Record<string, StockQuoteDetails | null> = {};
     let allFound = instruments.length > 0;
@@ -72,11 +78,65 @@ export function WatchedInstrumentsSection() {
 
   useEffect(() => {
     let active = true;
+  
+    const loadFavoriteInstruments = async () => {
+      if (!activeAccount) {
+        setUsingDefaults(true);
+        setInstruments([...DEFAULT_WATCHLIST]);
+        return;
+      }
+  
+      const assets = await getTopFavoriteAssets(activeAccount.id, 4);
+
+      if (assets.length === 0) {
+        setUsingDefaults(true);
+        setInstruments([...DEFAULT_WATCHLIST]);
+        return;
+      }
+
+      setUsingDefaults(false);
+  
+      const resolved = await Promise.all(
+        assets.map(async (asset) => {
+          const results = await searchInstruments(asset.symbol);
+          const match = results.find(
+            (item) =>
+              item.symbol.trim().toUpperCase() ===
+              asset.symbol.trim().toUpperCase(),
+          );
+  
+        const quote = await getStockQuoteDetails(asset.symbol, match?.exchange);
+          return {
+            symbol: asset.symbol,
+            name: match?.name ?? asset.symbol,
+            exchange: match?.exchange || match?.exchangeName || "",
+            currency: quote?.currency ?? "PLN",
+          };
+        }),
+      );
+  
+      if (active) {
+        setInstruments(resolved);
+      }
+    };
+  
+    void loadFavoriteInstruments();
+  
+    return () => {
+      active = false;
+    };
+  }, [activeAccount]);
+
+
+  useEffect(() => {
+    let active = true;
+    
 
     const loadQuotes = async () => {
       if (!cachedInitial.allFound) {
         setLoading(true);
       }
+
       const entries = await Promise.all(
         instruments.map(async (instrument) => {
           const quote = await getStockQuoteDetails(
@@ -198,6 +258,14 @@ export function WatchedInstrumentsSection() {
         );
       })}
 
+      {usingDefaults && (
+        <Text
+          style={[styles.defaultNotice, { color: colors.textMuted }]}
+        >
+          Tutaj pojawią się aktywa oznaczone serduszkiem
+        </Text>
+      )}
+
       {selected && (
         <ModalChartView
           instrument={{
@@ -235,5 +303,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     textAlign: "center",
+  },
+  defaultNotice: {
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+    padding: 16,
   },
 });

@@ -599,6 +599,7 @@ export interface StockQuoteDetails {
   fiftyTwoWeekHigh?: number;
   fiftyTwoWeekLow?: number;
   fiftyTwoWeekChangePercent?: number;
+  exchange?: string;
 }
 
 export interface StockFinancialData {

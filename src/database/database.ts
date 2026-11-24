@@ -14,6 +14,7 @@ import {
   validateWalletId,
   validateWalletName,
   validateBoolean,
+  validateNumberPositiveInteger,
 } from "./checkSecurityParam";
 import { acquireDbLock } from "./dbLock";
 import {
@@ -1551,6 +1552,30 @@ export async function getFavoriteAssets(
 }
 
 /**
+ * Pobiera ulubione aktywo danego użytkownika z bazy danych.
+ * @param userId - Identyfikator użytkownika.
+ * @param symbol - Symbol aktywa.
+ * @returns - Zwraca obietnicę, która rozwiązuje się z ulubionym aktywem lub null, jeśli nie znaleziono.
+ */
+export async function getFavoriteAsset(
+  userId: number,
+  symbol: string
+): Promise<FavoriteAsset | null> {
+  validateUserId(userId);
+  const normalizedSymbol = normalizeAndValidateSymbol(symbol);
+
+  const database = await getReadyDatabase();
+
+  return (
+    (await database.getFirstAsync<FavoriteAsset>(
+      `SELECT * FROM favorite_assets WHERE user_id = ? AND symbol = ?`,
+      userId,
+      normalizedSymbol
+    )) ?? null
+  );
+}
+
+/**
 * Funkcja addFavoriteAsset dodaje ulubione aktywo danego użytkownika do bazy danych.
 * @param {number} userId - Identyfikator użytkownika, dla którego dodawane jest ulubione aktywo.
 * @param {string} symbol - Symbol aktywa, które ma zostać dodane.
@@ -1674,14 +1699,72 @@ export async function addCounterToFavoriteAsset(
     (asset) => asset.symbol === normalizedSymbol
   );
 
+
   if (!assetExists) {
-    throw new Error("Nie znaleziono ulubionego aktywa do aktualizacji");
+    await addFavoriteAsset(userId, normalizedSymbol, 0);
+
+    const newAsset = await getFavoriteAsset(userId, normalizedSymbol);
+    if (!newAsset) {
+      throw new Error("Nie udało się dodać nowego ulubionego aktywa");
+    }
   }
 
   await database.runAsync(
     `UPDATE favorite_assets SET counter = counter + 1 WHERE user_id = ? AND symbol = ?`,
     userId,
     normalizedSymbol
+  );
+}
+
+/**
+ * Pobiera listę najbardziej ulubionych aktywów użytkownika, posortowanych według liczby odwiedzin.
+ * @param userId - Identyfikator użytkownika.
+ * @param limit - Maksymalna liczba aktywów do zwrócenia (domyślnie 4).
+ * @returns - Zwraca obietnicę, która rozwiązuje się z listą ulubionych aktywów.
+ * @throws - Rzuca błąd, jeśli identyfikator użytkownika jest nieprawidłowy.
+ */
+export async function getTopFavoriteAssets(
+  userId: number,
+  limit = 4,
+): Promise<FavoriteAsset[]> {
+  validateUserId(userId);
+
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<FavoriteAsset>(
+    `SELECT *
+     FROM favorite_assets
+     WHERE user_id = ? AND favorite = 1
+     ORDER BY counter DESC, id DESC
+     LIMIT ?`,
+    userId,
+    limit,
+  );
+}
+
+/**
+ * Pobiera listę aktywów znajdujących się na liście obserwowanych przez użytkownika.
+ * @param userId - Identyfikator użytkownika.
+ * @returns - Zwraca obietnicę, która rozwiązuje się z listą aktywów na liście obserwowanych.
+ * @throws - Rzuca błąd, jeśli identyfikator użytkownika jest nieprawidłowy.
+ */
+export async function getWatchlistAssets(
+  userId: number,
+  limit = 10
+): Promise<FavoriteAsset[]> {
+  validateUserId(userId);
+  validateNumberPositiveInteger(limit);
+
+  const database = await getReadyDatabase();
+
+  return database.getAllAsync<FavoriteAsset>(
+    `SELECT *
+     FROM favorite_assets
+     WHERE user_id = ?
+     ORDER BY favorite DESC, counter DESC, id DESC
+     LIMIT ?`,
+    userId,
+    limit
   );
 }
 

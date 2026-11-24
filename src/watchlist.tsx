@@ -14,7 +14,7 @@ export type WatchlistInstrument = {
   currency: string;
 };
 
-const DEFAULT_WATCHLIST: WatchlistInstrument[] = [
+export const DEFAULT_WATCHLIST: WatchlistInstrument[] = [
   {
     symbol: "PKO",
     name: "PKO Bank Polski",
