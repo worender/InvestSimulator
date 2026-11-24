@@ -1,3 +1,4 @@
+import { addFavoriteAsset, getFavoriteAsset, updateFavoriteAsset } from "@/database/database";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -48,7 +49,6 @@ import type { ChartInterval } from "./ChartFullscreenModal";
 import { Section } from "./Section";
 import { Skeleton } from "./Skeleton";
 import { StockCandleChart } from "./StockCandleChart";
-import { addFavoriteAsset, getFavoriteAsset,  updateFavoriteAsset } from "@/database/database";
 
 const RETURN_PERIODS = [
   { key: "1Y", label: "1Y" },
