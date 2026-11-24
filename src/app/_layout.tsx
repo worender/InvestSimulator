@@ -1,8 +1,10 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useCallback, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { preloadMarketData } from "../api/marketService";
+import { LoadingScreen } from "../components/LoadingScreen";
 import { LoginScreen } from "../components/settings/LoginScreen";
 import { InteractionLockProvider } from "../interactionLock";
 import { NavigationVisibilityProvider } from "../navigationVisibility";
@@ -15,13 +17,21 @@ import "../webIsolation";
 
 // Główny komponent aplikacji, który ustawia kontekst motywu, widoczności nawigacji i powiadomień. Zawiera również stos ekranów (Stack) dla nawigacji w aplikacji.
 function AppStack() {
-  const { mode, loggedIn, fontSizePreference } = useTheme();
+  const {
+    mode,
+    loggedIn,
+    fontSizePreference,
+    activeAccount,
+    accountLoadingPromises,
+    clearAccountLoadingPromises,
+  } = useTheme();
+  const [loadingPromises, setLoadingPromises] = useState<
+    readonly Promise<unknown>[]
+  >(() => (loggedIn ? [preloadMarketData()] : []));
 
-  useEffect(() => {
-    if (loggedIn) {
-      void preloadMarketData();
-    }
-  }, [loggedIn]);
+  const finishLoading = useCallback(() => {
+    setLoadingPromises([]);
+  }, []);
 
   return (
     <>
@@ -29,7 +39,7 @@ function AppStack() {
       <WebGlobalStyles />
       {loggedIn ? (
         <Stack
-          key={`app-${fontSizePreference}`}
+          key={`app-${fontSizePreference}-${activeAccount?.id ?? "none"}`}
           screenOptions={{
             gestureEnabled: true,
             fullScreenGestureEnabled: true,
@@ -40,9 +50,36 @@ function AppStack() {
       ) : (
         <LoginScreen />
       )}
+      {loadingPromises.length > 0 && (
+        <View style={styles.loadingOverlay}>
+          <LoadingScreen
+            promises={loadingPromises}
+            onFinished={finishLoading}
+            timeoutMs={3_000}
+          />
+        </View>
+      )}
+      {accountLoadingPromises.length > 0 && (
+        <View style={styles.loadingOverlay}>
+          <LoadingScreen
+            promises={accountLoadingPromises}
+            onFinished={clearAccountLoadingPromises}
+            timeoutMs={5_000}
+            finishDurationMs={1_000}
+          />
+        </View>
+      )}
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 1000,
+    elevation: 1000,
+  },
+});
 
 export default function RootLayout() {
   return (
